@@ -1,6 +1,6 @@
 """Central SQLite FTS5 index for fast cross-dictionary lookup.
 
-Storing every entry in a single FTS5 table lets us search across all loaded
+Storing every headword in a single FTS5 table lets us search across all loaded
 dictionaries in a single query, with prefix matching out of the box.
 
 Schema:
@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from ..parsers.base import Dictionary, DictionaryEntry
+from ..parsers.base import Dictionary
 
 
 class IndexStore:
@@ -52,8 +52,6 @@ class IndexStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
 
-    # ----------------------------------------------------------- connection
-
     def open(self) -> None:
         if self._conn is not None:
             return
@@ -82,10 +80,7 @@ class IndexStore:
         finally:
             cur.close()
 
-    # ------------------------------------------------------- dictionary CRUD
-
     def register_dictionary(self, dictionary: Dictionary) -> int:
-        """Insert dictionary metadata. Returns the row id."""
         meta = dictionary.metadata
         with self._cursor() as cur:
             cur.execute(
@@ -126,27 +121,15 @@ class IndexStore:
             cur.execute("DELETE FROM entries WHERE dictionary = ?", (name,))
             cur.execute("DELETE FROM dictionaries WHERE name = ?", (name,))
 
-    # ------------------------------------------------------------ indexing
-
     def index_dictionary(self, dictionary: Dictionary) -> int:
-        """Index all headwords of a dictionary into the FTS5 table.
-
-        We only index the headwords, not full definitions — definitions are
-        re-fetched from the source dictionary on demand. This keeps the
-        index DB small even for huge sources.
-
-        Returns the number of entries indexed.
-        """
         if not dictionary.loaded:
             dictionary.load()
 
         self.register_dictionary(dictionary)
 
-        # Wipe any prior entries for this dictionary (in case of re-index)
         with self._cursor() as cur:
             cur.execute("DELETE FROM entries WHERE dictionary = ?", (dictionary.metadata.name,))
 
-        # Bulk-insert in batches for speed
         batch: list[tuple[str, str]] = []
         count = 0
         BATCH_SIZE = 5000
@@ -169,20 +152,12 @@ class IndexStore:
 
         return count
 
-    # ------------------------------------------------------------- search
-
     def search_headword(
         self,
         query: str,
         limit: int = 100,
         dictionaries: list[str] | None = None,
     ) -> list[tuple[str, str]]:
-        """Search for a headword (exact or prefix).
-
-        Returns a list of (headword, dictionary_name) tuples.
-        """
-        # FTS5 prefix match: append * to the term
-        # Escape FTS5 special characters by quoting
         safe = query.replace('"', '""')
         fts_query = f'"{safe}"*'
 

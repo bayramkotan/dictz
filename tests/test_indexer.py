@@ -9,7 +9,6 @@ from dictz.storage.indexer import IndexStore
 
 
 def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
-    """Same helper as test_stardict.py — duplicated for test isolation."""
     base = tmp_path / name
     entries = [
         ("apple", "elma"),
@@ -74,7 +73,6 @@ def test_index_and_search(tmp_path: Path) -> None:
     count = store.index_dictionary(d)
     assert count == 4
 
-    # Prefix search: "app" matches apple, application, apply
     results = store.search_headword("app")
     headwords = [r[0] for r in results]
     assert "apple" in headwords

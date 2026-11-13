@@ -18,9 +18,22 @@
 
 ---
 
+## Dil/Platform Kararı (2026-11-12)
+
+**Karar:** Python + PySide6 ile **v1.0'a kadar devam**. Rust port'u v1.0 sonrası ayrı bir proje olarak (`dictz-rs`) ele alınacak — karşılaştırma + öğrenme amaçlı, ikisini paralel sürdürmeyeceğiz.
+
+**Değerlendirilen seçenekler:**
+- Tam Rust pivot: reddedildi (GUI ekosistemi Qt kadar olgun değil; Babylon .bgl ters mühendislik gerektiren kötü bir format, PyGlossary yıllarca uğraşmış; diğer tüm projeler PySide6)
+- Hibrit (Rust core + Python GUI, PyO3): şimdilik ertelendi; gerçek bir darboğaz görülürse spesifik parça için yeniden değerlendirilir
+- Paralel iki uygulama: reddedildi (VenvStudio Pro Ekim'de aynı sebeple bırakılmıştı — tek public repo tercihi)
+
+**Performans not:** dictz boyutunda projelerde Python darboğaz değil — sıcak noktaların hepsi zaten C/C++'ta (SQLite, rapidfuzz, Qt). Benchmark'la kanıtlanmış bir sorun çıkarsa o parça PyO3 ile Rust'a alınır.
+
+---
+
 ## Bu Oturumda Yapılanlar (v0.0.1)
 
-İlk iskelet sıfırdan kuruldu. İsim önce Lexora olarak seçildi, sonra `dictz` olarak değiştirildi; tüm paket/modül/yol/ID alanları topluca güncellendi. Versiyon başlangıçta 0.1.0 olarak yazılmıştı, ardından 0.0.1'e indirildi (daha alçakgönüllü başlangıç işareti).
+İlk iskelet sıfırdan kuruldu. İsim önce Lexora olarak seçildi, sonra `dictz` olarak değiştirildi; tüm paket/modül/yol/ID alanları topluca güncellendi. Versiyon başlangıçta 0.1.0 olarak yazılmıştı, ardından 0.0.1'e indirildi (daha alçakgönüllü başlangıç işareti). Oturum sonunda Rust'a geçiş değerlendirildi — Python'da kalma kararı verildi (yukarı bak).
 
 ### Mimari (4 katman)
 
@@ -75,6 +88,7 @@
 - [ ] **Ekran OCR** (Tesseract)
 - [ ] **Anki entegrasyonu**
 - [ ] **Sözlük yöneticisi UI + tercihler + tema**
+- [ ] **v1.0 sonrası**: `dictz-rs` ayrı Rust port projesi (karşılaştırma + öğrenme)
 
 ---
 
@@ -104,7 +118,7 @@ Test sözlüğü için **FreeDict** (https://freedict.org/) önerilir — küç�
 
 ## Git Notes
 
-- Commit mesajları **İngilizce** (CodeReady/VenvStudio kuralı ile aynı)
+- Commit mesajları **İngilizce**
 - İlk commit önerisi: `feat: bootstrap dictz v0.0.1 with StarDict support`
 - Tag: `v0.0.1`
 - Remote: `git remote add origin https://github.com/bayramkotan/dictz.git`
