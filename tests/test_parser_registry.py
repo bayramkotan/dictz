@@ -34,6 +34,4 @@ def test_parser_for_unknown_raises() -> None:
 
 def test_supported_extensions_has_all() -> None:
     exts = supported_extensions()
-    assert ".ifo" in exts
-    assert ".dsl" in exts
-    assert ".bgl" in exts
+    assert ".ifo" in exts and ".dsl" in exts and ".bgl" in exts

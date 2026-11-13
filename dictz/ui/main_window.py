@@ -1,24 +1,30 @@
-"""dictz main window — three-pane layout:
+"""dictz main window — functional GoldenDict-style layout.
 
-    +-------------------+----------------------------+
-    | Search box        |                            |
-    +-------------------+                            |
-    | Suggestion list   |   Definition view          |
-    | (headwords)       |   (HTML, all dictionaries) |
-    |                   |                            |
-    |                   |                            |
-    +-------------------+----------------------------+
-    | Status bar (loaded dicts, word counts)         |
-    +-------------------+----------------------------+
+    +------------------------------------------------------------+
+    | Toolbar: [Back][Fwd]  [Search box.............]  [★][Zoom] |
+    +-----------+------------------------------------------------+
+    | Sidebar   | Tab bar: [elma] [book] [+]                     |
+    | (dock)    +------------------------------------------------+
+    | - Dicts   |                                                |
+    | - Favs    |   Definition view                              |
+    | - History |   (QWebEngineView when available)              |
+    |           |                                                |
+    |           +------------------------------------------------+
+    |           | Suggestion list (dropdown under search)        |
+    +-----------+------------------------------------------------+
+    | Status: 3 sözlük · 512,340 kelime             dark · 110%  |
+    +------------------------------------------------------------+
 """
 from __future__ import annotations
 
 import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
+    QCompleter,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -27,9 +33,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
-    QSplitter,
     QStatusBar,
-    QTextBrowser,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -37,270 +41,596 @@ from PySide6.QtWidgets import (
 
 from ..core.query_manager import QueryManager
 from ..parsers.base import DictionaryEntry
-
-SEARCH_DEBOUNCE_MS = 150
+from ..storage.history import HistoryStore
+from ..storage.settings import Preferences
+from . import themes
+from .definition_tabs import DefinitionTabs
+from .dictionary_manager import DictionaryManagerDialog
+from .icons import icon
+from .preferences_dialog import PreferencesDialog
+from .sidebar import Sidebar
 
 
 class MainWindow(QMainWindow):
-    dictionary_loaded = Signal(str)
-
-    def __init__(self, query_manager: QueryManager, parent: QWidget | None = None):
-        super().__init__(parent)
+    def __init__(
+        self,
+        query_manager: QueryManager,
+        history_store: HistoryStore,
+        preferences: Preferences,
+    ):
+        super().__init__()
         self.query_manager = query_manager
+        self.history = history_store
+        self.prefs = preferences
 
         self.setWindowTitle("dictz")
-        self.resize(1100, 720)
+        self.resize(1280, 820)
 
-        self._build_ui()
-        self._build_menus()
+        self._nav_history: list[str] = []
+        self._nav_cursor = -1
+        self._applying_nav = False  # suppress history push during back/forward
+
+        self._build_center()
         self._build_toolbar()
+        self._build_menus()
+        self._build_sidebar()
+        self._build_statusbar()
+        self._build_shortcuts()
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._run_search)
 
+        self._apply_prefs_to_ui()
+        self._refresh_sidebar()
         self._refresh_status()
 
-    def _build_ui(self) -> None:
+        # Restore window geometry if saved
+        if self.prefs.window_geometry:
+            try:
+                self.restoreGeometry(self.prefs.window_geometry)
+            except Exception:
+                pass
+        if self.prefs.window_state:
+            try:
+                self.restoreState(self.prefs.window_state)
+            except Exception:
+                pass
+
+        # Start with one empty tab showing the welcome text
+        self.tabs.new_tab()
+
+    # ----------------------------------------------------------- UI build
+
+    def _build_center(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
-
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(8, 8, 8, 8)
-
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Bir kelime arayın…")
-        self.search_box.setClearButtonEnabled(True)
-        self.search_box.textChanged.connect(self._on_search_text_changed)
-        self.search_box.returnPressed.connect(self._run_search)
-        left_layout.addWidget(self.search_box)
-
-        self.suggestion_list = QListWidget()
-        self.suggestion_list.itemActivated.connect(self._on_suggestion_activated)
-        self.suggestion_list.currentItemChanged.connect(self._on_suggestion_current_changed)
-        left_layout.addWidget(self.suggestion_list, 1)
-
-        self.result_view = QTextBrowser()
-        self.result_view.setOpenExternalLinks(True)
-        self.result_view.setStyleSheet(
-            "QTextBrowser { font-size: 14px; padding: 8px; }"
-        )
-        self._set_welcome_text()
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(left)
-        splitter.addWidget(self.result_view)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 3)
-        splitter.setSizes([300, 800])
-
-        layout = QHBoxLayout(central)
+        layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(splitter)
+        layout.setSpacing(0)
 
-        self.setStatusBar(QStatusBar())
-        self.dict_count_label = QLabel("0 sözlük")
-        self.statusBar().addPermanentWidget(self.dict_count_label)
+        # Suggestion list is a thin floating-like widget under the toolbar
+        self.tabs = DefinitionTabs()
+        self.tabs.link_activated.connect(self._on_definition_link)
+        self.tabs.current_word_changed.connect(self._on_current_tab_word_changed)
+
+        self.suggestions = QListWidget()
+        self.suggestions.setMaximumHeight(140)
+        self.suggestions.setFrameShape(QListWidget.Shape.NoFrame)
+        self.suggestions.itemActivated.connect(self._on_suggestion_activated)
+        self.suggestions.itemClicked.connect(self._on_suggestion_activated)
+        self.suggestions.hide()
+
+        layout.addWidget(self.suggestions)
+        layout.addWidget(self.tabs, 1)
+
+    def _build_toolbar(self) -> None:
+        tb = QToolBar("Ana araç çubuğu")
+        tb.setMovable(False)
+        tb.setObjectName("main_toolbar")
+        self.addToolBar(tb)
+
+        self.back_action = QAction(icon("back"), "Geri", self)
+        self.back_action.setShortcut(QKeySequence("Alt+Left"))
+        self.back_action.triggered.connect(self._nav_back)
+        tb.addAction(self.back_action)
+
+        self.fwd_action = QAction(icon("forward"), "İleri", self)
+        self.fwd_action.setShortcut(QKeySequence("Alt+Right"))
+        self.fwd_action.triggered.connect(self._nav_forward)
+        tb.addAction(self.fwd_action)
+
+        tb.addSeparator()
+
+        # Search box lives in the toolbar — it's the main interaction surface
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Bir kelime ara…   (Ctrl+F odaklan)")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.setMinimumWidth(280)
+        self.search_box.textChanged.connect(self._on_search_text_changed)
+        self.search_box.returnPressed.connect(self._run_search_explicit)
+        tb.addWidget(self.search_box)
+
+        # Spacer — pushes the rest to the right
+        spacer = QWidget()
+        spacer.setSizePolicy(
+            spacer.sizePolicy().horizontalPolicy().Expanding,
+            spacer.sizePolicy().verticalPolicy().Preferred,
+        )
+        from PySide6.QtWidgets import QSizePolicy
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+
+        tb.addSeparator()
+
+        self.favorite_action = QAction(icon("star"), "Favori", self)
+        self.favorite_action.setCheckable(True)
+        self.favorite_action.setShortcut(QKeySequence("Ctrl+D"))
+        self.favorite_action.triggered.connect(self._toggle_favorite_current)
+        tb.addAction(self.favorite_action)
+
+        tb.addSeparator()
+
+        self.zoom_out_action = QAction(icon("zoom-out"), "Küçült", self)
+        self.zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
+        self.zoom_out_action.triggered.connect(self._zoom_out)
+        tb.addAction(self.zoom_out_action)
+
+        self.zoom_in_action = QAction(icon("zoom-in"), "Büyüt", self)
+        self.zoom_in_action.setShortcut(QKeySequence("Ctrl+="))
+        self.zoom_in_action.triggered.connect(self._zoom_in)
+        tb.addAction(self.zoom_in_action)
+
+        self.theme_action = QAction(icon("theme"), "Tema", self)
+        self.theme_action.triggered.connect(self._cycle_theme)
+        tb.addAction(self.theme_action)
+
+        tb.addSeparator()
+
+        self.prefs_action = QAction(icon("settings"), "Tercihler", self)
+        self.prefs_action.setShortcut(QKeySequence("Ctrl+,"))
+        self.prefs_action.triggered.connect(self._open_preferences)
+        tb.addAction(self.prefs_action)
 
     def _build_menus(self) -> None:
-        menu = self.menuBar()
+        menubar = self.menuBar()
 
-        file_menu = menu.addMenu("&Dosya")
+        file_menu = menubar.addMenu("&Dosya")
 
-        add_dict_action = QAction("Sözlük &Ekle…", self)
-        add_dict_action.setShortcut(QKeySequence("Ctrl+O"))
-        add_dict_action.triggered.connect(self.add_dictionary_dialog)
-        file_menu.addAction(add_dict_action)
+        add_dict = QAction(icon("open"), "Sözlük &Ekle…", self)
+        add_dict.setShortcut(QKeySequence("Ctrl+O"))
+        add_dict.triggered.connect(self._add_dictionary_dialog)
+        file_menu.addAction(add_dict)
+
+        manage = QAction(icon("folder"), "Sözlük &Yöneticisi…", self)
+        manage.setShortcut(QKeySequence("Ctrl+M"))
+        manage.triggered.connect(self._open_dictionary_manager)
+        file_menu.addAction(manage)
 
         file_menu.addSeparator()
-
         quit_action = QAction("Çı&kış", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
-        help_menu = menu.addMenu("&Yardım")
-        about_action = QAction("&Hakkında", self)
-        about_action.triggered.connect(self._show_about)
-        help_menu.addAction(about_action)
+        edit_menu = menubar.addMenu("&Düzen")
+        copy_word = QAction("Kelimeyi kopyala", self)
+        copy_word.setShortcut(QKeySequence("Ctrl+Shift+C"))
+        copy_word.triggered.connect(self._copy_current_word)
+        edit_menu.addAction(copy_word)
 
-    def _build_toolbar(self) -> None:
-        tb = QToolBar("Main")
-        tb.setMovable(False)
-        self.addToolBar(tb)
+        focus_search = QAction("Arama kutusuna odaklan", self)
+        focus_search.setShortcut(QKeySequence("Ctrl+F"))
+        focus_search.triggered.connect(lambda: self.search_box.setFocus())
+        edit_menu.addAction(focus_search)
 
-        add_dict = QAction("Sözlük Ekle", self)
-        add_dict.triggered.connect(self.add_dictionary_dialog)
-        tb.addAction(add_dict)
+        edit_menu.addSeparator()
+        prefs = QAction("Tercihler…", self)
+        prefs.setShortcut(QKeySequence("Ctrl+,"))
+        prefs.triggered.connect(self._open_preferences)
+        edit_menu.addAction(prefs)
 
-    def _set_welcome_text(self) -> None:
-        self.result_view.setHtml(
-            """
-            <div style="text-align: center; padding: 60px; color: #888;">
-                <h2 style="margin-bottom: 4px;">dictz</h2>
-                <p>Çok formatlı sözlük uygulaması</p>
-                <p style="margin-top: 32px; font-size: 13px;">
-                    Başlamak için <b>Dosya → Sözlük Ekle</b> menüsünden<br>
-                    bir StarDict (.ifo), DSL (.dsl) veya Babylon (.bgl) dosyası yükleyin.
-                </p>
-            </div>
-            """
-        )
+        view_menu = menubar.addMenu("&Görünüm")
+        new_tab = QAction("Yeni sekme", self)
+        new_tab.setShortcut(QKeySequence("Ctrl+T"))
+        new_tab.triggered.connect(lambda: self.tabs.new_tab())
+        view_menu.addAction(new_tab)
+
+        close_tab = QAction("Sekmeyi kapat", self)
+        close_tab.setShortcut(QKeySequence("Ctrl+W"))
+        close_tab.triggered.connect(self.tabs.close_current_tab)
+        view_menu.addAction(close_tab)
+
+        view_menu.addSeparator()
+        toggle_sidebar = QAction("Yan paneli göster/gizle", self)
+        toggle_sidebar.setShortcut(QKeySequence("Ctrl+B"))
+        toggle_sidebar.triggered.connect(self._toggle_sidebar)
+        view_menu.addAction(toggle_sidebar)
+
+        view_menu.addSeparator()
+        zoom_in = QAction("Büyüt", self)
+        zoom_in.setShortcut(QKeySequence("Ctrl+="))
+        zoom_in.triggered.connect(self._zoom_in)
+        view_menu.addAction(zoom_in)
+
+        zoom_out = QAction("Küçült", self)
+        zoom_out.setShortcut(QKeySequence("Ctrl+-"))
+        zoom_out.triggered.connect(self._zoom_out)
+        view_menu.addAction(zoom_out)
+
+        reset_zoom = QAction("Yakınlaştırmayı sıfırla", self)
+        reset_zoom.setShortcut(QKeySequence("Ctrl+0"))
+        reset_zoom.triggered.connect(self._zoom_reset)
+        view_menu.addAction(reset_zoom)
+
+        help_menu = menubar.addMenu("&Yardım")
+        about = QAction("&Hakkında", self)
+        about.triggered.connect(self._about)
+        help_menu.addAction(about)
+
+    def _build_sidebar(self) -> None:
+        self.sidebar = Sidebar(self)
+        self.sidebar.setObjectName("sidebar_dock")
+        self.sidebar.word_selected.connect(self._open_word)
+        self.sidebar.dictionary_toggled.connect(self._on_sidebar_dict_toggled)
+        self.sidebar.manage_dictionaries_requested.connect(self._open_dictionary_manager)
+        self.sidebar.clear_history_requested.connect(self._clear_history)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar)
+        self.sidebar.setMinimumWidth(240)
+
+    def _build_statusbar(self) -> None:
+        self.setStatusBar(QStatusBar())
+        self.dict_count_label = QLabel("0 sözlük")
+        self.zoom_label = QLabel("100%")
+        self.statusBar().addPermanentWidget(self.dict_count_label)
+        self.statusBar().addPermanentWidget(self._status_sep())
+        self.statusBar().addPermanentWidget(self.zoom_label)
+
+    def _status_sep(self) -> QLabel:
+        s = QLabel("·")
+        s.setContentsMargins(8, 0, 8, 0)
+        return s
+
+    def _build_shortcuts(self) -> None:
+        # Tab navigation shortcuts
+        QShortcut(QKeySequence("Ctrl+Tab"), self, lambda: self._cycle_tab(+1))
+        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, lambda: self._cycle_tab(-1))
+        # "Open word in new tab" with Ctrl+Enter on the search box
+        open_new = QShortcut(QKeySequence("Ctrl+Return"), self.search_box)
+        open_new.activated.connect(self._run_search_new_tab)
+
+    # ---------------------------------------------------- preferences
+
+    def _apply_prefs_to_ui(self) -> None:
+        # Theme
+        qss = themes.resolve(self.prefs.theme)
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(qss)
+        dark = "15181d" in qss  # crude but reliable
+        self.tabs.set_dark(dark)
+
+        # Font
+        if self.prefs.font_family:
+            self.setFont(QFont(self.prefs.font_family, self.prefs.font_size))
+
+        # Zoom
+        self.tabs.set_zoom(self.prefs.zoom_factor)
+        self._update_zoom_label()
+
+        # Sidebar visibility
+        self.sidebar.setVisible(self.prefs.show_sidebar)
+
+        # Debounce stays the same timer interval across sessions
+
+    # ---------------------------------------------------- search flow
 
     def _on_search_text_changed(self, text: str) -> None:
-        self._search_timer.start(SEARCH_DEBOUNCE_MS)
+        self._search_timer.start(self.prefs.search_debounce_ms)
 
     def _run_search(self) -> None:
         query = self.search_box.text().strip()
         if not query:
-            self.suggestion_list.clear()
-            self._set_welcome_text()
+            self.suggestions.clear()
+            self.suggestions.hide()
             return
 
-        self.suggestion_list.blockSignals(True)
-        self.suggestion_list.clear()
         suggestions = self.query_manager.suggest(query, limit=100)
-        for s in suggestions:
-            QListWidgetItem(s, self.suggestion_list)
-        self.suggestion_list.blockSignals(False)
+        self._populate_suggestions(suggestions)
 
         entries = self.query_manager.search(query, exact=True)
-        if not entries and not suggestions:
-            entries = self.query_manager.search(query, exact=False)
+        if entries:
+            self._display_in_current(query, entries)
+            self._push_nav(query)
+        else:
+            # Offer the first suggestion as a hint by leaving the dropdown open
+            pass
 
-        self._display_entries(query, entries)
+    def _run_search_explicit(self) -> None:
+        """Enter-key: force a search, open current tab."""
+        query = self.search_box.text().strip()
+        if not query:
+            return
+        entries = self.query_manager.search(query, exact=True)
+        if not entries:
+            entries = self.query_manager.search(query, exact=False)
+        self._display_in_current(query, entries)
+        self._push_nav(query)
+        self.suggestions.hide()
+
+    def _run_search_new_tab(self) -> None:
+        """Ctrl+Enter: open result in a new tab."""
+        query = self.search_box.text().strip()
+        if not query:
+            return
+        entries = self.query_manager.search(query, exact=True)
+        if not entries:
+            entries = self.query_manager.search(query, exact=False)
+        self.tabs.show_in_new_tab(query, entries)
+        self._push_nav(query)
+        self.suggestions.hide()
+
+    def _populate_suggestions(self, items: list[str]) -> None:
+        self.suggestions.clear()
+        for s in items:
+            QListWidgetItem(s, self.suggestions)
+        self.suggestions.setVisible(bool(items))
 
     def _on_suggestion_activated(self, item: QListWidgetItem) -> None:
         word = item.text()
         self.search_box.setText(word)
         entries = self.query_manager.search(word, exact=True)
-        self._display_entries(word, entries)
+        self._display_in_current(word, entries)
+        self._push_nav(word)
+        self.suggestions.hide()
 
-    def _on_suggestion_current_changed(self, current, _previous) -> None:
-        if current is None:
+    def _display_in_current(
+        self, word: str, entries: list[DictionaryEntry]
+    ) -> None:
+        self.tabs.show_in_current(word, entries)
+        self._update_favorite_button(word)
+        if word and entries:
+            self.history.record(word)
+            self._refresh_history_pane()
+
+    def _open_word(self, word: str) -> None:
+        """Called from sidebar clicks (favorite or history)."""
+        if not word:
             return
-        word = current.text()
+        self.search_box.setText(word)
         entries = self.query_manager.search(word, exact=True)
-        self._display_entries(word, entries)
+        self._display_in_current(word, entries)
+        self._push_nav(word)
 
-    def _display_entries(self, query: str, entries: list[DictionaryEntry]) -> None:
-        if not entries:
-            self.result_view.setHtml(
-                f"""
-                <div style="padding: 20px; color: #888;">
-                    <p><b>{html.escape(query)}</b> için sonuç bulunamadı.</p>
-                </div>
-                """
-            )
+    # ---------------------------------------------------- navigation
+
+    def _push_nav(self, word: str) -> None:
+        if self._applying_nav or not word:
             return
+        # Drop forward history on new navigation
+        self._nav_history = self._nav_history[: self._nav_cursor + 1]
+        self._nav_history.append(word)
+        self._nav_cursor = len(self._nav_history) - 1
+        self._update_nav_buttons()
 
-        parts: list[str] = []
-        parts.append(
-            """
-            <style>
-                body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; }
-                .dict-header {
-                    background: #f3f3f3;
-                    border-left: 3px solid #5d7eb0;
-                    padding: 6px 10px;
-                    margin: 16px 0 8px 0;
-                    font-size: 12px;
-                    color: #555;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                }
-                .headword {
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: #2a4d7a;
-                    margin-bottom: 6px;
-                }
-                .definition { padding-left: 8px; }
-                .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
-            </style>
-            """
-        )
+    def _nav_back(self) -> None:
+        if self._nav_cursor <= 0:
+            return
+        self._nav_cursor -= 1
+        word = self._nav_history[self._nav_cursor]
+        self._apply_nav(word)
 
-        current_dict = None
-        for entry in entries:
-            if entry.dictionary_id != current_dict:
-                current_dict = entry.dictionary_id
-                parts.append(f'<div class="dict-header">{html.escape(current_dict)}</div>')
+    def _nav_forward(self) -> None:
+        if self._nav_cursor + 1 >= len(self._nav_history):
+            return
+        self._nav_cursor += 1
+        word = self._nav_history[self._nav_cursor]
+        self._apply_nav(word)
 
-            parts.append(f'<div class="headword">{html.escape(entry.headword)}</div>')
-            definition = entry.definition
-            if "<" in definition and ">" in definition:
-                parts.append(f'<div class="definition">{definition}</div>')
-            else:
-                parts.append(
-                    f'<div class="definition"><pre>{html.escape(definition)}</pre></div>'
-                )
+    def _apply_nav(self, word: str) -> None:
+        self._applying_nav = True
+        try:
+            self.search_box.setText(word)
+            entries = self.query_manager.search(word, exact=True)
+            self._display_in_current(word, entries)
+        finally:
+            self._applying_nav = False
+            self._update_nav_buttons()
 
-        self.result_view.setHtml("\n".join(parts))
+    def _update_nav_buttons(self) -> None:
+        self.back_action.setEnabled(self._nav_cursor > 0)
+        self.fwd_action.setEnabled(self._nav_cursor + 1 < len(self._nav_history))
 
-    def add_dictionary_dialog(self) -> None:
+    # ---------------------------------------------------- favorites
+
+    def _toggle_favorite_current(self) -> None:
+        word = self.tabs.current_word() or self.search_box.text().strip()
+        if not word or word == "Yeni sekme":
+            return
+        now_fav = self.history.toggle_favorite(word)
+        self.favorite_action.setChecked(now_fav)
+        self._refresh_favorites_pane()
+
+    def _update_favorite_button(self, word: str) -> None:
+        self.favorite_action.setChecked(bool(word) and self.history.is_favorite(word))
+
+    # ---------------------------------------------------- tabs
+
+    def _on_current_tab_word_changed(self, word: str) -> None:
+        self._update_favorite_button(word)
+
+    def _cycle_tab(self, delta: int) -> None:
+        n = self.tabs.count()
+        if n == 0:
+            return
+        self.tabs.setCurrentIndex((self.tabs.currentIndex() + delta) % n)
+
+    # ---------------------------------------------------- zoom
+
+    def _zoom_in(self) -> None:
+        self.prefs.zoom_factor = min(3.0, self.prefs.zoom_factor + 0.1)
+        self.tabs.set_zoom(self.prefs.zoom_factor)
+        self.prefs.save()
+        self._update_zoom_label()
+
+    def _zoom_out(self) -> None:
+        self.prefs.zoom_factor = max(0.5, self.prefs.zoom_factor - 0.1)
+        self.tabs.set_zoom(self.prefs.zoom_factor)
+        self.prefs.save()
+        self._update_zoom_label()
+
+    def _zoom_reset(self) -> None:
+        self.prefs.zoom_factor = 1.0
+        self.tabs.set_zoom(1.0)
+        self.prefs.save()
+        self._update_zoom_label()
+
+    def _update_zoom_label(self) -> None:
+        self.zoom_label.setText(f"{int(self.prefs.zoom_factor * 100)}%")
+
+    # ---------------------------------------------------- theme
+
+    def _cycle_theme(self) -> None:
+        order = ["auto", "light", "dark"]
+        idx = order.index(self.prefs.theme) if self.prefs.theme in order else 0
+        self.prefs.theme = order[(idx + 1) % len(order)]
+        self.prefs.save()
+        self._apply_prefs_to_ui()
+        self.statusBar().showMessage(f"Tema: {self.prefs.theme}", 2500)
+
+    # ---------------------------------------------------- dict management
+
+    def _add_dictionary_dialog(self) -> None:
         file_filter = (
             "Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
-            "StarDict (*.ifo);;"
-            "DSL / Lingvo (*.dsl *.dsl.dz);;"
-            "Babylon (*.bgl);;"
-            "Tüm dosyalar (*)"
+            "StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dsl.dz);;"
+            "Babylon (*.bgl);;Tüm dosyalar (*)"
         )
-        path_str, _ = QFileDialog.getOpenFileName(
-            self,
-            "Sözlük dosyası seçin",
-            "",
-            file_filter,
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Sözlük dosyası seçin", "", file_filter
         )
-        if not path_str:
+        if not paths:
             return
-
-        try:
-            dictionary = self.query_manager.add_dictionary(Path(path_str))
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Sözlük yüklenemedi",
-                f"<b>{path_str}</b><br><br>{type(e).__name__}: {e}",
-            )
-            return
-
+        for p in paths:
+            try:
+                d = self.query_manager.add_dictionary(Path(p))
+                self.statusBar().showMessage(
+                    f"Yüklendi: {d.metadata.name} ({d.metadata.word_count:,} kelime)",
+                    4000,
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Yüklenemedi",
+                    f"<b>{p}</b><br><br>{type(e).__name__}: {e}",
+                )
+        self._refresh_sidebar()
         self._refresh_status()
-        self.statusBar().showMessage(
-            f"Yüklendi: {dictionary.metadata.name} "
-            f"({dictionary.metadata.word_count:,} kelime)",
-            5000,
-        )
-        self.dictionary_loaded.emit(dictionary.metadata.name)
+
+    def _open_dictionary_manager(self) -> None:
+        dlg = DictionaryManagerDialog(self.query_manager, self)
+        dlg.dictionaries_changed.connect(lambda: (self._refresh_sidebar(), self._refresh_status()))
+        dlg.exec()
+
+    def _on_sidebar_dict_toggled(self, name: str, enabled: bool) -> None:
+        self.query_manager.set_enabled(name, enabled)
+        self._refresh_status()
+
+    # ---------------------------------------------------- panes
+
+    def _refresh_sidebar(self) -> None:
+        items = [
+            (name, self.query_manager.is_enabled(name))
+            for name in self.query_manager.loaded_names()
+        ]
+        self.sidebar.set_dictionaries(items)
+        self._refresh_favorites_pane()
+        self._refresh_history_pane()
+
+    def _refresh_favorites_pane(self) -> None:
+        self.sidebar.set_favorites(self.history.favorites(500))
+
+    def _refresh_history_pane(self) -> None:
+        self.sidebar.set_history(self.history.recent(200))
 
     def _refresh_status(self) -> None:
-        n = len(self.query_manager.dictionaries)
-        total_words = sum(
-            d.metadata.word_count for d in self.query_manager.dictionaries.values()
+        enabled = [
+            n for n in self.query_manager.loaded_names()
+            if self.query_manager.is_enabled(n)
+        ]
+        n = len(enabled)
+        total = sum(
+            self.query_manager.dictionaries[name].metadata.word_count
+            for name in enabled
         )
         if n == 0:
-            self.dict_count_label.setText("0 sözlük")
+            self.dict_count_label.setText("0 sözlük yüklü")
         else:
-            self.dict_count_label.setText(f"{n} sözlük · {total_words:,} kelime")
+            self.dict_count_label.setText(f"{n} sözlük · {total:,} kelime")
 
-    def _show_about(self) -> None:
+    # ---------------------------------------------------- misc
+
+    def _toggle_sidebar(self) -> None:
+        self.sidebar.setVisible(not self.sidebar.isVisible())
+        self.prefs.show_sidebar = self.sidebar.isVisible()
+        self.prefs.save()
+
+    def _clear_history(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Geçmişi temizle",
+            "Tüm arama geçmişini silmek istediğinizden emin misiniz?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.history.clear_history()
+            self._refresh_history_pane()
+
+    def _copy_current_word(self) -> None:
+        word = self.tabs.current_word()
+        if word and word != "Yeni sekme":
+            QApplication.clipboard().setText(word)
+            self.statusBar().showMessage(f"Kopyalandı: {word}", 2000)
+
+    def _on_definition_link(self, url: str) -> None:
+        # dict://word or bword://word — open in current tab
+        if url.startswith(("dict:", "bword:")):
+            word = url.split(":", 1)[1].lstrip("/")
+            self._open_word(word)
+
+    def _open_preferences(self) -> None:
+        dlg = PreferencesDialog(self.prefs, self)
+        dlg.preferences_changed.connect(self._on_prefs_changed)
+        dlg.exec()
+
+    def _on_prefs_changed(self, prefs: Preferences) -> None:
+        self.prefs = prefs
+        self._apply_prefs_to_ui()
+
+    def _about(self) -> None:
         QMessageBox.about(
             self,
             "dictz hakkında",
             """
-            <h3>dictz 0.0.2</h3>
-            <p>Çok formatlı sözlük uygulaması (GoldenDict tarzı).</p>
-            <p style="color: #777; font-size: 12px;">
-                v0.0.2 — StarDict + DSL + Babylon desteği
+            <h3>dictz 0.0.3</h3>
+            <p>Çok formatlı çevrimdışı sözlük uygulaması.</p>
+            <p style="color: #888; font-size: 12px;">
+                v0.0.3 — işlevsel UI (sekmeler, sidebar, favoriler, geçmiş, temalar)
             </p>
             <p>© 2026 Bayram Kotan · GPL-3.0+</p>
+            <p><a href="https://github.com/bayramkotan/dictz">github.com/bayramkotan/dictz</a></p>
             """,
         )
 
-    def closeEvent(self, event):  # noqa: N802 (Qt naming)
+    # ---------------------------------------------------- shutdown
+
+    def closeEvent(self, event):  # noqa: N802
+        self.prefs.window_geometry = self.saveGeometry()
+        self.prefs.window_state = self.saveState()
+        self.prefs.last_search = self.search_box.text()
+        self.prefs.save()
         self.query_manager.close_all()
         if self.query_manager.index_store:
             self.query_manager.index_store.close()
+        self.history.close()
         super().closeEvent(event)

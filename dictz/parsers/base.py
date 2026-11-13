@@ -1,9 +1,4 @@
-"""Abstract base class for all dictionary format parsers.
-
-Every concrete parser (StarDict, DSL, Babylon) implements this interface,
-so the rest of the application can treat dictionaries uniformly regardless
-of their underlying file format.
-"""
+"""Abstract base class for all dictionary format parsers."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -17,9 +12,9 @@ class DictionaryEntry:
     """A single headword + definition pair from a dictionary."""
 
     headword: str
-    definition: str  # HTML or plain text
-    dictionary_id: str = ""  # filled in by the query manager
-    score: float = 1.0  # 1.0 = exact match, <1.0 = fuzzy match similarity
+    definition: str
+    dictionary_id: str = ""
+    score: float = 1.0
 
     def __repr__(self) -> str:
         preview = self.definition[:50].replace("\n", " ")
@@ -37,7 +32,7 @@ class DictionaryMetadata:
     author: str = ""
     word_count: int = 0
     file_path: Path = field(default_factory=Path)
-    format: str = ""  # "stardict", "dsl", "babylon"
+    format: str = ""
 
     @property
     def display_name(self) -> str:
@@ -47,14 +42,7 @@ class DictionaryMetadata:
 
 
 class Dictionary(ABC):
-    """Abstract base for all dictionary format parsers.
-
-    Lifecycle:
-        1. __init__(path)        — store the path, do nothing expensive
-        2. load()                — read headers, build internal index
-        3. lookup(word) / iter_entries() — used by query manager
-        4. close()               — release file handles
-    """
+    """Abstract base for all dictionary format parsers."""
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -66,30 +54,15 @@ class Dictionary(ABC):
         return self._loaded
 
     @abstractmethod
-    def load(self) -> None:
-        """Load dictionary headers and build an in-memory index.
-
-        Should populate self.metadata. Heavy I/O is expected here.
-        """
-        ...
+    def load(self) -> None: ...
 
     @abstractmethod
-    def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
-        """Look up a word. Returns 0 or more matching entries.
-
-        Args:
-            word: The headword to search for (case-insensitive by default).
-            exact: If True, only exact matches. If False, prefix matches too.
-        """
-        ...
+    def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]: ...
 
     @abstractmethod
-    def iter_entries(self) -> Iterator[DictionaryEntry]:
-        """Yield every entry in the dictionary (used for full indexing)."""
-        ...
+    def iter_entries(self) -> Iterator[DictionaryEntry]: ...
 
     def close(self) -> None:
-        """Release any open file handles. Default: no-op."""
         self._loaded = False
 
     def __enter__(self):

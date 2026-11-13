@@ -1,0 +1,81 @@
+# dictz — TODO
+
+Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
+
+---
+
+## Near-term (v0.0.x)
+
+### v0.0.4 — portable packages
+- 📋 Linux AppImage (python-appimage or appimage-builder)
+- 📋 Windows portable zip (PyInstaller --onedir)
+- 📋 macOS .app bundle (PyInstaller / py2app)
+- 📋 GitHub Releases workflow (artifacts on tag push)
+- 📋 Code signing (where applicable — notarization skipped for now)
+
+### v0.0.5 — fuzzy + rich rendering
+- 📋 Fuzzy / approximate matching with RapidFuzz on no-exact-hit
+- 📋 Highlighted suggestion ranking (closest first)
+- 📋 Inline pronunciation audio playback from DSL `[s]sound.wav[/s]`
+- 📋 Embedded images from DSL `[s]picture.jpg[/s]`
+
+### v0.0.6 — services
+- 📋 TTS with edge-tts (40+ languages, neural voices)
+- 📋 Per-dictionary / per-language voice mapping
+- 📋 Clipboard monitor (Ctrl-C triggers lookup) with opt-in toggle
+- 📋 Global hotkey (Ctrl+Alt+K)
+
+### v0.0.7 — Anki + OCR
+- 📋 Anki integration (AnkiConnect HTTP, add selected headword + definition)
+- 📋 Screen-area OCR (mss + Tesseract) to grab words from videos/PDFs
+- 📋 Per-deck + per-model mapping in preferences
+
+### v0.0.8 — formats
+- 📋 XDXF parser (PyGlossary already does)
+- 📋 Slob / Aard2 (PyGlossary)
+- 📋 DictD `.index` / `.dict`
+- 💡 MDict (.mdx / .mdd) — closed format, reader is tricky
+- 💡 EPUB-as-glossary
+
+### v0.0.9 — groups, search, UX
+- 📋 Dictionary groups (per-language presets, like GoldenDict groups)
+- 📋 Full-text search inside definitions (not just headwords)
+- 📋 Multi-word phrase lookup
+- 📋 Morphology / stemming (Hunspell) for lemma matching
+- 📋 Per-dictionary priority weighting
+
+---
+
+## v0.1.0 — first polished release
+- 📋 Preferences dialog gets panels (General / Search / Appearance / Shortcuts / Advanced)
+- 📋 Shortcut editor
+- 📋 Export / import settings
+- 📋 Diagnostics panel (what's indexed, FTS5 stats, parser warnings)
+- 📋 First-run tour
+
+---
+
+## Post-v1.0 ideas
+- 💡 `dictz-rs` — Rust port for benchmarking / learning (separate repo)
+- 💡 Mobile companion (Android via Chaquopy or Kivy, iOS via Kivy / BeeWare)
+- 💡 Browser extension (select a word on any page → send to dictz)
+- 💡 WebView-based "card mode" (Anki-style flashcard review in the app)
+
+---
+
+## Known bugs / limitations
+
+- `.syn` synonym files in StarDict are ignored (optional feature)
+- `sametypesequence` in StarDict `.ifo` is not interpreted (HTML / plain tags)
+- UTF-8 is assumed for `.ifo` headers (no latin-1 fallback)
+- Large `.bgl` files load eagerly into memory; streaming would be better
+- QWebEngine not available on every PySide6 install → we fall back to QTextBrowser, which drops images/complex CSS
+- Window layout is stored via QSettings, but dock reset UI is missing
+
+---
+
+## Recently done
+
+- ✅ **v0.0.3** — tabbed UI, sidebar (dict/fav/history), themes, zoom, window state, QWebEngine renderer, keyboard shortcuts, dictionary manager dialog
+- ✅ **v0.0.2** — DSL + Babylon parsers via PyGlossary
+- ✅ **v0.0.1** — StarDict native parser, SQLite FTS5 index, 3-pane UI

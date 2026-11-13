@@ -6,8 +6,6 @@ StarDict files come in groups of 3-4 files sharing a basename:
     name.dict  — concatenated definitions (raw bytes)
     name.dict.dz — same, compressed with dictzip (gzip variant w/ random access)
     name.syn   — optional synonyms index (binary)
-
-Reference: https://github.com/huzheng001/stardict-3/blob/master/dict/doc/StarDictFileFormat
 """
 from __future__ import annotations
 
@@ -28,7 +26,6 @@ class StarDictDictionary(Dictionary):
 
     def __init__(self, path: Path | str):
         super().__init__(path)
-        # path can point to any of the sibling files; we normalize to the .ifo
         if self.path.suffix.lower() != ".ifo":
             ifo_candidate = self.path.with_suffix(".ifo")
             if ifo_candidate.exists():
@@ -36,14 +33,12 @@ class StarDictDictionary(Dictionary):
             else:
                 raise StarDictError(f"No .ifo file found alongside {self.path}")
 
-        self._basepath = self.path.with_suffix("")  # strip .ifo
-        self._idx_offset_bits = 32  # default; .ifo may override to 64
-        self._index: dict[str, tuple[int, int]] = {}  # word -> (offset, size)
-        self._sorted_words: list[str] = []  # for prefix search
+        self._basepath = self.path.with_suffix("")
+        self._idx_offset_bits = 32
+        self._index: dict[str, tuple[int, int]] = {}
+        self._sorted_words: list[str] = []
         self._dict_data: bytes | None = None
         self.metadata.format = "stardict"
-
-    # ------------------------------------------------------------------ load
 
     def load(self) -> None:
         if self._loaded:
@@ -56,10 +51,8 @@ class StarDictDictionary(Dictionary):
         self._loaded = True
 
     def _parse_ifo(self) -> None:
-        """Parse the .ifo header file. Format: key=value per line."""
         ifo_path = self._basepath.with_suffix(".ifo")
         text = ifo_path.read_text(encoding="utf-8", errors="replace")
-
         lines = text.splitlines()
         if not lines or not lines[0].startswith("StarDict's dict ifo file"):
             raise StarDictError(f"Not a valid StarDict .ifo: {ifo_path}")
@@ -85,7 +78,6 @@ class StarDictDictionary(Dictionary):
             raise StarDictError(f"Unsupported idxoffsetbits: {self._idx_offset_bits}")
 
     def _parse_idx(self) -> None:
-        """Parse .idx file. Format per entry: word\\0 + offset + size."""
         idx_path = self._basepath.with_suffix(".idx")
         if not idx_path.exists():
             gz_path = self._basepath.with_suffix(".idx.gz")
@@ -122,7 +114,6 @@ class StarDictDictionary(Dictionary):
             pos = tail_start + entry_tail_size
 
     def _load_dict_data(self) -> None:
-        """Load the .dict (or .dict.dz) into memory."""
         dict_path = self._basepath.with_suffix(".dict")
         dz_path = Path(str(self._basepath) + ".dict.dz")
 
@@ -133,8 +124,6 @@ class StarDictDictionary(Dictionary):
                 self._dict_data = f.read()
         else:
             raise StarDictError(f"Missing .dict or .dict.dz file near {self._basepath}")
-
-    # ---------------------------------------------------------------- lookup
 
     def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
         if not self._loaded:

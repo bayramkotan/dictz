@@ -1,16 +1,4 @@
-"""PyGlossary-backed base parser.
-
-PyGlossary is a mature multi-format converter library that can read 60+
-dictionary formats. We wrap it behind our own Dictionary interface so the
-rest of dictz doesn't need to know about PyGlossary's quirks.
-
-For each supported format (DSL, Babylon, etc.) we subclass PyGlossaryDictionary
-and set `_format` to the PyGlossary plugin name. Everything else is shared:
-headers, iteration, exact and prefix lookup.
-
-The PyGlossary Glossary.init() call is global and expensive (it loads every
-plugin module). We call it once per process via _ensure_init().
-"""
+"""PyGlossary-backed base parser for DSL / Babylon / other PyGlossary formats."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +11,6 @@ _pyglossary_initialized = False
 
 
 def _ensure_init() -> None:
-    """Call Glossary.init() exactly once per process."""
     global _pyglossary_initialized
     if _pyglossary_initialized:
         return
@@ -43,27 +30,16 @@ class PyGlossaryError(Exception):
 
 
 class PyGlossaryDictionary(Dictionary):
-    """Generic PyGlossary-backed dictionary.
+    """Generic PyGlossary-backed dictionary."""
 
-    Subclasses set:
-        _format: the PyGlossary plugin name (e.g. "ABBYYLingvoDSL", "Babylon")
-        format_label: the human-readable format label stored in metadata
-    """
-
-    _format: str = ""  # overridden by subclass
-    format_label: str = ""  # overridden by subclass
+    _format: str = ""
+    format_label: str = ""
 
     def __init__(self, path: Path | str):
         super().__init__(path)
-        # word -> definition (loaded eagerly on load() — PyGlossary doesn't
-        # offer cheap random access for most formats, so we materialize the
-        # whole dictionary in memory on first load, then serve lookups from
-        # the dict. For very large glossaries this trades memory for speed.
         self._entries: dict[str, str] = {}
         self._sorted_words: list[str] = []
         self.metadata.format = self.format_label
-
-    # ------------------------------------------------------------------ load
 
     def load(self) -> None:
         if self._loaded:
@@ -91,27 +67,21 @@ class PyGlossaryDictionary(Dictionary):
                 f"PyGlossary refused to open {self.path} as {self._format}"
             )
 
-        # Pull header fields
         self.metadata.name = glos.getInfo("name") or glos.getInfo("title") or self.path.stem
         self.metadata.author = glos.getInfo("author") or ""
         self.metadata.description = glos.getInfo("description") or ""
         self.metadata.source_language = glos.getInfo("sourceLang") or ""
         self.metadata.target_language = glos.getInfo("targetLang") or ""
 
-        # Materialize all entries. PyGlossary iterates once in direct mode.
         for entry in glos:
             if entry is None:
                 continue
-            # Skip resource entries (images, sounds, binary blobs)
             if getattr(entry, "isData", lambda: False)():
                 continue
-            # PyGlossary 5.0+ renamed s_word -> s_term; keep a fallback.
             word = getattr(entry, "s_term", None) or getattr(entry, "s_word", "") or ""
             defi = entry.defi or ""
             if not word:
                 continue
-            # A headword can have multiple variants; PyGlossary gives them as
-            # a single `\n`-separated string in s_word. Register them all.
             variants = [w.strip() for w in word.split("|") if w.strip()]
             if not variants:
                 variants = [word]
@@ -122,8 +92,6 @@ class PyGlossaryDictionary(Dictionary):
         self.metadata.word_count = len(self._entries)
         self._sorted_words = sorted(self._entries.keys(), key=str.lower)
         self._loaded = True
-
-    # ---------------------------------------------------------------- lookup
 
     def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
         if not self._loaded:

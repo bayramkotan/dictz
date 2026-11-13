@@ -5,12 +5,11 @@
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/bayramkotan/dictz)
 [![Downloads](https://img.shields.io/pypi/dm/dictz.svg)](https://pypi.org/project/dictz/)
+[![GitHub stars](https://img.shields.io/github/stars/bayramkotan/dictz?style=social)](https://github.com/bayramkotan/dictz)
 
-Cross-platform, multi-format, offline dictionary application — a GoldenDict-style desktop tool built with Python and Qt.
+Cross-platform, multi-format, offline dictionary application — a modern GoldenDict-style desktop tool built with Python and Qt.
 
 > [Türkçe açıklama aşağıda](#türkçe)
-
-![Platforms: Windows, Linux, macOS](https://img.shields.io/badge/runs_on-Windows_·_Linux_·_macOS-success)
 
 ## Highlights
 
@@ -18,7 +17,20 @@ Cross-platform, multi-format, offline dictionary application — a GoldenDict-st
 - **Multi-dictionary** — load any number of dictionaries at once; a single query hits them all
 - **Fast** — SQLite FTS5 index with Unicode + diacritic-insensitive search
 - **Offline** — no network calls, no telemetry
-- **Cross-platform** — one codebase runs on Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), and macOS
+- **Modern UI** — tabbed definitions, dockable sidebar (dictionaries / favorites / history), back/forward navigation, light + dark themes, configurable zoom and fonts
+- **Cross-platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), macOS
+
+## Screens & features at a glance
+
+- **Tabbed definition view** — open each lookup in its own tab (Ctrl+T / Ctrl+W / Ctrl+Tab)
+- **Live suggestions** — debounced as-you-type, powered by FTS5 prefix matching
+- **Back / Forward** — browser-style history navigation (Alt+Left / Alt+Right)
+- **Favorites** — star words with Ctrl+D, review them in the sidebar
+- **History** — every lookup logged, re-openable with one click, clearable with one button
+- **Dictionary manager** — add / remove / reorder / enable / disable from a dialog or the sidebar
+- **Zoom** — Ctrl+= / Ctrl+- / Ctrl+0
+- **Themes** — Light, Dark, Auto (follows the OS)
+- **Rich HTML** — QWebEngineView renders DSL markup with images and formatting
 
 ## Install
 
@@ -52,7 +64,7 @@ python -m dictz
 | ABBYY Lingvo DSL | `.dsl` / `.dsl.dz` | [PyGlossary](https://github.com/ilius/pyglossary) |
 | Babylon | `.bgl` | [PyGlossary](https://github.com/ilius/pyglossary) |
 
-More formats (XDXF, Slob, DictD, MDict, …) are planned — see the [roadmap](#roadmap).
+More formats (XDXF, Slob, DictD, MDict, …) are on the [TODO](TODO.md).
 
 ## Where to find dictionaries
 
@@ -60,27 +72,28 @@ More formats (XDXF, Slob, DictD, MDict, …) are planned — see the [roadmap](#
 - [StarDict.org](http://download.huzheng.org/) — large StarDict collection
 - [Lingvo DSL packs](http://lingvo.helpmax.net/) — ABBYY Lingvo community dictionaries
 
-## Roadmap
+## Keyboard shortcuts
 
-- [x] **v0.0.1** — StarDict, multi-dictionary search, SQLite FTS5 index
-- [x] **v0.0.2** — DSL + Babylon format support via PyGlossary
-- [ ] Fuzzy / approximate matching (RapidFuzz)
-- [ ] Rich HTML rendering (QWebEngineView) with images and audio
-- [ ] Text-to-speech (edge-tts neural voices)
-- [ ] Clipboard monitoring + global hotkey
-- [ ] Screen-area OCR (Tesseract)
-- [ ] Anki integration (one-click flashcards)
-- [ ] Dictionary manager UI + preferences
-- [ ] Dark mode
-- [ ] Standalone binaries for Windows / Linux / macOS (PyInstaller)
+| Action | Shortcut |
+|--------|----------|
+| Focus search box | Ctrl+F |
+| Open in current tab | Enter |
+| Open in new tab | Ctrl+Enter |
+| New tab / Close tab | Ctrl+T / Ctrl+W |
+| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Back / Forward | Alt+← / Alt+→ |
+| Toggle favorite | Ctrl+D |
+| Toggle sidebar | Ctrl+B |
+| Zoom in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Preferences | Ctrl+, |
+| Add dictionary | Ctrl+O |
+| Dictionary manager | Ctrl+M |
+| Copy current word | Ctrl+Shift+C |
 
 ## Development
 
 ```bash
-# Install with dev extras
 pip install -e ".[dev]"
-
-# Run the test suite
 pytest -v
 ```
 
@@ -91,17 +104,20 @@ dictz/
 ├── dictz/
 │   ├── core/           # query orchestration, parser dispatch
 │   ├── parsers/        # one module per dictionary format
-│   ├── storage/        # SQLite FTS5 indexer
+│   ├── storage/        # SQLite FTS5 indexer, history, settings
 │   ├── services/       # (planned) TTS, OCR, clipboard, Anki
-│   ├── ui/             # PySide6 widgets
+│   ├── ui/             # PySide6 widgets — tabs, sidebar, themes
 │   └── app.py          # entry point
 ├── tests/
+├── docs/
+├── CHANGELOG.md
+├── TODO.md
 └── pyproject.toml
 ```
 
 ## Contributing
 
-Issues and pull requests are welcome at [github.com/bayramkotan/dictz](https://github.com/bayramkotan/dictz).
+Issues and pull requests are welcome at [github.com/bayramkotan/dictz](https://github.com/bayramkotan/dictz). See [TODO.md](TODO.md) for ideas.
 
 ## License
 
@@ -115,7 +131,7 @@ Licensed under the [GNU General Public License v3.0 or later](LICENSE).
 
 ## Türkçe
 
-dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir sözlük uygulamasıdır. GoldenDict tarzı bir masaüstü aracıdır ve Python + Qt ile geliştirilmektedir.
+dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir sözlük uygulamasıdır. GoldenDict tarzı modern bir masaüstü aracıdır ve Python + Qt ile geliştirilmektedir.
 
 ### Öne çıkanlar
 
@@ -123,7 +139,8 @@ dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir s
 - **Çoklu sözlük** — istediğin kadar sözlük yükle; tek bir arama hepsinde çalışır
 - **Hızlı** — SQLite FTS5 indeksi + Unicode + diakritik duyarsız arama
 - **Çevrimdışı** — hiçbir ağ çağrısı yok, telemetri yok
-- **Çapraz platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora) ve macOS üzerinde aynı kod
+- **Modern arayüz** — sekmeli tanım görüntüleyici, yan panel (sözlükler/favoriler/geçmiş), ileri/geri gezinme, açık + koyu tema, yakınlaştırma, özelleştirilebilir yazı tipi
+- **Çapraz platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), macOS
 
 ### Kurulum
 
@@ -137,19 +154,22 @@ pip install dictz
 dictz
 ```
 
-### Yol haritası
+### Klavye kısayolları
 
-- [x] **v0.0.1** — StarDict format desteği, çoklu sözlükte arama, SQLite FTS5 indeksi
-- [x] **v0.0.2** — DSL + Babylon format desteği (PyGlossary ile)
-- [ ] Fuzzy arama (RapidFuzz)
-- [ ] Tanımlar için zengin HTML görüntüleme
-- [ ] Metin okuma (TTS, neural sesler)
-- [ ] Pano izleme + global kısayol
-- [ ] Ekran OCR (Tesseract)
-- [ ] Anki entegrasyonu
-- [ ] Sözlük yöneticisi UI + tercihler
-- [ ] Koyu tema
-- [ ] Windows / Linux / macOS tek dosya binary (PyInstaller)
+| Eylem | Kısayol |
+|-------|---------|
+| Arama kutusuna odaklan | Ctrl+F |
+| Mevcut sekmede aç | Enter |
+| Yeni sekmede aç | Ctrl+Enter |
+| Yeni sekme / Sekmeyi kapat | Ctrl+T / Ctrl+W |
+| Önceki / sonraki sekme | Ctrl+Tab / Ctrl+Shift+Tab |
+| Geri / İleri | Alt+← / Alt+→ |
+| Favori aç/kapat | Ctrl+D |
+| Yan paneli aç/kapat | Ctrl+B |
+| Büyüt / küçült / sıfırla | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Tercihler | Ctrl+, |
+| Sözlük ekle | Ctrl+O |
+| Sözlük yöneticisi | Ctrl+M |
 
 ### Lisans
 
