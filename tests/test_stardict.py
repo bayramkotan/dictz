@@ -1,8 +1,4 @@
-"""Tests for the StarDict parser.
-
-We build a tiny StarDict dictionary in a tmp dir and verify that the parser
-reads the .ifo, decodes the .idx, and pulls definitions out of the .dict.
-"""
+"""Tests for the StarDict parser."""
 from __future__ import annotations
 
 import struct
@@ -14,7 +10,6 @@ from dictz.parsers.stardict import StarDictDictionary, StarDictError
 
 
 def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
-    """Construct a minimal valid StarDict on disk. Returns the .ifo path."""
     base = tmp_path / name
     entries = [
         ("apple", "elma — a round fruit"),
@@ -22,7 +17,6 @@ def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
         ("cat", "kedi — a small carnivorous mammal"),
     ]
 
-    # Build .dict (concatenated definitions, UTF-8 bytes)
     dict_bytes = b""
     idx_records: list[tuple[str, int, int]] = []
     offset = 0
@@ -34,7 +28,6 @@ def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
 
     base.with_suffix(".dict").write_bytes(dict_bytes)
 
-    # Build .idx: each record = word + \0 + offset(BE 32) + size(BE 32)
     idx_bytes = b""
     for word, offset, size in idx_records:
         idx_bytes += word.encode("utf-8") + b"\x00"
@@ -42,7 +35,6 @@ def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
         idx_bytes += struct.pack(">I", size)
     base.with_suffix(".idx").write_bytes(idx_bytes)
 
-    # Build .ifo
     ifo = (
         "StarDict's dict ifo file\n"
         "version=2.4.2\n"
@@ -58,9 +50,6 @@ def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
     return ifo_path
 
 
-# ----------------------------------------------------------------- tests
-
-
 def test_load_metadata(tmp_path: Path) -> None:
     ifo_path = _build_tiny_stardict(tmp_path)
     d = StarDictDictionary(ifo_path)
@@ -70,6 +59,7 @@ def test_load_metadata(tmp_path: Path) -> None:
     assert d.metadata.name == "Tiny Test Dictionary"
     assert d.metadata.author == "dictz Tests"
     assert d.metadata.word_count == 3
+    assert d.metadata.format == "stardict"
 
 
 def test_lookup_exact(tmp_path: Path) -> None:
@@ -132,5 +122,4 @@ def test_context_manager(tmp_path: Path) -> None:
     with StarDictDictionary(ifo_path) as d:
         assert d.loaded
         assert len(d.lookup("apple")) == 1
-    # After __exit__, dictionary is closed
     assert not d.loaded

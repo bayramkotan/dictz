@@ -1,71 +1,115 @@
 # dictz
 
-Cross-platform, multi-format offline dictionary application — a GoldenDict-style desktop tool built with Python and Qt.
+[![PyPI version](https://img.shields.io/pypi/v/dictz.svg)](https://pypi.org/project/dictz/)
+[![Python versions](https://img.shields.io/pypi/pyversions/dictz.svg)](https://pypi.org/project/dictz/)
+[![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/bayramkotan/dictz)
+[![Downloads](https://img.shields.io/pypi/dm/dictz.svg)](https://pypi.org/project/dictz/)
+
+Cross-platform, multi-format, offline dictionary application — a GoldenDict-style desktop tool built with Python and Qt.
 
 > [Türkçe açıklama aşağıda](#türkçe)
 
-## Features (roadmap)
+![Platforms: Windows, Linux, macOS](https://img.shields.io/badge/runs_on-Windows_·_Linux_·_macOS-success)
 
-- ✅ **v0.0.1** — StarDict format support, multi-dictionary search, SQLite FTS5 index
-- 🚧 **v0.2** — DSL (Lingvo) and Babylon (.bgl) format support via PyGlossary
-- 🚧 **v0.3** — Fuzzy / approximate matching with RapidFuzz
-- 🚧 **v0.4** — Rich HTML rendering for definitions (QWebEngineView)
-- 🚧 **v0.5** — Text-to-speech (edge-tts neural voices)
-- 🚧 **v0.6** — Clipboard monitoring + global hotkey
-- 🚧 **v0.7** — Screen-area OCR (Tesseract)
-- 🚧 **v0.8** — Anki integration (one-click flashcards)
-- 🚧 **v0.9** — Dictionary manager UI + preferences
-- 🚧 **v1.0** — PyInstaller packaging for Windows / Linux / macOS
+## Highlights
 
-## Quick start
+- **Multi-format** — StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`)
+- **Multi-dictionary** — load any number of dictionaries at once; a single query hits them all
+- **Fast** — SQLite FTS5 index with Unicode + diacritic-insensitive search
+- **Offline** — no network calls, no telemetry
+- **Cross-platform** — one codebase runs on Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), and macOS
+
+## Install
+
+### From PyPI
 
 ```bash
-# Clone
+pip install dictz
+```
+
+### From source
+
+```bash
 git clone https://github.com/bayramkotan/dictz.git
 cd dictz
-
-# Install (Python 3.10+)
 pip install -e .
+```
 
-# Run
+### Run
+
+```bash
 dictz
-# or
+# or equivalently
 python -m dictz
 ```
 
-## Project structure
+## Supported formats
+
+| Format | Extension | Parser |
+|--------|-----------|--------|
+| StarDict | `.ifo` / `.idx` / `.dict(.dz)` | native |
+| ABBYY Lingvo DSL | `.dsl` / `.dsl.dz` | [PyGlossary](https://github.com/ilius/pyglossary) |
+| Babylon | `.bgl` | [PyGlossary](https://github.com/ilius/pyglossary) |
+
+More formats (XDXF, Slob, DictD, MDict, …) are planned — see the [roadmap](#roadmap).
+
+## Where to find dictionaries
+
+- [FreeDict](https://freedict.org/) — StarDict dictionaries, many language pairs
+- [StarDict.org](http://download.huzheng.org/) — large StarDict collection
+- [Lingvo DSL packs](http://lingvo.helpmax.net/) — ABBYY Lingvo community dictionaries
+
+## Roadmap
+
+- [x] **v0.0.1** — StarDict, multi-dictionary search, SQLite FTS5 index
+- [x] **v0.0.2** — DSL + Babylon format support via PyGlossary
+- [ ] Fuzzy / approximate matching (RapidFuzz)
+- [ ] Rich HTML rendering (QWebEngineView) with images and audio
+- [ ] Text-to-speech (edge-tts neural voices)
+- [ ] Clipboard monitoring + global hotkey
+- [ ] Screen-area OCR (Tesseract)
+- [ ] Anki integration (one-click flashcards)
+- [ ] Dictionary manager UI + preferences
+- [ ] Dark mode
+- [ ] Standalone binaries for Windows / Linux / macOS (PyInstaller)
+
+## Development
+
+```bash
+# Install with dev extras
+pip install -e ".[dev]"
+
+# Run the test suite
+pytest -v
+```
+
+Project layout:
 
 ```
 dictz/
 ├── dictz/
-│   ├── core/           # query orchestration, fuzzy matching, cache
+│   ├── core/           # query orchestration, parser dispatch
 │   ├── parsers/        # one module per dictionary format
 │   ├── storage/        # SQLite FTS5 indexer
-│   ├── services/       # TTS, OCR, clipboard, Anki bridge
+│   ├── services/       # (planned) TTS, OCR, clipboard, Anki
 │   ├── ui/             # PySide6 widgets
 │   └── app.py          # entry point
 ├── tests/
 └── pyproject.toml
 ```
 
-## Supported formats
+## Contributing
 
-| Format | Extension | Status | Parser |
-|--------|-----------|--------|--------|
-| StarDict | `.ifo` / `.idx` / `.dict(.dz)` | ✅ v0.0.1 | native |
-| DSL (Lingvo) | `.dsl` | 🚧 v0.2 | PyGlossary |
-| Babylon | `.bgl` | 🚧 v0.2 | PyGlossary |
-
-## Running tests
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
+Issues and pull requests are welcome at [github.com/bayramkotan/dictz](https://github.com/bayramkotan/dictz).
 
 ## License
 
-GPL-3.0 or later — see `LICENSE`.
+Licensed under the [GNU General Public License v3.0 or later](LICENSE).
+
+## Author
+
+[Bayram Kotan](https://bayramkotan.com) — [github.com/bayramkotan](https://github.com/bayramkotan)
 
 ---
 
@@ -73,24 +117,40 @@ GPL-3.0 or later — see `LICENSE`.
 
 dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir sözlük uygulamasıdır. GoldenDict tarzı bir masaüstü aracıdır ve Python + Qt ile geliştirilmektedir.
 
-### Özellikler (yol haritası)
+### Öne çıkanlar
 
-- ✅ **v0.0.1** — StarDict format desteği, çoklu sözlükte arama, SQLite FTS5 indeksi
-- 🚧 **v0.2** — DSL (Lingvo) ve Babylon (.bgl) desteği
-- 🚧 **v0.3** — RapidFuzz ile fuzzy arama
-- 🚧 **v0.4** — Tanımlar için zengin HTML görüntüleme
-- 🚧 **v0.5** — Metin okuma (TTS, neural sesler)
-- 🚧 **v0.6** — Pano izleme + global kısayol
-- 🚧 **v0.7** — Ekran OCR (Tesseract)
-- 🚧 **v0.8** — Anki entegrasyonu
-- 🚧 **v0.9** — Sözlük yöneticisi + tercihler
-- 🚧 **v1.0** — Windows / Linux / macOS paketleri
+- **Çoklu format** — StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`)
+- **Çoklu sözlük** — istediğin kadar sözlük yükle; tek bir arama hepsinde çalışır
+- **Hızlı** — SQLite FTS5 indeksi + Unicode + diakritik duyarsız arama
+- **Çevrimdışı** — hiçbir ağ çağrısı yok, telemetri yok
+- **Çapraz platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora) ve macOS üzerinde aynı kod
 
-### Hızlı başlangıç
+### Kurulum
 
 ```bash
-git clone https://github.com/bayramkotan/dictz.git
-cd dictz
-pip install -e .
+pip install dictz
+```
+
+### Çalıştırma
+
+```bash
 dictz
 ```
+
+### Yol haritası
+
+- [x] **v0.0.1** — StarDict format desteği, çoklu sözlükte arama, SQLite FTS5 indeksi
+- [x] **v0.0.2** — DSL + Babylon format desteği (PyGlossary ile)
+- [ ] Fuzzy arama (RapidFuzz)
+- [ ] Tanımlar için zengin HTML görüntüleme
+- [ ] Metin okuma (TTS, neural sesler)
+- [ ] Pano izleme + global kısayol
+- [ ] Ekran OCR (Tesseract)
+- [ ] Anki entegrasyonu
+- [ ] Sözlük yöneticisi UI + tercihler
+- [ ] Koyu tema
+- [ ] Windows / Linux / macOS tek dosya binary (PyInstaller)
+
+### Lisans
+
+[GNU General Public License v3.0 veya sonrası](LICENSE).

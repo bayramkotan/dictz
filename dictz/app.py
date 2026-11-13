@@ -17,7 +17,7 @@ from .core.query_manager import QueryManager
 from .storage.indexer import IndexStore
 from .ui.main_window import MainWindow
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 APP_NAME = "dictz"
 
 

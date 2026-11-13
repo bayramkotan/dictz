@@ -37,9 +37,7 @@ from PySide6.QtWidgets import (
 
 from ..core.query_manager import QueryManager
 from ..parsers.base import DictionaryEntry
-from ..storage.indexer import IndexStore
 
-# Time to wait after typing stops before firing a search (ms)
 SEARCH_DEBOUNCE_MS = 150
 
 
@@ -63,13 +61,10 @@ class MainWindow(QMainWindow):
 
         self._refresh_status()
 
-    # ----------------------------------------------------------- UI build
-
     def _build_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
 
-        # Left pane: search box + suggestion list
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(8, 8, 8, 8)
@@ -86,7 +81,6 @@ class MainWindow(QMainWindow):
         self.suggestion_list.currentItemChanged.connect(self._on_suggestion_current_changed)
         left_layout.addWidget(self.suggestion_list, 1)
 
-        # Right pane: definition view
         self.result_view = QTextBrowser()
         self.result_view.setOpenExternalLinks(True)
         self.result_view.setStyleSheet(
@@ -105,7 +99,6 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(splitter)
 
-        # Status bar
         self.setStatusBar(QStatusBar())
         self.dict_count_label = QLabel("0 sözlük")
         self.statusBar().addPermanentWidget(self.dict_count_label)
@@ -149,16 +142,13 @@ class MainWindow(QMainWindow):
                 <p>Çok formatlı sözlük uygulaması</p>
                 <p style="margin-top: 32px; font-size: 13px;">
                     Başlamak için <b>Dosya → Sözlük Ekle</b> menüsünden<br>
-                    bir StarDict (.ifo) dosyası yükleyin.
+                    bir StarDict (.ifo), DSL (.dsl) veya Babylon (.bgl) dosyası yükleyin.
                 </p>
             </div>
             """
         )
 
-    # -------------------------------------------------- search interaction
-
     def _on_search_text_changed(self, text: str) -> None:
-        # Debounce: wait 150 ms after the last keystroke
         self._search_timer.start(SEARCH_DEBOUNCE_MS)
 
     def _run_search(self) -> None:
@@ -168,7 +158,6 @@ class MainWindow(QMainWindow):
             self._set_welcome_text()
             return
 
-        # Update the suggestion list (prefix matches)
         self.suggestion_list.blockSignals(True)
         self.suggestion_list.clear()
         suggestions = self.query_manager.suggest(query, limit=100)
@@ -176,31 +165,24 @@ class MainWindow(QMainWindow):
             QListWidgetItem(s, self.suggestion_list)
         self.suggestion_list.blockSignals(False)
 
-        # Run an exact-match search and display results
         entries = self.query_manager.search(query, exact=True)
         if not entries and not suggestions:
-            # Try fuzzy fallback (just shows prefix suggestions for now;
-            # real fuzzy comes in v0.3 with rapidfuzz)
             entries = self.query_manager.search(query, exact=False)
 
         self._display_entries(query, entries)
 
     def _on_suggestion_activated(self, item: QListWidgetItem) -> None:
-        # Double-click or Enter on suggestion -> jump to it
         word = item.text()
         self.search_box.setText(word)
         entries = self.query_manager.search(word, exact=True)
         self._display_entries(word, entries)
 
     def _on_suggestion_current_changed(self, current, _previous) -> None:
-        # Single-click / arrow navigation: live preview
         if current is None:
             return
         word = current.text()
         entries = self.query_manager.search(word, exact=True)
         self._display_entries(word, entries)
-
-    # --------------------------------------------------------- display
 
     def _display_entries(self, query: str, entries: list[DictionaryEntry]) -> None:
         if not entries:
@@ -213,13 +195,12 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Group by dictionary for readability
         parts: list[str] = []
         parts.append(
-            f"""
+            """
             <style>
-                body {{ font-family: 'Segoe UI', sans-serif; line-height: 1.6; }}
-                .dict-header {{
+                body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; }
+                .dict-header {
                     background: #f3f3f3;
                     border-left: 3px solid #5d7eb0;
                     padding: 6px 10px;
@@ -229,15 +210,15 @@ class MainWindow(QMainWindow):
                     font-weight: bold;
                     text-transform: uppercase;
                     letter-spacing: 0.5px;
-                }}
-                .headword {{
+                }
+                .headword {
                     font-size: 18px;
                     font-weight: bold;
                     color: #2a4d7a;
                     margin-bottom: 6px;
-                }}
-                .definition {{ padding-left: 8px; }}
-                .definition pre {{ white-space: pre-wrap; font-family: inherit; margin: 0; }}
+                }
+                .definition { padding-left: 8px; }
+                .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
             </style>
             """
         )
@@ -249,11 +230,8 @@ class MainWindow(QMainWindow):
                 parts.append(f'<div class="dict-header">{html.escape(current_dict)}</div>')
 
             parts.append(f'<div class="headword">{html.escape(entry.headword)}</div>')
-            # StarDict definitions may already be HTML; for v0.0.1 we keep it
-            # simple: if it looks like HTML, render as-is; otherwise wrap in <pre>
             definition = entry.definition
             if "<" in definition and ">" in definition:
-                # Already HTML-ish — let QTextBrowser render it
                 parts.append(f'<div class="definition">{definition}</div>')
             else:
                 parts.append(
@@ -262,14 +240,19 @@ class MainWindow(QMainWindow):
 
         self.result_view.setHtml("\n".join(parts))
 
-    # ---------------------------------------------------- dictionary mgmt
-
     def add_dictionary_dialog(self) -> None:
+        file_filter = (
+            "Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
+            "StarDict (*.ifo);;"
+            "DSL / Lingvo (*.dsl *.dsl.dz);;"
+            "Babylon (*.bgl);;"
+            "Tüm dosyalar (*)"
+        )
         path_str, _ = QFileDialog.getOpenFileName(
             self,
             "Sözlük dosyası seçin",
             "",
-            "StarDict (*.ifo);;Tüm dosyalar (*)",
+            file_filter,
         )
         if not path_str:
             return
@@ -307,10 +290,10 @@ class MainWindow(QMainWindow):
             self,
             "dictz hakkında",
             """
-            <h3>dictz 0.0.1</h3>
+            <h3>dictz 0.0.2</h3>
             <p>Çok formatlı sözlük uygulaması (GoldenDict tarzı).</p>
             <p style="color: #777; font-size: 12px;">
-                v0.0.1 — StarDict desteği, temel arama
+                v0.0.2 — StarDict + DSL + Babylon desteği
             </p>
             <p>© 2026 Bayram Kotan · GPL-3.0+</p>
             """,
