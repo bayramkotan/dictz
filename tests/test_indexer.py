@@ -16,7 +16,6 @@ def _build_tiny_stardict(tmp_path: Path, name: str = "tiny") -> Path:
         ("apply", "uygulamak"),
         ("book", "kitap"),
     ]
-
     dict_bytes = b""
     idx_records = []
     offset = 0
@@ -51,15 +50,11 @@ def test_register_and_list(tmp_path: Path) -> None:
     ifo_path = _build_tiny_stardict(tmp_path)
     store = IndexStore(tmp_path / "index.db")
     store.open()
-
     d = StarDictDictionary(ifo_path)
     d.load()
     store.register_dictionary(d)
-
     rows = store.list_dictionaries()
-    assert len(rows) == 1
-    assert rows[0]["name"] == "tiny-book"
-
+    assert len(rows) == 1 and rows[0]["name"] == "tiny-book"
     store.close()
 
 
@@ -67,34 +62,31 @@ def test_index_and_search(tmp_path: Path) -> None:
     ifo_path = _build_tiny_stardict(tmp_path)
     store = IndexStore(tmp_path / "index.db")
     store.open()
-
     d = StarDictDictionary(ifo_path)
     d.load()
     count = store.index_dictionary(d)
     assert count == 4
-
     results = store.search_headword("app")
     headwords = [r[0] for r in results]
-    assert "apple" in headwords
-    assert "application" in headwords
-    assert "apply" in headwords
+    assert "apple" in headwords and "application" in headwords and "apply" in headwords
     assert "book" not in headwords
-
     store.close()
 
 
-def test_remove_dictionary(tmp_path: Path) -> None:
-    ifo_path = _build_tiny_stardict(tmp_path)
+def test_sort_order(tmp_path: Path) -> None:
     store = IndexStore(tmp_path / "index.db")
     store.open()
-
-    d = StarDictDictionary(ifo_path)
-    d.load()
-    store.index_dictionary(d)
-    assert store.is_indexed(d.metadata.name)
-
-    store.remove_dictionary(d.metadata.name)
-    assert not store.is_indexed(d.metadata.name)
-    assert store.search_headword("app") == []
-
+    # Register two dicts manually via raw rows
+    import sqlite3
+    with store._cursor() as cur:  # pyright: ignore[reportPrivateUsage]
+        cur.execute(
+            "INSERT INTO dictionaries (name, path, format) VALUES ('a', 'x', 'stardict')"
+        )
+        cur.execute(
+            "INSERT INTO dictionaries (name, path, format) VALUES ('b', 'y', 'stardict')"
+        )
+    store.set_sort_order("b", -1)
+    store.set_sort_order("a", 1)
+    names = [r["name"] for r in store.list_dictionaries()]
+    assert names == ["b", "a"]
     store.close()

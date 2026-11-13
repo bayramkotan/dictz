@@ -1,5 +1,6 @@
 include README.md
 include CHANGELOG.md
+include TODO.md
 include LICENSE
 include pyproject.toml
 recursive-include dictz *.py

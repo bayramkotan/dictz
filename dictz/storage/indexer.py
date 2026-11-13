@@ -1,17 +1,4 @@
-"""Central SQLite FTS5 index for fast cross-dictionary lookup.
-
-Storing every headword in a single FTS5 table lets us search across all loaded
-dictionaries in a single query, with prefix matching out of the box.
-
-Schema:
-    entries (FTS5 virtual table)
-        headword     — the word being defined (indexed)
-        dictionary   — name of the source dictionary
-        rowid        — auto
-
-    dictionaries (regular table)
-        id, name, path, format, word_count, source_lang, target_lang, description
-"""
+"""Central SQLite FTS5 index for fast cross-dictionary lookup."""
 from __future__ import annotations
 
 import sqlite3
@@ -35,7 +22,8 @@ class IndexStore:
         source_lang  TEXT DEFAULT '',
         target_lang  TEXT DEFAULT '',
         description  TEXT DEFAULT '',
-        enabled      INTEGER DEFAULT 1
+        enabled      INTEGER DEFAULT 1,
+        sort_order   INTEGER DEFAULT 0
     );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS entries USING fts5(
@@ -58,6 +46,11 @@ class IndexStore:
         self._conn = sqlite3.connect(str(self.db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self.SCHEMA)
+        # Add sort_order column if upgrading from older schema
+        try:
+            self._conn.execute("ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         self._conn.commit()
 
     def close(self) -> None:
@@ -104,9 +97,9 @@ class IndexStore:
     def list_dictionaries(self, enabled_only: bool = True) -> list[sqlite3.Row]:
         with self._cursor() as cur:
             if enabled_only:
-                cur.execute("SELECT * FROM dictionaries WHERE enabled = 1 ORDER BY name")
+                cur.execute("SELECT * FROM dictionaries WHERE enabled = 1 ORDER BY sort_order, name")
             else:
-                cur.execute("SELECT * FROM dictionaries ORDER BY name")
+                cur.execute("SELECT * FROM dictionaries ORDER BY sort_order, name")
             return cur.fetchall()
 
     def set_enabled(self, name: str, enabled: bool) -> None:
@@ -114,6 +107,13 @@ class IndexStore:
             cur.execute(
                 "UPDATE dictionaries SET enabled = ? WHERE name = ?",
                 (1 if enabled else 0, name),
+            )
+
+    def set_sort_order(self, name: str, order: int) -> None:
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE dictionaries SET sort_order = ? WHERE name = ?",
+                (order, name),
             )
 
     def remove_dictionary(self, name: str) -> None:

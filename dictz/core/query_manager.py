@@ -1,11 +1,4 @@
-"""Query manager: orchestrates lookups across all loaded dictionaries.
-
-The query manager keeps a list of loaded `Dictionary` instances and dispatches
-a single user query to all of them, collecting and ranking the results.
-
-For v0.0.2 we run lookups sequentially. Parallelization with QThreadPool comes
-in a later version when big glossary loading becomes a bottleneck.
-"""
+"""Query manager: orchestrates lookups across all loaded dictionaries."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,8 +10,6 @@ from ..parsers.stardict import StarDictDictionary
 from ..storage.indexer import IndexStore
 
 
-# File-extension -> parser class. `.dsl.dz` is handled by peeling the .dz
-# compression suffix before the lookup.
 _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
     ".ifo": StarDictDictionary,
     ".dsl": DSLDictionary,
@@ -27,14 +18,10 @@ _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
 
 
 def parser_for(path: Path | str) -> type[Dictionary]:
-    """Pick a parser class based on file extension.
-
-    Handles compressed forms (.dsl.dz, .gls.dz) by peeling the .dz suffix.
-    """
+    """Pick a parser class based on file extension."""
     p = Path(path)
     suffix = p.suffix.lower()
 
-    # Strip dictzip compression layer
     if suffix == ".dz":
         inner_suffix = p.with_suffix("").suffix.lower()
         if inner_suffix in _PARSER_REGISTRY:
@@ -56,6 +43,7 @@ class QueryManager:
 
     def __init__(self, index_store: IndexStore | None = None):
         self.dictionaries: dict[str, Dictionary] = {}
+        self.enabled_names: set[str] = set()  # subset of dictionaries that are active
         self.index_store = index_store
 
     def add_dictionary(self, path: Path | str, reindex: bool = False) -> Dictionary:
@@ -63,6 +51,7 @@ class QueryManager:
         dictionary = parser_cls(path)
         dictionary.load()
         self.dictionaries[dictionary.metadata.name] = dictionary
+        self.enabled_names.add(dictionary.metadata.name)
 
         if self.index_store is not None:
             already_indexed = self.index_store.is_indexed(dictionary.metadata.name)
@@ -75,8 +64,20 @@ class QueryManager:
         if name in self.dictionaries:
             self.dictionaries[name].close()
             del self.dictionaries[name]
+        self.enabled_names.discard(name)
         if self.index_store is not None:
             self.index_store.remove_dictionary(name)
+
+    def set_enabled(self, name: str, enabled: bool) -> None:
+        if enabled:
+            self.enabled_names.add(name)
+        else:
+            self.enabled_names.discard(name)
+        if self.index_store is not None:
+            self.index_store.set_enabled(name, enabled)
+
+    def is_enabled(self, name: str) -> bool:
+        return name in self.enabled_names
 
     def loaded_names(self) -> list[str]:
         return sorted(self.dictionaries.keys())
@@ -87,6 +88,8 @@ class QueryManager:
 
         results: list[DictionaryEntry] = []
         for name, dictionary in self.dictionaries.items():
+            if name not in self.enabled_names:
+                continue
             try:
                 entries = dictionary.lookup(word, exact=exact)
             except Exception as e:
@@ -99,8 +102,12 @@ class QueryManager:
         if not prefix.strip():
             return []
 
+        enabled = list(self.enabled_names) if self.enabled_names else None
+
         if self.index_store is not None:
-            rows = self.index_store.search_headword(prefix, limit=limit)
+            rows = self.index_store.search_headword(
+                prefix, limit=limit, dictionaries=enabled
+            )
             seen: set[str] = set()
             out: list[str] = []
             for headword, _ in rows:
@@ -112,6 +119,8 @@ class QueryManager:
         seen = set()
         out = []
         for dictionary in self.dictionaries.values():
+            if dictionary.metadata.name not in self.enabled_names:
+                continue
             for entry in dictionary.lookup(prefix, exact=False):
                 if entry.headword not in seen:
                     seen.add(entry.headword)
@@ -124,3 +133,4 @@ class QueryManager:
         for dictionary in self.dictionaries.values():
             dictionary.close()
         self.dictionaries.clear()
+        self.enabled_names.clear()
