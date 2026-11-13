@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dictz"
+version = "0.0.2"
+description = "dictz — a cross-platform multi-format offline dictionary application (GoldenDict-style)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Bayram Kotan", email = "bayramkotan@gmail.com" },
+]
+maintainers = [
+    { name = "Bayram Kotan", email = "bayramkotan@gmail.com" },
+]
+keywords = [
+    "dictionary", "stardict", "dsl", "babylon", "goldendict",
+    "offline", "lexicography", "translation", "pyside6", "qt",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: MacOS X",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Natural Language :: English",
+    "Natural Language :: Turkish",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "PySide6>=6.6.0",
+    "rapidfuzz>=3.6.0",
+    "pyglossary>=4.7.0",
+]
+
+[project.optional-dependencies]
+tts = [
+    "edge-tts>=6.1.0",
+    "pyttsx3>=2.90",
+]
+ocr = [
+    "mss>=9.0.0",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0.0",
+]
+anki = [
+    "requests>=2.31.0",
+]
+all = [
+    "dictz[tts,ocr,anki]",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-qt>=4.3.0",
+    "ruff>=0.3.0",
+    "pyinstaller>=6.0.0",
+]
+
+[project.scripts]
+dictz = "dictz.app:main"
+
+[project.urls]
+Homepage = "https://github.com/bayramkotan/dictz"
+Repository = "https://github.com/bayramkotan/dictz"
+Issues = "https://github.com/bayramkotan/dictz/issues"
+Documentation = "https://github.com/bayramkotan/dictz#readme"
+Changelog = "https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dictz*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
