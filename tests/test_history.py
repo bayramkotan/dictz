@@ -1,6 +1,7 @@
 """Tests for the history + favorites store."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from dictz.storage.history import HistoryStore
@@ -9,9 +10,13 @@ from dictz.storage.history import HistoryStore
 def test_record_and_recent(tmp_path: Path) -> None:
     s = HistoryStore(tmp_path / "h.db")
     s.open()
-    s.record("apple"); s.record("book"); s.record("cat"); s.record("apple")
+    s.record("apple")
+    s.record("book")
+    s.record("cat")
+    s.record("apple")
     recent = s.recent(10)
-    assert recent[0] == "apple" and set(recent) == {"apple", "book", "cat"}
+    assert recent[0] == "apple"
+    assert set(recent) == {"apple", "book", "cat"}
     s.close()
 
 
@@ -38,17 +43,20 @@ def test_favorite_note(tmp_path: Path) -> None:
 def test_clear_history(tmp_path: Path) -> None:
     s = HistoryStore(tmp_path / "h.db")
     s.open()
-    s.record("a"); s.record("b")
+    s.record("a")
+    s.record("b")
     s.clear_history()
     assert s.recent() == []
     s.close()
 
 
 def test_favorites_persist_sort(tmp_path: Path) -> None:
-    import time
     s = HistoryStore(tmp_path / "h.db")
     s.open()
-    s.add_favorite("alpha"); time.sleep(0.01); s.add_favorite("beta")
+    s.add_favorite("alpha")
+    time.sleep(0.01)
+    s.add_favorite("beta")
     favs = s.favorites()
-    assert favs[0] == "beta" and favs[1] == "alpha"
+    assert favs[0] == "beta"
+    assert favs[1] == "alpha"
     s.close()

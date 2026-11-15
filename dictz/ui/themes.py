@@ -1,7 +1,6 @@
 """Light and dark Qt style sheets."""
 from __future__ import annotations
 
-
 LIGHT_QSS = """
 * { font-family: "Segoe UI", "Inter", "Cantarell", "Helvetica Neue", sans-serif; }
 QMainWindow, QDialog, QWidget { background: #fafbfc; color: #1a1d23; }

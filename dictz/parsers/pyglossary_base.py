@@ -6,7 +6,6 @@ from typing import Iterator
 
 from .base import Dictionary, DictionaryEntry
 
-
 _pyglossary_initialized = False
 
 

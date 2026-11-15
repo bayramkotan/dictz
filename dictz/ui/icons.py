@@ -4,7 +4,6 @@ from __future__ import annotations
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
-
 _ICON_MAP = {
     "open": QStyle.StandardPixmap.SP_DialogOpenButton,
     "save": QStyle.StandardPixmap.SP_DialogSaveButton,

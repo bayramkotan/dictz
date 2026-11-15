@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Iterator
 
@@ -42,10 +42,8 @@ class IndexStore:
         self._conn = sqlite3.connect(str(self.db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self.SCHEMA)
-        try:
+        with suppress(sqlite3.OperationalError):
             self._conn.execute("ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
         self._conn.commit()
 
     def close(self) -> None:

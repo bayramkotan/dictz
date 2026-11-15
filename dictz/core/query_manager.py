@@ -9,7 +9,6 @@ from ..parsers.dsl import DSLDictionary
 from ..parsers.stardict import StarDictDictionary
 from ..storage.indexer import IndexStore
 
-
 _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
     ".ifo": StarDictDictionary,
     ".dsl": DSLDictionary,

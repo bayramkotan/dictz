@@ -3,8 +3,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFontComboBox,
-    QFormLayout, QSpinBox, QVBoxLayout, QWidget,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFontComboBox,
+    QFormLayout,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..storage.settings import Preferences

@@ -9,7 +9,6 @@ from PySide6.QtWidgets import QTextBrowser, QWidget
 from ..parsers.base import DictionaryEntry
 from . import themes
 
-
 try:
     from PySide6.QtWebEngineWidgets import QWebEngineView
     HAS_WEBENGINE = True
