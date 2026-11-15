@@ -1,0 +1,40 @@
+{
+ "meta": {
+  "name": "dictz parity sample",
+  "author": "",
+  "description": "",
+  "source": "English",
+  "target": "Turkish",
+  "count": 7
+ },
+ "entries": [
+  [
+   "apple",
+   "<p style=\"padding-left:1em;margin:0\"><b>elma</b> <i class=\"p\"><font color=\"green\">i.</font></i> </p><p style=\"padding-left:2em;margin:0\">meyve, <i>kırmızı</i> <font color=\"green\">yeşil</font> <font color=\"red\">kırmızı</font></p><p style=\"padding-left:3em;margin:0\"><span class=\"ex\"><font color=\"steelblue\">An apple a day.</font></span></p><p style=\"padding-left:2em;margin:0\">see <a href=\"bword://pear\">pear</a> and <a href=\"bword://orange juice\">orange juice</a></p><br/><img align=\"top\" src=\"apple.png\" alt=\"apple.png\" /> <object type=\"audio/x-wav\" data=\"apple.wav\" width=\"40\" height=\"40\"><param name=\"autoplay\" value=\"false\" /></object>"
+  ],
+  [
+   "apples",
+   "<p style=\"padding-left:1em;margin:0\"><b>elma</b> <i class=\"p\"><font color=\"green\">i.</font></i> </p><p style=\"padding-left:2em;margin:0\">meyve, <i>kırmızı</i> <font color=\"green\">yeşil</font> <font color=\"red\">kırmızı</font></p><p style=\"padding-left:3em;margin:0\"><span class=\"ex\"><font color=\"steelblue\">An apple a day.</font></span></p><p style=\"padding-left:2em;margin:0\">see <a href=\"bword://pear\">pear</a> and <a href=\"bword://orange juice\">orange juice</a></p><br/><img align=\"top\" src=\"apple.png\" alt=\"apple.png\" /> <object type=\"audio/x-wav\" data=\"apple.wav\" width=\"40\" height=\"40\"><param name=\"autoplay\" value=\"false\" /></object>"
+  ],
+  [
+   "go  x",
+   "<b>go to <u class=\"accent\">x</u></b><br/><p style=\"padding-left:1em;margin:0\">gitmek</p><p style=\"padding-left:1em;margin:0\">informal <span class=\"sec\">extra</span></p>"
+  ],
+  [
+   "go to x",
+   "<b>go to <u class=\"accent\">x</u></b><br/><p style=\"padding-left:1em;margin:0\">gitmek</p><p style=\"padding-left:1em;margin:0\">informal <span class=\"sec\">extra</span></p>"
+  ],
+  [
+   "H[sub]2[/sub]O",
+   "su, x<sup>2</sup> <font face=\"Helvetica\" class=\"dsl_t\">wɔːtə</font>"
+  ],
+  [
+   "pear",
+   "armut"
+  ],
+  [
+   "rock & roll",
+   "<p style=\"padding-left:0.3em;margin:0\">müzik türü [not a tag] a&nbsp;b</p><br/><a href=\"http://example.org\">example.org</a> <a href=\"https://dictz.example/\">site</a>"
+  ]
+ ]
+}

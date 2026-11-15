@@ -64,9 +64,17 @@ def main(argv: list[str] | None = None) -> int:
 
     prefs = Preferences.load()
     query_manager = QueryManager(index_store=index_store)
+    # Dictionaries added earlier (in this or the Rust edition) come back.
+    loaded, errors = query_manager.restore_from_index()
+    for err in errors:
+        print(f"[dictz] could not reopen {err}", file=sys.stderr)
 
     window = MainWindow(query_manager, history_store, prefs)
     window.show()
+    if errors:
+        window.statusBar().showMessage(f"{len(errors)} sözlük açılamadı: " + "; ".join(errors), 10000)
+    elif loaded:
+        window.statusBar().showMessage(f"{len(loaded)} sözlük yüklendi", 4000)
 
     return app.exec()
 

@@ -6,30 +6,24 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ## Near-term (v0.0.x)
 
-### v0.0.6 — fuzzy + rich media
-- 📋 Fuzzy / approximate matching with RapidFuzz on no-exact-hit
-- 📋 Highlighted suggestion ranking (closest first)
-- 📋 Inline pronunciation audio playback from DSL `[s]sound.wav[/s]`
-- 📋 Embedded images from DSL `[s]picture.jpg[/s]`
-
 ### v0.0.7 — services
 - 📋 TTS with edge-tts (40+ languages, neural voices)
 - 📋 Per-dictionary / per-language voice mapping
 - 📋 Clipboard monitor (Ctrl-C triggers lookup) with opt-in toggle
 - 📋 Global hotkey (Ctrl+Alt+K)
 
-### v0.0.7 — Anki + OCR
+### v0.0.8 — Anki + OCR
 - 📋 Anki integration (AnkiConnect HTTP, add selected headword + definition)
 - 📋 Screen-area OCR (mss + Tesseract)
 - 📋 Per-deck + per-model mapping in preferences
 
-### v0.0.8 — formats
+### v0.0.9 — formats
 - 📋 XDXF parser (PyGlossary already does)
 - 📋 Slob / Aard2 (PyGlossary)
 - 📋 DictD `.index` / `.dict`
 - 💡 MDict (.mdx / .mdd)
 
-### v0.0.9 — groups, search, UX
+### v0.0.10 — groups, search, UX
 - 📋 Dictionary groups (per-language presets, like GoldenDict groups)
 - 📋 Full-text search inside definitions (not just headwords)
 - 📋 Multi-word phrase lookup
@@ -40,16 +34,18 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ## Rust edition (`dictz-rs/`), built alongside the Python edition
 
-dictz is built **twice**, in Python (`dictz`, PyPI) and in Rust (`dictz-rs/`, crates.io). The Rust side is not a library-only side project: it becomes the same full application (CLI + GUI), with the same features, version numbers and release. Every version moves the Rust track forward too.
+dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs/`, `dictz` on crates.io, egui). Both are full applications with the same features, version number, tag, CI file and selftest checks. Every new feature is done in **both** editions in the same version.
 
-- ✅ v0.0.5: crate scaffold (`Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError`), version kept in lockstep with Python, published to crates.io from CI
-- 📋 v0.0.6: native StarDict parser (`.ifo` / `.idx` / `.dict` / `.dict.dz`) + `dictz-rs` CLI binary (`lookup`, `--version`, `--selftest`)
-- 📋 v0.0.7: SQLite FTS5 index (rusqlite, bundled) + fuzzy matching, the same schema as Python
-- 📋 v0.0.8: native DSL parser (`.dsl` / `.dsl.dz`, DSL markup → HTML)
-- 📋 v0.0.9: native Babylon `.bgl` parser
-- 📋 v0.1.0: decide the GUI toolkit and ship a GUI MVP (search box, results, definition view, dictionary manager); portable Rust binaries for Linux / Windows / macOS in the same GitHub Release
-- 📋 v1.0: Rust edition has full feature parity with the Python edition (tabs, favorites, history, themes, TTS, clipboard, Anki, OCR)
-- Rule: the same CI file (`ci.yml`), the same tag, the same selftest checks for both editions
+- ✅ v0.0.5: crate scaffold, version lockstep, crates.io publishing from CI
+- ✅ v0.0.6: **parity reached**:
+  - native StarDict, DSL and Babylon parsers
+  - FTS5 index, history and favorites in shared files
+  - full egui GUI
+  - fuzzy search and DSL media (the v0.0.6 features, in both editions)
+  - portable Rust binaries and golden-file parity tests
+- 📋 v0.0.7+: every feature below lands in both editions in the same version
+- 💡 Rust: right-to-left shaping for Arabic/Persian articles (egui draws RTL text left-to-right)
+- 💡 Rust: AppImage for the Rust binary too (the tar.gz is a single file already)
 
 ---
 
@@ -75,6 +71,9 @@ dictz is built **twice**, in Python (`dictz`, PyPI) and in Rust (`dictz-rs/`, cr
 
 ## Known bugs / limitations
 
+- DSL `[s]` media: only `wav`/`mp3` sounds and `jpg/jpeg/gif/tif/tiff/png/bmp` pictures, with case-sensitive extensions (PyGlossary's rule, kept for parity); Lingvo `.spx` sounds are not played
+- Rust GUI: Arabic/Persian text is not shaped right-to-left
+
 - `.syn` synonym files in StarDict are ignored
 - `sametypesequence` in StarDict `.ifo` is not interpreted
 - UTF-8 assumed for `.ifo` headers (no latin-1 fallback)
@@ -87,6 +86,7 @@ dictz is built **twice**, in Python (`dictz`, PyPI) and in Rust (`dictz-rs/`, cr
 
 ## Recently done
 
+- ✅ **v0.0.6** — Rust edition is a full app (native StarDict/DSL/Babylon, FTS5, GUI, portable binaries); fuzzy "did you mean" + DSL pictures/sounds in both editions; dictionaries restored on start; order kept; link clicks fixed; parity golden tests; CI triggers on tags only
 - ✅ **v0.0.5** — portable binaries actually start and read DSL/Babylon (PyInstaller entry point + PyGlossary bundle paths fixed); `dictz --selftest` run on every binary in CI; one tag → PyPI + crates.io + GitHub Releases via API-token secrets; `dictz-rs/` Rust crate scaffold
 - ✅ **v0.0.4** — cross-platform portable builds (Linux tarball + AppImage, Windows portable zip, macOS .app); PyInstaller spec; GitHub Actions matrix release pipeline
 - ✅ **v0.0.3** — tabbed UI, sidebar, themes, zoom, window state, QWebEngine renderer, keyboard shortcuts, dictionary manager dialog

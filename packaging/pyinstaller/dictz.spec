@@ -38,8 +38,12 @@ hidden_imports = [
     "PySide6.QtWebChannel",
     "PySide6.QtNetwork",
     "PySide6.QtPrintSupport",
+    # in-app playback of DSL sounds (dictz.ui.main_window._play_audio)
+    "PySide6.QtMultimedia",
     "sqlite3",
     "rapidfuzz",
+    "rapidfuzz.fuzz",
+    "rapidfuzz.process",
 ]
 
 # Pull in PyGlossary's entire plugin tree at runtime
@@ -62,7 +66,6 @@ excludes = [
     "PySide6.Qt3DAnimation",
     "PySide6.QtCharts",
     "PySide6.QtDataVisualization",
-    "PySide6.QtMultimedia",
     "PySide6.QtMultimediaWidgets",
     "PySide6.QtSensors",
     "PySide6.QtPositioning",

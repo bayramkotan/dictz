@@ -1,0 +1,48 @@
+{
+ "meta": {
+  "name": "dictz parity BGL — Türkçe",
+  "author": "Bayram Kotan",
+  "description": "Örnek sözlük",
+  "source": "English",
+  "target": "Turkish",
+  "count": 9
+ },
+ "entries": [
+  [
+   "A & B",
+   "café AB &lt;tag&gt; ğı &csdot;\nline2"
+  ],
+  [
+   "apple",
+   "<font color=\"#007000\">noun</font><br>\n<b>elma</b>, meyve"
+  ],
+  [
+   "apples",
+   "<font color=\"#007000\">noun</font><br>\n<b>elma</b>, meyve"
+  ],
+  [
+   "book",
+   "<b>Book</b><br>\n[buk]<br>\nkitap; defter"
+  ],
+  [
+   "cherry",
+   "kiraz çilek ü"
+  ],
+  [
+   "door",
+   "kapı"
+  ],
+  [
+   "Door",
+   "kapı"
+  ],
+  [
+   "doors",
+   "kapı"
+  ],
+  [
+   "fig",
+   "incir"
+  ]
+ ]
+}

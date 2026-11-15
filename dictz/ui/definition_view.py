@@ -10,11 +10,28 @@ from ..parsers.base import DictionaryEntry
 from . import themes
 
 try:
+    from PySide6.QtWebEngineCore import QWebEnginePage
     from PySide6.QtWebEngineWidgets import QWebEngineView
     HAS_WEBENGINE = True
 except ImportError:
     QWebEngineView = None  # type: ignore
+    QWebEnginePage = None  # type: ignore
     HAS_WEBENGINE = False
+
+
+if HAS_WEBENGINE:
+    class _LinkPage(QWebEnginePage):  # type: ignore[misc, valid-type]
+        """Hands clicked links to the window instead of navigating away."""
+
+        def __init__(self, on_link, parent=None):
+            super().__init__(parent)
+            self._on_link = on_link
+
+        def acceptNavigationRequest(self, url, nav_type, is_main_frame):  # noqa: N802
+            if nav_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+                self._on_link(url.toString())
+                return False
+            return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
 
 class DefinitionView(QWidget):
@@ -30,6 +47,7 @@ class DefinitionView(QWidget):
 
         if HAS_WEBENGINE:
             self._view = QWebEngineView(self)
+            self._view.setPage(_LinkPage(self.link_activated.emit, self._view))
             layout.addWidget(self._view)
             self._html_mode = "web"
         else:
@@ -63,11 +81,22 @@ class DefinitionView(QWidget):
         """
         self.set_html(body)
 
-    def show_not_found(self, query: str) -> None:
+    def show_not_found(self, query: str, suggestions: list[tuple[str, float]] | None = None) -> None:
+        from urllib.parse import quote
+
+        did_you_mean = ""
+        if suggestions:
+            items = "".join(
+                f'<li><a href="bword://{quote(w)}">{html.escape(w)}</a>'
+                f' <span class="score">%{score:.0f}</span></li>'
+                for w, score in suggestions
+            )
+            did_you_mean = f'<h3>Bunu mu demek istediniz?</h3><ul class="did-you-mean">{items}</ul>'
         body = f"""
-        <div style="padding: 48px 24px; opacity: 0.7;">
-            <h2>Sonuç yok</h2>
-            <p><b>{html.escape(query)}</b> için hiçbir sözlükte eşleşme bulunamadı.</p>
+        <div style="padding: 48px 24px;">
+            <h2 style="opacity: 0.8;">Sonuç yok</h2>
+            <p style="opacity: 0.7;"><b>{html.escape(query)}</b> için hiçbir sözlükte eşleşme bulunamadı.</p>
+            {did_you_mean}
         </div>
         """
         self.set_html(body)

@@ -122,18 +122,27 @@ class IndexStore:
                 count += len(batch)
         return count
 
-    def search_headword(self, query: str, limit: int = 100, dictionaries: list[str] | None = None) -> list[tuple[str, str]]:
+    def search_headword(
+        self, query: str, limit: int = 100, dictionaries: list[str] | None = None
+    ) -> list[tuple[str, str]]:
+        """Prefix search (``"query"*``) ranked by FTS5.
+
+        ``dictionaries`` limits the search; an empty list means "none".
+        """
+        if dictionaries is not None and not dictionaries:
+            return []
         safe = query.replace('"', '""')
         fts_query = f'"{safe}"*'
+        sql = "SELECT headword, dictionary FROM entries WHERE entries MATCH ?"
+        args: list = [fts_query]
+        if dictionaries is not None:
+            sql += f" AND dictionary IN ({','.join('?' * len(dictionaries))})"
+            args.extend(dictionaries)
+        sql += " ORDER BY rank LIMIT ?"
+        args.append(limit)
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT headword, dictionary FROM entries WHERE entries MATCH ? ORDER BY rank LIMIT ?",
-                (fts_query, limit),
-            )
+            cur.execute(sql, args)
             rows = cur.fetchall()
-        if dictionaries:
-            allowed = set(dictionaries)
-            rows = [r for r in rows if r["dictionary"] in allowed]
         return [(r["headword"], r["dictionary"]) for r in rows]
 
     def is_indexed(self, name: str) -> bool:

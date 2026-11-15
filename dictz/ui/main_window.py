@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.query_manager import QueryManager
+from ..core.media import media_kind, parse_audio_url, rewrite_media_html
+from ..core.query_manager import QueryManager, Suggestion
 from ..parsers.base import DictionaryEntry
 from ..storage.history import HistoryStore
 from ..storage.settings import Preferences
@@ -255,14 +256,20 @@ class MainWindow(QMainWindow):
             self._display_in_current(query, entries)
             self._push_nav(query)
 
+    def _lookup_with_fallback(self, query: str) -> tuple[list[DictionaryEntry], list[tuple[str, float]]]:
+        """Exact → prefix → fuzzy "did you mean" candidates."""
+        entries = self.query_manager.search(query, exact=True)
+        if not entries:
+            entries = self.query_manager.search(query, exact=False)
+        fuzzy = [] if entries else self.query_manager.fuzzy(query)
+        return entries, fuzzy
+
     def _run_search_explicit(self) -> None:
         query = self.search_box.text().strip()
         if not query:
             return
-        entries = self.query_manager.search(query, exact=True)
-        if not entries:
-            entries = self.query_manager.search(query, exact=False)
-        self._display_in_current(query, entries)
+        entries, fuzzy = self._lookup_with_fallback(query)
+        self._display_in_current(query, entries, fuzzy)
         self._push_nav(query)
         self.suggestions.hide()
 
@@ -270,29 +277,45 @@ class MainWindow(QMainWindow):
         query = self.search_box.text().strip()
         if not query:
             return
-        entries = self.query_manager.search(query, exact=True)
-        if not entries:
-            entries = self.query_manager.search(query, exact=False)
-        self.tabs.show_in_new_tab(query, entries)
+        entries, fuzzy = self._lookup_with_fallback(query)
+        self.tabs.show_in_new_tab(query, self._with_media(entries), fuzzy)
         self._push_nav(query)
         self.suggestions.hide()
 
-    def _populate_suggestions(self, items: list[str]) -> None:
+    def _populate_suggestions(self, items: list[Suggestion]) -> None:
         self.suggestions.clear()
         for s in items:
-            QListWidgetItem(s, self.suggestions)
+            it = QListWidgetItem(f"≈ {s.word}" if s.fuzzy else s.word, self.suggestions)
+            it.setData(Qt.ItemDataRole.UserRole, s.word)
+            if s.fuzzy:
+                font = it.font()
+                font.setItalic(True)
+                it.setFont(font)
+                it.setToolTip("Benzer kelime (bulanık eşleşme)")
         self.suggestions.setVisible(bool(items))
 
     def _on_suggestion_activated(self, item: QListWidgetItem) -> None:
-        word = item.text()
+        word = item.data(Qt.ItemDataRole.UserRole) or item.text()
         self.search_box.setText(word)
         entries = self.query_manager.search(word, exact=True)
         self._display_in_current(word, entries)
         self._push_nav(word)
         self.suggestions.hide()
 
-    def _display_in_current(self, word: str, entries: list[DictionaryEntry]) -> None:
-        self.tabs.show_in_current(word, entries)
+    def _with_media(self, entries: list[DictionaryEntry]) -> list[DictionaryEntry]:
+        """Inline pictures and turn sounds into play links."""
+        out = []
+        for e in entries:
+            resolver = self.query_manager.media(e.dictionary_id)
+            definition = rewrite_media_html(e.definition, e.dictionary_id, resolver)
+            out.append(DictionaryEntry(e.headword, definition, e.dictionary_id, e.score))
+        return out
+
+    def _display_in_current(self, word: str, entries: list[DictionaryEntry],
+                            fuzzy: list[tuple[str, float]] | None = None) -> None:
+        if not entries and fuzzy is None:
+            fuzzy = self.query_manager.fuzzy(word) if word else []
+        self.tabs.show_in_current(word, self._with_media(entries), fuzzy)
         self._update_favorite_button(word)
         if word and entries:
             self.history.record(word)
@@ -455,9 +478,63 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Kopyalandı: {word}", 2000)
 
     def _on_definition_link(self, url: str) -> None:
+        from urllib.parse import unquote
+
         if url.startswith(("dict:", "bword:")):
-            word = url.split(":", 1)[1].lstrip("/")
+            word = unquote(url.split(":", 1)[1].lstrip("/"))
             self._open_word(word)
+            return
+        audio = parse_audio_url(url)
+        if audio is not None:
+            self._play_audio(*audio)
+            return
+        if url.startswith(("http://", "https://", "mailto:")):
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            QDesktopServices.openUrl(QUrl(url))
+            return
+        if url.startswith("sound://") or media_kind(url) == "audio":
+            word = self.tabs.current_word()
+            entries = self.query_manager.search(word, exact=True) if word else []
+            if entries:
+                self._play_audio(entries[0].dictionary_id, url.removeprefix("sound://"))
+
+    def _play_audio(self, dictionary: str, name: str) -> None:
+        """Play a dictionary sound: in-app with QtMultimedia when available,
+        otherwise with the system's default player."""
+        import hashlib
+
+        resolver = self.query_manager.media(dictionary)
+        data = resolver.read(name) if resolver else None
+        if data is None:
+            self.statusBar().showMessage(f"Ses dosyası bulunamadı: {name}", 4000)
+            return
+        from ..app import user_data_dir
+
+        cache = user_data_dir() / "media-cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        suffix = Path(name).suffix.lower() or ".wav"
+        target = cache / (hashlib.sha1(f"{dictionary}/{name}".encode()).hexdigest()[:16] + suffix)
+        if not target.exists():
+            target.write_bytes(data)
+        self.statusBar().showMessage(f"Çalınıyor: {name}", 3000)
+        from PySide6.QtCore import QUrl
+
+        try:
+            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+
+            if not hasattr(self, "_player"):
+                self._audio_out = QAudioOutput(self)
+                self._player = QMediaPlayer(self)
+                self._player.setAudioOutput(self._audio_out)
+            self._player.stop()
+            self._player.setSource(QUrl.fromLocalFile(str(target)))
+            self._player.play()
+        except Exception:  # noqa: BLE001 — no multimedia backend: hand it to the OS
+            from PySide6.QtGui import QDesktopServices
+
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def _open_preferences(self) -> None:
         dlg = PreferencesDialog(self.prefs, self)

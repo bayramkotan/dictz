@@ -50,3 +50,6 @@ test_dicts/
 # AppImage build cache
 build/appimage-tools/
 *.AppImage
+
+# Rust
+dictz-rs/target/

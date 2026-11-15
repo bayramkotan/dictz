@@ -1,0 +1,397 @@
+//! Lookups across all loaded dictionaries — mirrors
+//! `dictz/core/query_manager.py`.
+
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
+use crate::babylon::BabylonDictionary;
+use crate::dsl::DslDictionary;
+use crate::fuzzy;
+use crate::index::IndexStore;
+use crate::media::MediaResolver;
+use crate::stardict::StarDictDictionary;
+use crate::{Dictionary, DictionaryEntry, DictzError};
+
+/// File extensions that can be opened.
+pub fn supported_extensions() -> &'static [&'static str] {
+    &[".bgl", ".dsl", ".ifo"]
+}
+
+/// Create the right parser for `path` (`.ifo`, `.dsl`, `.dsl.dz`, `.bgl`).
+pub fn open_dictionary(path: &Path) -> Result<Box<dyn Dictionary>, DictzError> {
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let ext = |e: &str| name.ends_with(e);
+    if ext(".ifo") || ext(".idx") || ext(".dict") || ext(".dict.dz") || ext(".idx.gz") {
+        Ok(Box::new(StarDictDictionary::new(path)?))
+    } else if ext(".dsl") || ext(".dsl.dz") {
+        Ok(Box::new(DslDictionary::new(path)))
+    } else if ext(".bgl") {
+        Ok(Box::new(BabylonDictionary::new(path)))
+    } else {
+        Err(DictzError::Unsupported(path.display().to_string()))
+    }
+}
+
+/// A suggestion under the search box.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Suggestion {
+    /// Headword.
+    pub word: String,
+    /// `true` when it came from fuzzy matching (not a prefix hit).
+    pub fuzzy: bool,
+}
+
+struct Loaded {
+    dict: Box<dyn Dictionary>,
+    enabled: bool,
+    media: MediaResolver,
+}
+
+/// Coordinates lookups across dictionaries, in the user's order.
+pub struct QueryManager {
+    dicts: Vec<Loaded>,
+    /// Optional FTS5 index (suggestions + persistence of the dictionary list).
+    pub index: Option<IndexStore>,
+    headword_cache: Option<Vec<String>>,
+}
+
+/// Suggestions are filled up with fuzzy matches when fewer prefix hits exist.
+pub const FUZZY_FILL_BELOW: usize = 10;
+
+impl QueryManager {
+    /// New manager, optionally backed by an index.
+    pub fn new(index: Option<IndexStore>) -> Self {
+        Self {
+            dicts: Vec::new(),
+            index,
+            headword_cache: None,
+        }
+    }
+
+    fn position(&self, name: &str) -> Option<usize> {
+        self.dicts
+            .iter()
+            .position(|d| d.dict.metadata().name == name)
+    }
+
+    /// Load a dictionary file and append it to the list.
+    /// Returns its name.
+    pub fn add_dictionary(
+        &mut self,
+        path: impl AsRef<Path>,
+        reindex: bool,
+    ) -> Result<String, DictzError> {
+        let path = path.as_ref();
+        let mut dict = open_dictionary(path)?;
+        dict.load()?;
+        let name = dict.metadata().name.clone();
+        if let Some(i) = self.position(&name) {
+            self.dicts.remove(i);
+        }
+        if let Some(index) = self.index.as_mut() {
+            if reindex || !index.is_indexed(&name)? {
+                index.index_dictionary(dict.as_ref())?;
+            }
+        }
+        let media = MediaResolver::for_dictionary(path);
+        self.dicts.push(Loaded {
+            dict,
+            enabled: true,
+            media,
+        });
+        self.persist_order();
+        self.headword_cache = None;
+        Ok(name)
+    }
+
+    /// Reload every dictionary recorded in the index (start-up).
+    /// Returns (loaded names, errors).
+    pub fn restore_from_index(&mut self) -> (Vec<String>, Vec<String>) {
+        let rows = match self.index.as_ref().map(|i| i.list_dictionaries(false)) {
+            Some(Ok(r)) => r,
+            Some(Err(e)) => return (Vec::new(), vec![e.to_string()]),
+            None => return (Vec::new(), Vec::new()),
+        };
+        let mut ok = Vec::new();
+        let mut errors = Vec::new();
+        for row in rows {
+            if self.position(&row.name).is_some() {
+                continue;
+            }
+            let loaded = open_dictionary(&row.path).and_then(|mut d| d.load().map(|_| d));
+            match loaded {
+                Ok(dict) => {
+                    let media = MediaResolver::for_dictionary(&row.path);
+                    ok.push(dict.metadata().name.clone());
+                    self.dicts.push(Loaded {
+                        dict,
+                        enabled: row.enabled,
+                        media,
+                    });
+                }
+                Err(e) => errors.push(format!("{}: {}", row.path.display(), e)),
+            }
+        }
+        self.headword_cache = None;
+        (ok, errors)
+    }
+
+    /// Unload a dictionary and drop it from the index.
+    pub fn remove_dictionary(&mut self, name: &str) -> Result<(), DictzError> {
+        if let Some(i) = self.position(name) {
+            self.dicts[i].dict.close();
+            self.dicts.remove(i);
+        }
+        if let Some(index) = self.index.as_ref() {
+            index.remove_dictionary(name)?;
+        }
+        self.persist_order();
+        self.headword_cache = None;
+        Ok(())
+    }
+
+    /// Enable or disable a dictionary.
+    pub fn set_enabled(&mut self, name: &str, enabled: bool) {
+        if let Some(i) = self.position(name) {
+            self.dicts[i].enabled = enabled;
+        }
+        if let Some(index) = self.index.as_ref() {
+            let _ = index.set_enabled(name, enabled);
+        }
+        self.headword_cache = None;
+    }
+
+    /// `true` when loaded and enabled.
+    pub fn is_enabled(&self, name: &str) -> bool {
+        self.position(name)
+            .map(|i| self.dicts[i].enabled)
+            .unwrap_or(false)
+    }
+
+    /// Move a dictionary up (`delta < 0`) or down in the list.
+    pub fn move_dictionary(&mut self, name: &str, delta: isize) {
+        let Some(i) = self.position(name) else { return };
+        let j = (i as isize + delta).clamp(0, self.dicts.len() as isize - 1) as usize;
+        if i != j {
+            let d = self.dicts.remove(i);
+            self.dicts.insert(j, d);
+            self.persist_order();
+            self.headword_cache = None;
+        }
+    }
+
+    fn persist_order(&self) {
+        if let Some(index) = self.index.as_ref() {
+            for (i, d) in self.dicts.iter().enumerate() {
+                let m = d.dict.metadata();
+                let _ = index.set_sort_order(&m.name, i as i64);
+                let _ = index.set_enabled(&m.name, d.enabled);
+            }
+        }
+    }
+
+    /// Names in list order.
+    pub fn loaded_names(&self) -> Vec<String> {
+        self.dicts
+            .iter()
+            .map(|d| d.dict.metadata().name.clone())
+            .collect()
+    }
+
+    /// A loaded dictionary by name.
+    pub fn dictionary(&self, name: &str) -> Option<&dyn Dictionary> {
+        self.position(name).map(|i| self.dicts[i].dict.as_ref())
+    }
+
+    /// Media resolver of a loaded dictionary.
+    pub fn media(&self, name: &str) -> Option<&MediaResolver> {
+        self.position(name).map(|i| &self.dicts[i].media)
+    }
+
+    /// Path of a loaded dictionary.
+    pub fn path_of(&self, name: &str) -> Option<PathBuf> {
+        self.dictionary(name)
+            .map(|d| d.metadata().file_path.clone())
+    }
+
+    /// Total headwords in enabled dictionaries.
+    pub fn word_count(&self) -> usize {
+        self.dicts
+            .iter()
+            .filter(|d| d.enabled)
+            .map(|d| d.dict.metadata().word_count)
+            .sum()
+    }
+
+    /// Look `word` up in every enabled dictionary, in list order.
+    pub fn search(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {
+        if word.trim().is_empty() {
+            return Vec::new();
+        }
+        self.dicts
+            .iter()
+            .filter(|d| d.enabled)
+            .flat_map(|d| d.dict.lookup(word, exact))
+            .collect()
+    }
+
+    fn enabled_names(&self) -> Vec<String> {
+        self.dicts
+            .iter()
+            .filter(|d| d.enabled)
+            .map(|d| d.dict.metadata().name.clone())
+            .collect()
+    }
+
+    /// Headwords of all enabled dictionaries (list order, each dictionary
+    /// sorted, duplicates removed) — the fuzzy candidate list.
+    pub fn all_headwords(&mut self) -> &[String] {
+        if self.headword_cache.is_none() {
+            let mut seen = HashSet::new();
+            let mut out = Vec::new();
+            for d in self.dicts.iter().filter(|d| d.enabled) {
+                for w in d.dict.words().sorted() {
+                    if seen.insert(w.as_str()) {
+                        out.push(w.clone());
+                    }
+                }
+            }
+            self.headword_cache = Some(out);
+        }
+        self.headword_cache.as_deref().unwrap_or(&[])
+    }
+
+    /// "Did you mean" candidates for `word`, best first.
+    pub fn fuzzy(&mut self, word: &str, limit: usize, cutoff: f64) -> Vec<(String, f64)> {
+        let word = word.trim().to_string();
+        if word.is_empty() {
+            return Vec::new();
+        }
+        let words = self.all_headwords();
+        fuzzy::extract(&word, words.iter().map(String::as_str), limit, cutoff)
+    }
+
+    /// Suggestions for the search box: prefix hits ranked closest-first,
+    /// filled up with fuzzy matches when there are fewer than
+    /// [`FUZZY_FILL_BELOW`].
+    pub fn suggest(&mut self, prefix: &str, limit: usize) -> Vec<Suggestion> {
+        let prefix = prefix.trim().to_string();
+        if prefix.is_empty() {
+            return Vec::new();
+        }
+        let enabled = self.enabled_names();
+        let mut words: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        if let Some(index) = self.index.as_ref() {
+            if let Ok(rows) = index.search_headword(&prefix, limit, Some(&enabled)) {
+                for (w, _) in rows {
+                    if seen.insert(w.clone()) {
+                        words.push(w);
+                    }
+                }
+            }
+        } else {
+            'outer: for d in self.dicts.iter().filter(|d| d.enabled) {
+                for e in d.dict.lookup(&prefix, false) {
+                    if seen.insert(e.headword.clone()) {
+                        words.push(e.headword);
+                        if words.len() >= limit {
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+        fuzzy::rank(&prefix, &mut words);
+        let mut out: Vec<Suggestion> = words
+            .into_iter()
+            .map(|word| Suggestion { word, fuzzy: false })
+            .collect();
+        if out.len() < FUZZY_FILL_BELOW {
+            for (w, _) in self.fuzzy(&prefix, fuzzy::DEFAULT_LIMIT, fuzzy::DEFAULT_CUTOFF) {
+                if out.len() >= limit {
+                    break;
+                }
+                if seen.insert(w.clone()) {
+                    out.push(Suggestion {
+                        word: w,
+                        fuzzy: true,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Close everything.
+    pub fn close_all(&mut self) {
+        for d in &mut self.dicts {
+            d.dict.close();
+        }
+        self.dicts.clear();
+        self.headword_cache = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stardict::write_stardict;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("dictz-qm-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn search_suggest_fuzzy_order_restore() {
+        let d = tmp("all");
+        let a =
+            write_stardict(&d.join("a"), "A", &[("apple", "elma"), ("apply", "uygula")]).unwrap();
+        let b =
+            write_stardict(&d.join("b"), "B", &[("apple", "Apfel"), ("banana", "muz")]).unwrap();
+        let db = d.join("index.db");
+        let mut qm = QueryManager::new(Some(IndexStore::open(&db).unwrap()));
+        qm.add_dictionary(&a, false).unwrap();
+        qm.add_dictionary(&b, false).unwrap();
+        assert_eq!(qm.search("apple", true).len(), 2);
+        assert_eq!(qm.loaded_names(), vec!["A", "B"]);
+        qm.move_dictionary("B", -1);
+        assert_eq!(qm.loaded_names(), vec!["B", "A"]);
+        assert_eq!(qm.search("apple", true)[0].definition, "Apfel");
+        qm.set_enabled("B", false);
+        assert_eq!(qm.search("apple", true).len(), 1);
+
+        let s = qm.suggest("app", 30);
+        assert_eq!(s[0].word, "apple");
+        assert!(!s[0].fuzzy);
+        let f = qm.fuzzy("aple", 5, 60.0);
+        assert_eq!(f[0].0, "apple");
+        assert!(qm
+            .suggest("aplpe", 30)
+            .iter()
+            .any(|s| s.fuzzy && s.word == "apple"));
+
+        // restart: same order and enabled flags come back
+        drop(qm);
+        let mut qm2 = QueryManager::new(Some(IndexStore::open(&db).unwrap()));
+        let (ok, errors) = qm2.restore_from_index();
+        assert!(errors.is_empty(), "{:?}", errors);
+        assert_eq!(ok, vec!["B", "A"]);
+        assert!(!qm2.is_enabled("B"));
+        assert!(qm2.is_enabled("A"));
+    }
+
+    #[test]
+    fn unsupported_extension() {
+        assert!(matches!(
+            open_dictionary(Path::new("x.txt")),
+            Err(DictzError::Unsupported(_))
+        ));
+    }
+}

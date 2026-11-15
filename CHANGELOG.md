@@ -5,6 +5,52 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.6] — 2026-11-15
+
+**dictz now ships as two full editions with the same features:** Python (`pip install dictz`, Qt) and Rust (`cargo install dictz`, egui). Both are released from the same tag with the same version.
+
+### Added — Rust edition (`dictz-rs/`, crates.io)
+- **Full application**, no longer a scaffold. The binary `dictz` has `--version`, `--selftest` and `FILE…` arguments. The GUI has the same layout, Turkish labels and shortcuts as the Python edition:
+  - menu bar, toolbar (back/forward, search, favorite, zoom, theme, preferences), live suggestions
+  - tabbed articles
+  - sidebar with Sözlükler / Favoriler / Geçmiş
+  - dictionary manager (enable/disable, add, remove, up/down, add by path) and preferences (theme, font file, size, search delay)
+  - about box, light/dark/auto themes, zoom, drag-and-drop of dictionary files
+- **Native parsers**, written in Rust without Python or PyGlossary:
+  - **StarDict**
+  - **DSL**: a port of PyGlossary's DSL reader
+  - **Babylon `.bgl`**: a port of PyGlossary's Babylon reader, covering charsets, `<charset>` tags, entities, part of speech, title and transcription fields, `$index$` markers, type-11 blocks and the Persian clean-up
+- **SQLite FTS5 index**, **history** and **favorites** with the same schema and the same files as the Python edition. Both editions share one data folder, so dictionaries, history and favorites appear in both.
+- A small HTML renderer for articles (colors, bold/italic, indented paragraphs, links, pictures, sounds), with readable colors in the dark theme.
+- System fonts are used as fallbacks for wide script coverage (Turkish, Cyrillic, Greek, Arabic/Persian, CJK), plus a bold face.
+- **Portable Rust binaries** on every release: `dictz-rs-linux-x86_64.tar.gz`, `dictz-rs-windows-x86_64.zip`, `dictz-rs-macos-arm64.tar.gz`. Each one runs `--selftest` in CI before it is published.
+- Library use without GUI dependencies: `default-features = false`.
+
+### Added — both editions (v0.0.6 features)
+- **Fuzzy search / "did you mean"**:
+  - When nothing matches, the not-found page lists the closest headwords with their similarity (%).
+  - Suggestions are ranked closest-first and filled up with fuzzy matches, marked `≈`.
+  - Scores are RapidFuzz `fuzz.ratio`, identical in both editions.
+- **DSL pictures and sounds**:
+  - `[s]picture.png[/s]` is shown inline and `[s]sound.wav[/s]` gets a ▶ play button.
+  - Files are looked up in `X.dsl.files/`, then `X.dsl.files.zip`, then StarDict `res/`, then the dictionary folder; the match is case-insensitive.
+  - Python plays sounds with QtMultimedia, Rust with rodio; both fall back to the system player.
+- **Dictionaries come back after a restart.** They were lost on every start before.
+- **Dictionary order is kept**: the manager's up/down now changes the search order and the sidebar order.
+- **Parity tests**: `tests/data/parity/` holds a hand-made DSL, BGL and media zip plus golden output from the Python edition. `dictz-rs/tests/parity.rs` and `tests/test_parity.py` require byte-identical headwords, definitions and metadata. They were also checked against real PyGlossary test dictionaries (4 BGL, 4 DSL: identical).
+- `--selftest` gained the **Babylon parser**, **Fuzzy matching** and **Media resolver** checks (6 checks in Rust, 7 in Python).
+
+### Fixed
+- **Python:** clicking links in articles did nothing with QtWebEngine; links now open (`bword://`, `http(s)://`, sounds).
+- **Python:** DSL headwords containing `&`, `<` or `>` were stored XML-escaped (`rock &amp; roll`).
+- Suggestions could come from disabled dictionaries when all dictionaries were disabled; the filter now runs in SQL.
+- The PyInstaller spec excluded QtMultimedia; it is bundled now so sounds play in the portable builds.
+
+### Changed
+- **CI triggers on tag pushes only** (plus pull requests and manual runs), so a release is exactly **one** run. A plain push to `main` starts nothing.
+- The Rust CI jobs install the ALSA headers, run the parity and library-only tests and the selftest, and publish with `cargo publish --locked`.
+- `.gitattributes` marks dictionary samples as binary; `dictz-rs/target/` is ignored.
+
 ## [0.0.5] — 2026-11-15
 
 ### Fixed

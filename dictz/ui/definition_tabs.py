@@ -58,18 +58,26 @@ class DefinitionTabs(QTabWidget):
             view.show_welcome()
         return view
 
-    def show_in_current(self, word: str, entries: list[DictionaryEntry]) -> None:
+    def show_in_current(self, word: str, entries: list[DictionaryEntry],
+                        suggestions: list[tuple[str, float]] | None = None) -> None:
         view = self.current_view()
         if view is None:
             view = self.new_tab(word)
-        view.show_entries(entries)
+        if entries:
+            view.show_entries(entries)
+        else:
+            view.show_not_found(word, suggestions)
         idx = self.currentIndex()
         if idx >= 0:
             self.setTabText(idx, word or "Sonuç yok")
 
-    def show_in_new_tab(self, word: str, entries: list[DictionaryEntry]) -> None:
+    def show_in_new_tab(self, word: str, entries: list[DictionaryEntry],
+                        suggestions: list[tuple[str, float]] | None = None) -> None:
         view = self.new_tab(word)
-        view.show_entries(entries)
+        if entries:
+            view.show_entries(entries)
+        else:
+            view.show_not_found(word, suggestions)
 
     def close_current_tab(self) -> None:
         idx = self.currentIndex()
