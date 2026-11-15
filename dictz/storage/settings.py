@@ -21,7 +21,7 @@ class Preferences:
     last_search: str = ""
 
     @classmethod
-    def load(cls) -> "Preferences":
+    def load(cls) -> Preferences:
         qs = QSettings()
         p = cls()
         p.theme = qs.value("ui/theme", p.theme, type=str)

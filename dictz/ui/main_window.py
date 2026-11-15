@@ -1,15 +1,25 @@
 """dictz main window — functional GoldenDict-style layout."""
 from __future__ import annotations
 
-import html
+import contextlib
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMainWindow, QMessageBox, QSizePolicy, QStatusBar,
-    QToolBar, QVBoxLayout, QWidget,
+    QApplication,
+    QFileDialog,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QSizePolicy,
+    QStatusBar,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.query_manager import QueryManager
@@ -54,15 +64,11 @@ class MainWindow(QMainWindow):
         self._refresh_status()
 
         if self.prefs.window_geometry:
-            try:
+            with contextlib.suppress(Exception):
                 self.restoreGeometry(self.prefs.window_geometry)
-            except Exception:
-                pass
         if self.prefs.window_state:
-            try:
+            with contextlib.suppress(Exception):
                 self.restoreState(self.prefs.window_state)
-            except Exception:
-                pass
 
         self.tabs.new_tab()
 

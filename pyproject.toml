@@ -33,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Education",
     "Topic :: Text Processing :: Linguistic",
 ]
@@ -72,11 +73,35 @@ include = ["dictz*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["build", "dist", ".venv", "venv", "packaging/pyinstaller/dictz.spec"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+# E501 line-too-long, N806/N802 Qt naming (QObjects use camelCase), B008 Qt signals, UP007 Union syntax (keep X | None readable in older runtimes)
+ignore = ["E501", "N802", "N803", "N806", "B008", "UP007", "UP035", "UP045"]
+per-file-ignores = { "tests/*" = ["E402"] }
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning:pyglossary.*",
+]
+
+[tool.coverage.run]
+source = ["dictz"]
+omit = ["dictz/__main__.py", "dictz/ui/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
