@@ -1,275 +1,620 @@
-"""dictz main window — functional GoldenDict-style layout."""
+"""dictz main window (Python edition).
+
+Same layout, menus and shortcuts as the Rust edition's egui window.
+"""
 from __future__ import annotations
 
 import contextlib
+import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QFont, QKeySequence, QShortcut
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
+    QPushButton,
     QSizePolicy,
-    QStatusBar,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from .. import __version__
 from ..core.media import media_kind, parse_audio_url, rewrite_media_html
-from ..core.query_manager import QueryManager, Suggestion
+from ..core.query_manager import QueryManager, Suggestion, is_dictionary_file, scan_folder
 from ..parsers.base import DictionaryEntry
 from ..storage.history import HistoryStore
 from ..storage.settings import Preferences
 from . import themes
 from .definition_tabs import DefinitionTabs
-from .dictionary_manager import DictionaryManagerDialog
+from .definition_view import group_by_dictionary
+from .dictionary_manager import FILE_FILTER, DictionaryManagerDialog, info_html
 from .icons import icon
 from .preferences_dialog import PreferencesDialog
 from .sidebar import Sidebar
 
 
+class DictionaryLoader(QThread):
+    """Opens dictionaries off the GUI thread; indexes new / changed files with
+    its own SQLite connection."""
+
+    loaded = Signal(object, str, bool)  # Dictionary, path, enabled
+    failed = Signal(str, str)
+    progress = Signal(int, int, str)
+
+    def __init__(self, db_path: Path, rows: list[dict], new_files: list[Path], reindex_changed: bool, parent=None):
+        super().__init__(parent)
+        self.db_path = db_path
+        self.rows = rows
+        self.new_files = new_files
+        self.reindex_changed = reindex_changed
+
+    def run(self) -> None:
+        from ..core.query_manager import _changed
+        from ..storage.indexer import IndexStore
+
+        store = IndexStore(self.db_path)
+        store.open()
+        total = len(self.rows) + len(self.new_files)
+        i = 0
+        try:
+            for row in self.rows:
+                i += 1
+                self.progress.emit(i, total, Path(row["path"]).name)
+                try:
+                    d = QueryManager.open_file(row["path"])
+                    if self.reindex_changed and _changed(row, Path(row["path"])):
+                        store.index_dictionary(d)
+                    self.loaded.emit(d, row["path"], bool(row["enabled"]))
+                except Exception as exc:  # noqa: BLE001
+                    self.failed.emit(row["path"], str(exc))
+            for f in self.new_files:
+                i += 1
+                self.progress.emit(i, total, f.name)
+                try:
+                    d = QueryManager.open_file(f)
+                    if not store.is_indexed(d.metadata.name):
+                        store.index_dictionary(d)
+                    self.loaded.emit(d, str(f), True)
+                except Exception as exc:  # noqa: BLE001
+                    self.failed.emit(str(f), str(exc))
+        finally:
+            store.close()
+
+
+class UpdateChecker(QThread):
+    result = Signal(str, str)  # latest, error
+
+    def run(self) -> None:
+        try:
+            from ..core.updater import latest_version
+
+            self.result.emit(latest_version(), "")
+        except Exception as exc:  # noqa: BLE001
+            self.result.emit("", str(exc))
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, query_manager: QueryManager, history_store: HistoryStore, preferences: Preferences):
+    def __init__(self, query_manager: QueryManager, history_store: HistoryStore, preferences: Preferences,
+                 startup_files: list[Path] | None = None):
         super().__init__()
         self.query_manager = query_manager
         self.history = history_store
         self.prefs = preferences
-
+        self.startup_files = list(startup_files or [])
         self.setWindowTitle("dictz")
         self.resize(1280, 820)
+        self.setAcceptDrops(True)
 
         self._nav_history: list[str] = []
         self._nav_cursor = -1
         self._applying_nav = False
+        self._loader: DictionaryLoader | None = None
+        self._update_checker: UpdateChecker | None = None
+        self._load_errors: list[str] = []
+        self._loaded_count = 0
 
         self._build_center()
         self._build_toolbar()
-        self._build_menus()
+        self._build_dictionary_bar()
         self._build_sidebar()
+        self._build_found_in()
         self._build_statusbar()
+        self._build_menus()
         self._build_shortcuts()
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._run_search)
 
-        self._apply_prefs_to_ui()
-        self._refresh_sidebar()
-        self._refresh_status()
-
-        if self.prefs.window_geometry:
+        qs = QSettings()
+        if self.prefs["general.remember_window"]:
             with contextlib.suppress(Exception):
-                self.restoreGeometry(self.prefs.window_geometry)
-        if self.prefs.window_state:
-            with contextlib.suppress(Exception):
-                self.restoreState(self.prefs.window_state)
+                if qs.value("window/geometry") is not None:
+                    self.restoreGeometry(qs.value("window/geometry"))
+                if qs.value("window/state") is not None:
+                    self.restoreState(qs.value("window/state"))
 
+        self.apply_prefs()
         self.tabs.new_tab()
+        if self.prefs["general.restore_last_search"] and self.prefs["state.last_search"]:
+            self.search_box.setText(self.prefs["state.last_search"])
+            self._search_timer.stop()
+        self.search_box.setFocus()
+        if int(self.prefs["history.max_entries"]):
+            self.history.purge(int(self.prefs["history.max_entries"]))
+        if self.prefs["general.check_updates_on_start"]:
+            QTimer.singleShot(3000, lambda: self._check_updates(silent=True))
 
+    # ================================================================ build
     def _build_center(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        self.tabs = DefinitionTabs()
+        self.tabs = DefinitionTabs(self.prefs)
         self.tabs.link_activated.connect(self._on_definition_link)
         self.tabs.current_word_changed.connect(self._on_current_tab_word_changed)
+        self.tabs.find_result.connect(self._on_find_result)
         self.suggestions = QListWidget()
-        self.suggestions.setMaximumHeight(140)
+        self.suggestions.setMaximumHeight(160)
         self.suggestions.setFrameShape(QListWidget.Shape.NoFrame)
         self.suggestions.itemActivated.connect(self._on_suggestion_activated)
         self.suggestions.itemClicked.connect(self._on_suggestion_activated)
         self.suggestions.hide()
         layout.addWidget(self.suggestions)
         layout.addWidget(self.tabs, 1)
+        # find bar
+        self.find_bar = QWidget()
+        self.find_bar.setObjectName("find_bar")
+        fl = QHBoxLayout(self.find_bar)
+        fl.setContentsMargins(8, 4, 8, 4)
+        fl.addWidget(QLabel("Sayfada bul:"))
+        self.find_box = QLineEdit()
+        self.find_box.setPlaceholderText("metin…")
+        self.find_box.textChanged.connect(lambda t: self._find(False))
+        self.find_box.returnPressed.connect(lambda: self._find(False))
+        fl.addWidget(self.find_box, 1)
+        prev_b = QPushButton("◀")
+        next_b = QPushButton("▶")
+        prev_b.clicked.connect(lambda: self._find(True))
+        next_b.clicked.connect(lambda: self._find(False))
+        fl.addWidget(prev_b)
+        fl.addWidget(next_b)
+        self.find_case = QCheckBox("Büyük/küçük harf")
+        self.find_case.toggled.connect(lambda _: self._find(False))
+        fl.addWidget(self.find_case)
+        self.find_count = QLabel("")
+        fl.addWidget(self.find_count)
+        close_b = QToolButton()
+        close_b.setText("✕")
+        close_b.clicked.connect(self._close_find)
+        fl.addWidget(close_b)
+        self.find_bar.hide()
+        layout.addWidget(self.find_bar)
+
+    def _act(self, text: str, slot, shortcut: str | None = None, icon_name: str | None = None,
+             checkable: bool = False, tip: str | None = None) -> QAction:
+        a = QAction(icon(icon_name), text, self) if icon_name else QAction(text, self)
+        if shortcut:
+            a.setShortcut(QKeySequence(shortcut))
+        a.setCheckable(checkable)
+        if tip:
+            a.setToolTip(tip)
+        a.triggered.connect(slot)
+        self.addAction(a)
+        return a
 
     def _build_toolbar(self) -> None:
-        tb = QToolBar("Ana araç çubuğu")
+        tb = QToolBar("Araç çubuğu")
         tb.setMovable(False)
         tb.setObjectName("main_toolbar")
         self.addToolBar(tb)
-        self.back_action = QAction(icon("back"), "Geri", self)
-        self.back_action.setShortcut(QKeySequence("Alt+Left"))
-        self.back_action.triggered.connect(self._nav_back)
+        self.toolbar = tb
+        self.back_action = self._act("Geri", self._nav_back, "Alt+Left", "back")
+        self.fwd_action = self._act("İleri", self._nav_forward, "Alt+Right", "forward")
         tb.addAction(self.back_action)
-        self.fwd_action = QAction(icon("forward"), "İleri", self)
-        self.fwd_action.setShortcut(QKeySequence("Alt+Right"))
-        self.fwd_action.triggered.connect(self._nav_forward)
         tb.addAction(self.fwd_action)
         tb.addSeparator()
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Bir kelime ara…   (Ctrl+F odaklan)")
+        self.search_box.setObjectName("search_box")
+        self.search_box.setPlaceholderText("Bir kelime ara…   (Ctrl+F)")
         self.search_box.setClearButtonEnabled(True)
-        self.search_box.setMinimumWidth(280)
+        self.search_box.setMinimumWidth(320)
         self.search_box.textChanged.connect(self._on_search_text_changed)
         self.search_box.returnPressed.connect(self._run_search_explicit)
+        self.search_box.installEventFilter(self)
         tb.addWidget(self.search_box)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
-        tb.addSeparator()
-        self.favorite_action = QAction(icon("star"), "Favori", self)
-        self.favorite_action.setCheckable(True)
-        self.favorite_action.setShortcut(QKeySequence("Ctrl+D"))
-        self.favorite_action.triggered.connect(self._toggle_favorite_current)
+        self.random_action = self._act("Rastgele", self._random_word, "Ctrl+R", "refresh", tip="Rastgele kelime (Ctrl+R)")
+        tb.addAction(self.random_action)
+        self.favorite_action = self._act("Favori", self._toggle_favorite_current, "Ctrl+D", "star", checkable=True)
         tb.addAction(self.favorite_action)
         tb.addSeparator()
-        self.zoom_out_action = QAction(icon("zoom-out"), "Küçült", self)
-        self.zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
-        self.zoom_out_action.triggered.connect(self._zoom_out)
+        self.zoom_out_action = self._act("Küçült", self._zoom_out, "Ctrl+-", "zoom-out")
+        self.zoom_in_action = self._act("Büyüt", self._zoom_in, "Ctrl+=", "zoom-in")
         tb.addAction(self.zoom_out_action)
-        self.zoom_in_action = QAction(icon("zoom-in"), "Büyüt", self)
-        self.zoom_in_action.setShortcut(QKeySequence("Ctrl+="))
-        self.zoom_in_action.triggered.connect(self._zoom_in)
         tb.addAction(self.zoom_in_action)
-        self.theme_action = QAction(icon("theme"), "Tema", self)
-        self.theme_action.triggered.connect(self._cycle_theme)
+        self.theme_action = self._act("Tema", self._cycle_theme, None, "theme", tip="Tema: Otomatik → Açık → Koyu")
         tb.addAction(self.theme_action)
         tb.addSeparator()
-        self.prefs_action = QAction(icon("settings"), "Tercihler", self)
-        self.prefs_action.setShortcut(QKeySequence("Ctrl+,"))
-        self.prefs_action.triggered.connect(self._open_preferences)
+        self.prefs_action = self._act("Tercihler", self._open_preferences, "Ctrl+,", "settings")
         tb.addAction(self.prefs_action)
 
-    def _build_menus(self) -> None:
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu("&Dosya")
-        add_dict = QAction(icon("open"), "Sözlük &Ekle…", self)
-        add_dict.setShortcut(QKeySequence("Ctrl+O"))
-        add_dict.triggered.connect(self._add_dictionary_dialog)
-        file_menu.addAction(add_dict)
-        manage = QAction(icon("folder"), "Sözlük &Yöneticisi…", self)
-        manage.setShortcut(QKeySequence("Ctrl+M"))
-        manage.triggered.connect(self._open_dictionary_manager)
-        file_menu.addAction(manage)
-        file_menu.addSeparator()
-        quit_action = QAction("Çı&kış", self)
-        quit_action.setShortcut(QKeySequence.StandardKey.Quit)
-        quit_action.triggered.connect(self.close)
-        file_menu.addAction(quit_action)
-        edit_menu = menubar.addMenu("&Düzen")
-        copy_word = QAction("Kelimeyi kopyala", self)
-        copy_word.setShortcut(QKeySequence("Ctrl+Shift+C"))
-        copy_word.triggered.connect(self._copy_current_word)
-        edit_menu.addAction(copy_word)
-        focus_search = QAction("Arama kutusuna odaklan", self)
-        focus_search.setShortcut(QKeySequence("Ctrl+F"))
-        focus_search.triggered.connect(lambda: self.search_box.setFocus())
-        edit_menu.addAction(focus_search)
-        edit_menu.addSeparator()
-        prefs = QAction("Tercihler…", self)
-        prefs.setShortcut(QKeySequence("Ctrl+,"))
-        prefs.triggered.connect(self._open_preferences)
-        edit_menu.addAction(prefs)
-        view_menu = menubar.addMenu("&Görünüm")
-        new_tab = QAction("Yeni sekme", self)
-        new_tab.setShortcut(QKeySequence("Ctrl+T"))
-        new_tab.triggered.connect(lambda: self.tabs.new_tab())
-        view_menu.addAction(new_tab)
-        close_tab = QAction("Sekmeyi kapat", self)
-        close_tab.setShortcut(QKeySequence("Ctrl+W"))
-        close_tab.triggered.connect(self.tabs.close_current_tab)
-        view_menu.addAction(close_tab)
-        view_menu.addSeparator()
-        toggle_sidebar = QAction("Yan paneli göster/gizle", self)
-        toggle_sidebar.setShortcut(QKeySequence("Ctrl+B"))
-        toggle_sidebar.triggered.connect(self._toggle_sidebar)
-        view_menu.addAction(toggle_sidebar)
-        view_menu.addSeparator()
-        zoom_in = QAction("Büyüt", self)
-        zoom_in.setShortcut(QKeySequence("Ctrl+="))
-        zoom_in.triggered.connect(self._zoom_in)
-        view_menu.addAction(zoom_in)
-        zoom_out = QAction("Küçült", self)
-        zoom_out.setShortcut(QKeySequence("Ctrl+-"))
-        zoom_out.triggered.connect(self._zoom_out)
-        view_menu.addAction(zoom_out)
-        reset_zoom = QAction("Yakınlaştırmayı sıfırla", self)
-        reset_zoom.setShortcut(QKeySequence("Ctrl+0"))
-        reset_zoom.triggered.connect(self._zoom_reset)
-        view_menu.addAction(reset_zoom)
-        help_menu = menubar.addMenu("&Yardım")
-        about = QAction("&Hakkında", self)
-        about.triggered.connect(self._about)
-        help_menu.addAction(about)
+    def _build_dictionary_bar(self) -> None:
+        bar = QToolBar("Sözlük çubuğu")
+        bar.setObjectName("dictionary_bar")
+        bar.setMovable(True)
+        self.addToolBarBreak()
+        self.addToolBar(bar)
+        self.dictionary_bar = bar
+
+    def _refresh_dictionary_bar(self) -> None:
+        bar = self.dictionary_bar
+        bar.clear()
+        qm = self.query_manager
+        names = qm.loaded_names()
+        if not names:
+            lab = QLabel("  Sözlük yok — Ctrl+O ile ekleyin")
+            lab.setObjectName("hint")
+            bar.addWidget(lab)
+            return
+        for name in names:
+            b = QToolButton()
+            short = name if len(name) <= 22 else name[:21] + "…"
+            b.setText(short)
+            b.setCheckable(True)
+            b.setChecked(qm.is_enabled(name))
+            m = qm.dictionaries[name].metadata
+            b.setToolTip(f"{m.display_name}\n{m.word_count:,} kelime\nTıkla: aç/kapat · Sağ tık: yalnızca bu")
+            b.toggled.connect(lambda on, n=name: self._set_dictionary_enabled(n, on))
+            b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            b.customContextMenuRequested.connect(lambda _p, n=name: self._solo_dictionary(n))
+            bar.addWidget(b)
+        bar.addSeparator()
+        all_b = QToolButton()
+        all_b.setText("Tümü")
+        all_b.setToolTip("Tüm sözlükleri etkinleştir")
+        all_b.clicked.connect(lambda: self._enable_all(True))
+        bar.addWidget(all_b)
 
     def _build_sidebar(self) -> None:
         self.sidebar = Sidebar(self)
         self.sidebar.setObjectName("sidebar_dock")
         self.sidebar.word_selected.connect(self._open_word)
-        self.sidebar.dictionary_toggled.connect(self._on_sidebar_dict_toggled)
+        self.sidebar.dictionary_toggled.connect(self._set_dictionary_enabled)
+        self.sidebar.dictionary_activated.connect(self._show_dictionary_info)
         self.sidebar.manage_dictionaries_requested.connect(self._open_dictionary_manager)
         self.sidebar.clear_history_requested.connect(self._clear_history)
+        self.sidebar.history_remove_requested.connect(self._remove_history_word)
+        self.sidebar.favorite_remove_requested.connect(self._remove_favorite)
+        self.sidebar.export_favorites_requested.connect(self._export_favorites)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar)
-        self.sidebar.setMinimumWidth(240)
+        self.sidebar.setMinimumWidth(220)
+
+    def _build_found_in(self) -> None:
+        dock = QDockWidget("Bulunduğu sözlükler", self)
+        dock.setObjectName("found_in_dock")
+        self.found_list = QListWidget()
+        self.found_list.itemClicked.connect(self._on_found_in_clicked)
+        dock.setWidget(self.found_list)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        dock.setMinimumWidth(180)
+        self.found_dock = dock
 
     def _build_statusbar(self) -> None:
-        self.setStatusBar(QStatusBar())
+        sb = self.statusBar()
+        self.progress = QProgressBar()
+        self.progress.setMaximumWidth(180)
+        self.progress.setMaximumHeight(14)
+        self.progress.setTextVisible(False)
+        self.progress.hide()
+        self.timing_label = QLabel("")
         self.dict_count_label = QLabel("0 sözlük")
         self.zoom_label = QLabel("100%")
-        self.statusBar().addPermanentWidget(self.dict_count_label)
-        sep = QLabel("·")
-        sep.setContentsMargins(8, 0, 8, 0)
-        self.statusBar().addPermanentWidget(sep)
-        self.statusBar().addPermanentWidget(self.zoom_label)
+        sb.addPermanentWidget(self.progress)
+        sb.addPermanentWidget(self.timing_label)
+        sb.addPermanentWidget(self.dict_count_label)
+        sb.addPermanentWidget(QLabel("·"))
+        sb.addPermanentWidget(self.zoom_label)
+
+    def _build_menus(self) -> None:
+        mb = self.menuBar()
+        m = mb.addMenu("&Dosya")
+        m.addAction(self._act("Sözlük &Ekle…", self._add_dictionary_dialog, "Ctrl+O", "open"))
+        m.addAction(self._act("&Klasör Ekle…", self._add_folder_dialog, "Ctrl+Shift+O", "folder"))
+        m.addAction(self._act("Sözlük &Yöneticisi…", self._open_dictionary_manager, "Ctrl+M", "dict"))
+        m.addSeparator()
+        m.addAction(self._act("Makaleyi HTML olarak &kaydet…", self._save_article, "Ctrl+S", "save"))
+        m.addAction(self._act("Favorileri dışa aktar…", self._export_favorites))
+        m.addSeparator()
+        m.addAction(self._act("Çı&kış", self.close, "Ctrl+Q"))
+
+        e = mb.addMenu("&Düzen")
+        e.addAction(self._act("Kelimeyi kopyala", self._copy_current_word, "Ctrl+Shift+C", "copy"))
+        e.addAction(self._act("Makaleyi metin olarak kopyala", self._copy_article, "Ctrl+Shift+A"))
+        e.addSeparator()
+        e.addAction(self._act("Arama kutusuna odaklan", self._focus_search, "Ctrl+F"))
+        e.addAction(self._act("Sayfada bul…", self._open_find, "Ctrl+Shift+F"))
+        e.addAction(self._act("Sonraki eşleşme", lambda: self._find(False), "F3"))
+        e.addAction(self._act("Önceki eşleşme", lambda: self._find(True), "Shift+F3"))
+        e.addSeparator()
+        e.addAction(self._act("Tercihler…", self._open_preferences))
+
+        v = mb.addMenu("&Görünüm")
+        v.addAction(self._act("Yeni sekme", lambda: self.tabs.new_tab(), "Ctrl+T", "new"))
+        v.addAction(self._act("Sekmeyi kapat", self.tabs.close_current_tab, "Ctrl+W", "close"))
+        v.addAction(self._act("Tüm makaleleri aç", lambda: self._all_open(True)))
+        v.addAction(self._act("Tüm makaleleri kapat", lambda: self._all_open(False)))
+        v.addSeparator()
+        self.view_toggles: dict[str, QAction] = {}
+        for key, label, sc in [
+            ("appearance.show_toolbar", "Araç çubuğu", None),
+            ("appearance.show_dictionary_bar", "Sözlük çubuğu", None),
+            ("appearance.show_sidebar", "Yan panel", "Ctrl+B"),
+            ("appearance.show_found_in", "Bulunduğu sözlükler", None),
+            ("appearance.show_statusbar", "Durum çubuğu", None),
+        ]:
+            a = self._act(label, lambda on, k=key: self._toggle_pref(k, on), sc, checkable=True)
+            self.view_toggles[key] = a
+            v.addAction(a)
+        v.addSeparator()
+        self.fullscreen_action = self._act("Tam ekran", self._toggle_fullscreen, "F11", checkable=True)
+        v.addAction(self.fullscreen_action)
+        self.ontop_action = self._act("Her zaman üstte", lambda on: self._toggle_pref("general.always_on_top", on),
+                                      checkable=True)
+        v.addAction(self.ontop_action)
+        v.addSeparator()
+        v.addAction(self.zoom_in_action)
+        v.addAction(self.zoom_out_action)
+        v.addAction(self._act("Yakınlaştırmayı sıfırla", self._zoom_reset, "Ctrl+0"))
+        tm = v.addMenu("Tema")
+        self.theme_group = QActionGroup(self)
+        self.theme_actions = {}
+        for val, label in [("auto", "Otomatik"), ("light", "Açık"), ("dark", "Koyu")]:
+            a = QAction(label, self, checkable=True)
+            a.triggered.connect(lambda _=False, t=val: self._set_theme(t))
+            self.theme_group.addAction(a)
+            tm.addAction(a)
+            self.theme_actions[val] = a
+
+        g = mb.addMenu("&Git")
+        g.addAction(self.back_action)
+        g.addAction(self.fwd_action)
+        g.addAction(self.random_action)
+        g.addAction(self._act("Sonraki sekme", lambda: self._cycle_tab(1), "Ctrl+Tab"))
+        g.addAction(self._act("Önceki sekme", lambda: self._cycle_tab(-1), "Ctrl+Shift+Tab"))
+
+        self.dict_menu = mb.addMenu("&Sözlükler")
+        self.dict_menu.aboutToShow.connect(self._fill_dictionary_menu)
+
+        h = mb.addMenu("&Yardım")
+        h.addAction(self._act("Kısayollar", self._show_shortcuts, "F1", "help"))
+        h.addAction(self._act("Komut satırı (CLI)", self._show_cli_help))
+        h.addAction(self._act("Güncellemeleri denetle…", lambda: self._check_updates(silent=False)))
+        h.addAction(self._act("Veri klasörünü aç", self._open_data_dir, None, "folder"))
+        h.addSeparator()
+        h.addAction(self._act("&Hakkında", self._about))
 
     def _build_shortcuts(self) -> None:
-        QShortcut(QKeySequence("Ctrl+Tab"), self, lambda: self._cycle_tab(+1))
-        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, lambda: self._cycle_tab(-1))
-        open_new = QShortcut(QKeySequence("Ctrl+Return"), self.search_box)
-        open_new.activated.connect(self._run_search_new_tab)
+        QShortcut(QKeySequence("Ctrl+Return"), self.search_box).activated.connect(self._run_search_new_tab)
+        QShortcut(QKeySequence("Escape"), self.find_bar).activated.connect(self._close_find)
 
-    def _apply_prefs_to_ui(self) -> None:
-        qss = themes.resolve(self.prefs.theme)
+    def eventFilter(self, obj, event):  # noqa: N802
+        from PySide6.QtCore import QEvent
+
+        if obj is self.search_box and event.type() == QEvent.Type.FocusIn and self.prefs["search.select_all_on_focus"]:
+            QTimer.singleShot(0, self.search_box.selectAll)
+        if obj is self.search_box and event.type() == QEvent.Type.KeyPress and self.suggestions.isVisible():
+            if event.key() == Qt.Key.Key_Down:
+                self.suggestions.setFocus()
+                self.suggestions.setCurrentRow(0)
+                return True
+            if event.key() == Qt.Key.Key_Escape:
+                self.suggestions.hide()
+                return True
+        return super().eventFilter(obj, event)
+
+    # ================================================================ loading
+    def start_loading(self) -> None:
+        """Open dictionaries from the index, scan dictionary folders and add
+        files given on the command line — in the background."""
+        qm = self.query_manager
+        store = qm.index_store
+        rows = [dict(r) for r in store.list_dictionaries(enabled_only=False)] if store else []
+        known = {str(Path(r["path"]).resolve()) for r in rows}
+        new_files: list[Path] = []
+        if self.prefs["dictionaries.scan_on_startup"]:
+            for folder in self.prefs["dictionaries.folders"]:
+                new_files += scan_folder(folder, bool(self.prefs["dictionaries.recursive"]))
+        new_files += [f for f in self.startup_files if is_dictionary_file(f)]
+        seen: set[str] = set()
+        new_files = [f for f in new_files if (r := str(f.resolve())) not in known and not (r in seen or seen.add(r))]
+        if not rows and not new_files:
+            self._loading_finished()
+            return
+        db = Path(store.db_path) if store else Path()
+        self._loader = DictionaryLoader(db, rows, new_files, bool(self.prefs["dictionaries.reindex_on_change"]), self)
+        self._loader.loaded.connect(self._on_dictionary_loaded)
+        self._loader.failed.connect(lambda p, e: self._load_errors.append(f"{p}: {e}"))
+        self._loader.progress.connect(self._on_load_progress)
+        self._loader.finished.connect(self._loading_finished)
+        self.progress.show()
+        if self.prefs["general.load_in_background"]:
+            self._loader.start()
+        else:
+            self._loader.run()
+
+    def _on_load_progress(self, i: int, total: int, name: str) -> None:
+        self.progress.setMaximum(total)
+        self.progress.setValue(i)
+        self.statusBar().showMessage(f"Sözlükler yükleniyor ({i}/{total}): {name}")
+
+    def _on_dictionary_loaded(self, dictionary, path: str, enabled: bool) -> None:
+        self.query_manager.attach(dictionary, path, enabled)
+        self._loaded_count += 1
+        self._refresh_dictionaries()
+
+    def _loading_finished(self) -> None:
+        self.query_manager._persist_order()
+        self.progress.hide()
+        self._refresh_dictionaries()
+        if self._load_errors:
+            self.statusBar().showMessage(f"{len(self._load_errors)} sözlük açılamadı: " + "; ".join(self._load_errors),
+                                         12000)
+        elif self._loaded_count:
+            self.statusBar().showMessage(f"{self._loaded_count} sözlük yüklendi", 4000)
+        else:
+            self.statusBar().clearMessage()
+        if self.prefs["general.restore_tabs"] and self.prefs["state.open_tabs"]:
+            words = [w for w in self.prefs["state.open_tabs"] if isinstance(w, str) and w]
+            if words:
+                first = True
+                for w in words:
+                    entries = self._search_with_fallback(w)[0]
+                    if first:
+                        self.tabs.show_in_current(w, self._with_media(entries))
+                        first = False
+                    else:
+                        self.tabs.show_in_new_tab(w, self._with_media(entries))
+                self.tabs.setCurrentIndex(min(int(self.prefs["state.current_tab"]), self.tabs.count() - 1))
+                return
+        if self.search_box.text().strip():
+            self._run_search()
+
+    # ================================================================ prefs
+    def apply_prefs(self) -> None:
+        p = self.prefs
         app = QApplication.instance()
         if app is not None:
-            app.setStyleSheet(qss)
-        dark = "15181d" in qss
-        self.tabs.set_dark(dark)
-        if self.prefs.font_family:
-            self.setFont(QFont(self.prefs.font_family, self.prefs.font_size))
-        self.tabs.set_zoom(self.prefs.zoom_factor)
+            app.setStyleSheet(themes.qss(p))
+            if p["appearance.ui_font_family"]:
+                app.setFont(QFont(p["appearance.ui_font_family"], int(p["appearance.ui_font_size"])))
+        self.tabs.apply_prefs()
+        self.toolbar.setVisible(p["appearance.show_toolbar"])
+        self.dictionary_bar.setVisible(p["appearance.show_dictionary_bar"])
+        self.sidebar.setVisible(p["appearance.show_sidebar"])
+        self.found_dock.setVisible(p["appearance.show_found_in"])
+        self.statusBar().setVisible(p["appearance.show_statusbar"])
+        area = Qt.DockWidgetArea.RightDockWidgetArea if p["appearance.sidebar_side"] == "right" \
+            else Qt.DockWidgetArea.LeftDockWidgetArea
+        if self.dockWidgetArea(self.sidebar) != area:
+            self.addDockWidget(area, self.sidebar)
+        for key, a in self.view_toggles.items():
+            a.blockSignals(True)
+            a.setChecked(bool(p[key]))
+            a.blockSignals(False)
+        self.ontop_action.blockSignals(True)
+        self.ontop_action.setChecked(bool(p["general.always_on_top"]))
+        self.ontop_action.blockSignals(False)
+        on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
+        if on_top != bool(p["general.always_on_top"]):
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, bool(p["general.always_on_top"]))
+            self.show()
+        self.theme_actions.get(p["appearance.theme"], self.theme_actions["auto"]).setChecked(True)
         self._update_zoom_label()
-        self.sidebar.setVisible(self.prefs.show_sidebar)
+        self._refresh_dictionaries()
 
+    def _toggle_pref(self, key: str, on: bool) -> None:
+        self.prefs.set(key, on, save=True)
+        self.apply_prefs()
+
+    def _open_preferences(self) -> None:
+        dlg = PreferencesDialog(self.prefs, self)
+        dlg.preferences_changed.connect(lambda _p: self.apply_prefs())
+        dlg.action_requested.connect(self._on_prefs_action)
+        dlg.exec()
+
+    def _on_prefs_action(self, action: str) -> None:
+        if action == "open_data":
+            self._open_data_dir()
+        elif action == "reindex":
+            qm = self.query_manager
+            if qm.index_store is not None:
+                for n in qm.loaded_names():
+                    qm.index_store.index_dictionary(qm.dictionaries[n])
+                QMessageBox.information(self, "İndeks", f"{len(qm.loaded_names())} sözlük yeniden indekslendi.")
+        elif action == "check_updates":
+            self._check_updates(silent=False)
+        elif action == "clear_history":
+            self.history.clear_history()
+            self._refresh_history_pane()
+        elif action == "clear_favorites":
+            self.history.clear_favorites()
+            self._refresh_favorites_pane()
+
+    # ================================================================ search
     def _on_search_text_changed(self, text: str) -> None:
-        self._search_timer.start(self.prefs.search_debounce_ms)
+        self._search_timer.start(int(self.prefs["search.debounce_ms"]))
+
+    def _search_with_fallback(self, query: str, dictionaries: list[str] | None = None):
+        p = self.prefs
+        limit = int(p["search.max_articles"])
+        entries = self._case_filter(
+            query, self.query_manager.search(query, exact=True, dictionaries=dictionaries, max_articles=limit))
+        if not entries and p["search.prefix_fallback"]:
+            entries = self.query_manager.search(query, exact=False, dictionaries=dictionaries, max_articles=limit)
+        fuzzy = self._fuzzy(query) if not entries else []
+        return entries, fuzzy
+
+    def _case_filter(self, query: str, entries: list[DictionaryEntry]) -> list[DictionaryEntry]:
+        """With search.ignore_case off, exact matches must match case too."""
+        if self.prefs["search.ignore_case"]:
+            return entries
+        return [e for e in entries if e.headword == query]
+
+    def _fuzzy(self, query: str) -> list[tuple[str, float]]:
+        p = self.prefs
+        if not p["search.fuzzy"]:
+            return []
+        return self.query_manager.fuzzy(query, int(p["search.fuzzy_limit"]), float(p["search.fuzzy_cutoff"]))
 
     def _run_search(self) -> None:
         query = self.search_box.text().strip()
-        if not query:
+        p = self.prefs
+        if len(query) < int(p["search.min_chars"]):
             self.suggestions.clear()
             self.suggestions.hide()
             return
-        suggestions = self.query_manager.suggest(query, limit=100)
+        fill = int(p["search.fuzzy_fill_below"]) if p["search.fuzzy"] else 0
+        suggestions = self.query_manager.suggest(
+            query, limit=int(p["search.suggestion_limit"]), fuzzy_fill_below=fill,
+            fuzzy_limit=int(p["search.fuzzy_limit"]), fuzzy_cutoff=float(p["search.fuzzy_cutoff"]))
         self._populate_suggestions(suggestions)
-        entries = self.query_manager.search(query, exact=True)
+        if not p["search.live"]:
+            return
+        started = time.perf_counter()
+        entries = self._case_filter(
+            query, self.query_manager.search(query, exact=True, max_articles=int(p["search.max_articles"])))
         if entries:
-            self._display_in_current(query, entries)
+            self._display_in_current(query, entries, None, started)
             self._push_nav(query)
 
-    def _lookup_with_fallback(self, query: str) -> tuple[list[DictionaryEntry], list[tuple[str, float]]]:
-        """Exact → prefix → fuzzy "did you mean" candidates."""
-        entries = self.query_manager.search(query, exact=True)
-        if not entries:
-            entries = self.query_manager.search(query, exact=False)
-        fuzzy = [] if entries else self.query_manager.fuzzy(query)
-        return entries, fuzzy
-
     def _run_search_explicit(self) -> None:
+        if self.prefs["search.enter_new_tab"]:
+            self._run_search_new_tab()
+            return
         query = self.search_box.text().strip()
         if not query:
             return
-        entries, fuzzy = self._lookup_with_fallback(query)
-        self._display_in_current(query, entries, fuzzy)
+        started = time.perf_counter()
+        entries, fuzzy = self._search_with_fallback(query)
+        self._display_in_current(query, entries, fuzzy, started)
         self._push_nav(query)
         self.suggestions.hide()
 
@@ -277,8 +622,10 @@ class MainWindow(QMainWindow):
         query = self.search_box.text().strip()
         if not query:
             return
-        entries, fuzzy = self._lookup_with_fallback(query)
+        started = time.perf_counter()
+        entries, fuzzy = self._search_with_fallback(query)
         self.tabs.show_in_new_tab(query, self._with_media(entries), fuzzy)
+        self._after_display(query, entries, started)
         self._push_nav(query)
         self.suggestions.hide()
 
@@ -296,41 +643,93 @@ class MainWindow(QMainWindow):
 
     def _on_suggestion_activated(self, item: QListWidgetItem) -> None:
         word = item.data(Qt.ItemDataRole.UserRole) or item.text()
+        self.search_box.blockSignals(True)
         self.search_box.setText(word)
-        entries = self.query_manager.search(word, exact=True)
-        self._display_in_current(word, entries)
-        self._push_nav(word)
+        self.search_box.blockSignals(False)
+        self._open_word(word)
         self.suggestions.hide()
 
     def _with_media(self, entries: list[DictionaryEntry]) -> list[DictionaryEntry]:
-        """Inline pictures and turn sounds into play links."""
         out = []
+        show_images = self.prefs["article.show_images"]
         for e in entries:
-            resolver = self.query_manager.media(e.dictionary_id)
+            resolver = self.query_manager.media(e.dictionary_id) if show_images else None
             definition = rewrite_media_html(e.definition, e.dictionary_id, resolver)
             out.append(DictionaryEntry(e.headword, definition, e.dictionary_id, e.score))
         return out
 
     def _display_in_current(self, word: str, entries: list[DictionaryEntry],
-                            fuzzy: list[tuple[str, float]] | None = None) -> None:
+                            fuzzy: list[tuple[str, float]] | None = None, started: float | None = None) -> None:
         if not entries and fuzzy is None:
-            fuzzy = self.query_manager.fuzzy(word) if word else []
+            fuzzy = self._fuzzy(word) if word else []
         self.tabs.show_in_current(word, self._with_media(entries), fuzzy)
-        self._update_favorite_button(word)
-        if word and entries:
-            self.history.record(word)
-            self._refresh_history_pane()
+        self._after_display(word, entries, started)
 
-    def _open_word(self, word: str) -> None:
+    def _after_display(self, word: str, entries: list[DictionaryEntry], started: float | None) -> None:
+        self._update_favorite_button(word)
+        self._refresh_found_in(entries)
+        if started is not None:
+            ms = (time.perf_counter() - started) * 1000
+            n = len({e.dictionary_id for e in entries})
+            self.timing_label.setText(f"{len(entries)} madde · {n} sözlük · {ms:.0f} ms")
+        if word and entries:
+            if self.prefs["history.enabled"]:
+                self.history.record(word)
+                self._refresh_history_pane()
+            if self.prefs["audio.auto_play"]:
+                self._auto_play(entries)
+
+    def _auto_play(self, entries: list[DictionaryEntry]) -> None:
+        import re
+
+        for e in entries:
+            m = re.search(r'<object\b[^>]*\bdata="([^"]+)"', e.definition) or re.search(
+                r'href="sound://([^"]+)"', e.definition)
+            if m:
+                self._play_audio(e.dictionary_id, m.group(1))
+                return
+
+    def _open_word(self, word: str, dictionaries: list[str] | None = None, new_tab: bool = False) -> None:
         if not word:
             return
+        self.search_box.blockSignals(True)
         self.search_box.setText(word)
-        entries = self.query_manager.search(word, exact=True)
-        self._display_in_current(word, entries)
+        self.search_box.blockSignals(False)
+        started = time.perf_counter()
+        entries, fuzzy = self._search_with_fallback(word, dictionaries)
+        if new_tab:
+            self.tabs.show_in_new_tab(word, self._with_media(entries), fuzzy)
+            self._after_display(word, entries, started)
+        else:
+            self._display_in_current(word, entries, fuzzy, started)
         self._push_nav(word)
 
+    def _random_word(self) -> None:
+        e = self.query_manager.random_entry()
+        if e is None:
+            self.statusBar().showMessage("Önce bir sözlük ekleyin.", 3000)
+            return
+        self._open_word(e.headword)
+
+    # ================================================================ found-in
+    def _refresh_found_in(self, entries: list[DictionaryEntry]) -> None:
+        self.found_list.clear()
+        for i, (name, items) in enumerate(group_by_dictionary(entries)):
+            it = QListWidgetItem(f"{name}  ({len(items)})" if len(items) > 1 else name)
+            it.setData(Qt.ItemDataRole.UserRole, i)
+            it.setToolTip("Makaleye git")
+            self.found_list.addItem(it)
+
+    def _on_found_in_clicked(self, item: QListWidgetItem) -> None:
+        v = self.tabs.current_view()
+        if v is not None:
+            v.scroll_to_dictionary(int(item.data(Qt.ItemDataRole.UserRole)))
+
+    # ================================================================ nav
     def _push_nav(self, word: str) -> None:
         if self._applying_nav or not word:
+            return
+        if self._nav_cursor >= 0 and self._nav_history[self._nav_cursor] == word:
             return
         self._nav_history = self._nav_history[: self._nav_cursor + 1]
         self._nav_history.append(word)
@@ -352,9 +751,7 @@ class MainWindow(QMainWindow):
     def _apply_nav(self, word: str) -> None:
         self._applying_nav = True
         try:
-            self.search_box.setText(word)
-            entries = self.query_manager.search(word, exact=True)
-            self._display_in_current(word, entries)
+            self._open_word(word)
         finally:
             self._applying_nav = False
             self._update_nav_buttons()
@@ -363,146 +760,290 @@ class MainWindow(QMainWindow):
         self.back_action.setEnabled(self._nav_cursor > 0)
         self.fwd_action.setEnabled(self._nav_cursor + 1 < len(self._nav_history))
 
+    def _cycle_tab(self, delta: int) -> None:
+        n = self.tabs.count()
+        if n:
+            self.tabs.setCurrentIndex((self.tabs.currentIndex() + delta) % n)
+
+    def _on_current_tab_word_changed(self, word: str) -> None:
+        self._update_favorite_button(word)
+        v = self.tabs.current_view()
+        self._refresh_found_in(v.entries if v else [])
+
+    # ================================================================ favorites / history
     def _toggle_favorite_current(self) -> None:
         word = self.tabs.current_word() or self.search_box.text().strip()
-        if not word or word == "Yeni sekme":
+        if not word:
+            self.favorite_action.setChecked(False)
             return
         now_fav = self.history.toggle_favorite(word)
         self.favorite_action.setChecked(now_fav)
+        self.statusBar().showMessage(f"{'Favorilere eklendi' if now_fav else 'Favorilerden çıkarıldı'}: {word}", 2500)
         self._refresh_favorites_pane()
 
     def _update_favorite_button(self, word: str) -> None:
         self.favorite_action.setChecked(bool(word) and self.history.is_favorite(word))
 
-    def _on_current_tab_word_changed(self, word: str) -> None:
-        self._update_favorite_button(word)
-
-    def _cycle_tab(self, delta: int) -> None:
-        n = self.tabs.count()
-        if n == 0:
-            return
-        self.tabs.setCurrentIndex((self.tabs.currentIndex() + delta) % n)
-
-    def _zoom_in(self) -> None:
-        self.prefs.zoom_factor = min(3.0, self.prefs.zoom_factor + 0.1)
-        self.tabs.set_zoom(self.prefs.zoom_factor)
-        self.prefs.save()
-        self._update_zoom_label()
-
-    def _zoom_out(self) -> None:
-        self.prefs.zoom_factor = max(0.5, self.prefs.zoom_factor - 0.1)
-        self.tabs.set_zoom(self.prefs.zoom_factor)
-        self.prefs.save()
-        self._update_zoom_label()
-
-    def _zoom_reset(self) -> None:
-        self.prefs.zoom_factor = 1.0
-        self.tabs.set_zoom(1.0)
-        self.prefs.save()
-        self._update_zoom_label()
-
-    def _update_zoom_label(self) -> None:
-        self.zoom_label.setText(f"{int(self.prefs.zoom_factor * 100)}%")
-
-    def _cycle_theme(self) -> None:
-        order = ["auto", "light", "dark"]
-        idx = order.index(self.prefs.theme) if self.prefs.theme in order else 0
-        self.prefs.theme = order[(idx + 1) % len(order)]
-        self.prefs.save()
-        self._apply_prefs_to_ui()
-        self.statusBar().showMessage(f"Tema: {self.prefs.theme}", 2500)
-
-    def _add_dictionary_dialog(self) -> None:
-        file_filter = ("Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
-                       "StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dsl.dz);;"
-                       "Babylon (*.bgl);;Tüm dosyalar (*)")
-        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", file_filter)
-        if not paths:
-            return
-        for p in paths:
-            try:
-                d = self.query_manager.add_dictionary(Path(p))
-                self.statusBar().showMessage(f"Yüklendi: {d.metadata.name} ({d.metadata.word_count:,} kelime)", 4000)
-            except Exception as e:
-                QMessageBox.critical(self, "Yüklenemedi", f"<b>{p}</b><br><br>{type(e).__name__}: {e}")
-        self._refresh_sidebar()
-        self._refresh_status()
-
-    def _open_dictionary_manager(self) -> None:
-        dlg = DictionaryManagerDialog(self.query_manager, self)
-        dlg.dictionaries_changed.connect(lambda: (self._refresh_sidebar(), self._refresh_status()))
-        dlg.exec()
-
-    def _on_sidebar_dict_toggled(self, name: str, enabled: bool) -> None:
-        self.query_manager.set_enabled(name, enabled)
-        self._refresh_status()
-
-    def _refresh_sidebar(self) -> None:
-        items = [(name, self.query_manager.is_enabled(name)) for name in self.query_manager.loaded_names()]
-        self.sidebar.set_dictionaries(items)
-        self._refresh_favorites_pane()
-        self._refresh_history_pane()
-
     def _refresh_favorites_pane(self) -> None:
-        self.sidebar.set_favorites(self.history.favorites(500))
+        self.sidebar.set_favorites(self.history.favorites(int(self.prefs["history.favorites_limit"])))
 
     def _refresh_history_pane(self) -> None:
-        self.sidebar.set_history(self.history.recent(200))
+        self.sidebar.set_history(self.history.recent(int(self.prefs["history.limit"])))
 
-    def _refresh_status(self) -> None:
-        enabled = [n for n in self.query_manager.loaded_names() if self.query_manager.is_enabled(n)]
-        n = len(enabled)
-        total = sum(self.query_manager.dictionaries[name].metadata.word_count for name in enabled)
-        if n == 0:
-            self.dict_count_label.setText("0 sözlük yüklü")
-        else:
-            self.dict_count_label.setText(f"{n} sözlük · {total:,} kelime")
+    def _remove_history_word(self, word: str) -> None:
+        self.history.remove_history(word)
+        self._refresh_history_pane()
 
-    def _toggle_sidebar(self) -> None:
-        self.sidebar.setVisible(not self.sidebar.isVisible())
-        self.prefs.show_sidebar = self.sidebar.isVisible()
-        self.prefs.save()
+    def _remove_favorite(self, word: str) -> None:
+        self.history.remove_favorite(word)
+        self._refresh_favorites_pane()
+        self._update_favorite_button(self.tabs.current_word())
+
+    def _export_favorites(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Favorileri dışa aktar", "dictz-favoriler.txt",
+                                              "Metin (*.txt);;CSV (*.csv)")
+        if path:
+            words = self.history.favorites(1_000_000)
+            Path(path).write_text("\n".join(words) + "\n", encoding="utf-8")
+            self.statusBar().showMessage(f"{len(words)} favori kaydedildi: {path}", 4000)
 
     def _clear_history(self) -> None:
-        reply = QMessageBox.question(self, "Geçmişi temizle",
-            "Tüm arama geçmişini silmek istediğinizden emin misiniz?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, "Geçmişi temizle", "Tüm arama geçmişini silmek istediğinizden emin misiniz?") \
+                == QMessageBox.StandardButton.Yes:
             self.history.clear_history()
             self._refresh_history_pane()
 
+    # ================================================================ dictionaries
+    def _refresh_dictionaries(self) -> None:
+        qm = self.query_manager
+        self.sidebar.set_dictionaries([(n, qm.is_enabled(n), qm.dictionaries[n].metadata.word_count)
+                                       for n in qm.loaded_names()])
+        self._refresh_dictionary_bar()
+        self._refresh_favorites_pane()
+        self._refresh_history_pane()
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        qm = self.query_manager
+        enabled = [n for n in qm.loaded_names() if qm.is_enabled(n)]
+        total = sum(qm.dictionaries[n].metadata.word_count for n in enabled)
+        self.dict_count_label.setText(f"{len(enabled)} sözlük · {total:,} kelime" if enabled else "0 sözlük yüklü")
+
+    def _set_dictionary_enabled(self, name: str, enabled: bool) -> None:
+        if self.query_manager.is_enabled(name) == enabled:
+            return
+        self.query_manager.set_enabled(name, enabled)
+        self._refresh_dictionaries()
+
+    def _enable_all(self, on: bool) -> None:
+        for n in self.query_manager.loaded_names():
+            self.query_manager.set_enabled(n, on)
+        self._refresh_dictionaries()
+
+    def _solo_dictionary(self, name: str) -> None:
+        for n in self.query_manager.loaded_names():
+            self.query_manager.set_enabled(n, n == name)
+        self._refresh_dictionaries()
+        self.statusBar().showMessage(f"Yalnızca “{name}” etkin — Sözlükler → Tümünü etkinleştir ile geri alın", 5000)
+
+    def _fill_dictionary_menu(self) -> None:
+        m = self.dict_menu
+        m.clear()
+        qm = self.query_manager
+        for n in qm.loaded_names():
+            a = QAction(n, m, checkable=True)
+            a.setChecked(qm.is_enabled(n))
+            a.toggled.connect(lambda on, name=n: self._set_dictionary_enabled(name, on))
+            m.addAction(a)
+        if qm.loaded_names():
+            m.addSeparator()
+        m.addAction("Tümünü etkinleştir", lambda: self._enable_all(True))
+        m.addAction("Tümünü devre dışı bırak", lambda: self._enable_all(False))
+        m.addSeparator()
+        m.addAction(icon("dict"), "Sözlük yöneticisi…", self._open_dictionary_manager)
+        m.addAction(icon("open"), "Sözlük ekle…", self._add_dictionary_dialog)
+        m.addAction(icon("folder"), "Klasör ekle…", self._add_folder_dialog)
+
+    def _show_dictionary_info(self, name: str) -> None:
+        if name in self.query_manager.dictionaries:
+            QMessageBox.information(self, name, info_html(self.query_manager, name))
+
+    def add_paths(self, paths: list[Path]) -> None:
+        added = 0
+        for p in paths:
+            try:
+                d = self.query_manager.add_dictionary(Path(p))
+                added += 1
+                self.statusBar().showMessage(f"Yüklendi: {d.metadata.name} ({d.metadata.word_count:,} kelime)", 4000)
+            except Exception as e:  # noqa: BLE001
+                QMessageBox.critical(self, "Yüklenemedi", f"<b>{p}</b><br><br>{type(e).__name__}: {e}")
+        if added > 1:
+            self.statusBar().showMessage(f"{added} sözlük eklendi", 4000)
+        self._refresh_dictionaries()
+
+    def _add_dictionary_dialog(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", FILE_FILTER)
+        if paths:
+            self.add_paths([Path(p) for p in paths])
+
+    def _add_folder_dialog(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "Sözlük klasörü seçin")
+        if not d:
+            return
+        files = scan_folder(d, bool(self.prefs["dictionaries.recursive"]))
+        if not files:
+            QMessageBox.information(self, "Klasör ekle", "Bu klasörde sözlük dosyası bulunamadı.")
+            return
+        known = {str(Path(self.query_manager.dictionaries[n].metadata.file_path).resolve())
+                 for n in self.query_manager.loaded_names()}
+        new = [f for f in files if str(f.resolve()) not in known]
+        if QMessageBox.question(
+                self, "Klasör ekle",
+                f"{len(files)} sözlük bulundu, {len(new)} tanesi yeni.\nYeni olanlar eklensin mi?\n\n"
+                "İpucu: Tercihler → Sözlükler'e klasör ekleyince her açılışta otomatik taranır.") \
+                == QMessageBox.StandardButton.Yes:
+            self.add_paths(new)
+
+    def _open_dictionary_manager(self) -> None:
+        dlg = DictionaryManagerDialog(self.query_manager, self)
+        dlg.dictionaries_changed.connect(self._refresh_dictionaries)
+        dlg.add_paths_requested.connect(lambda paths: (self.add_paths(paths), dlg.refresh()))
+        dlg.exec()
+
+    def dragEnterEvent(self, event):  # noqa: N802
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):  # noqa: N802
+        paths: list[Path] = []
+        for url in event.mimeData().urls():
+            p = Path(url.toLocalFile())
+            paths += scan_folder(p, True) if p.is_dir() else ([p] if is_dictionary_file(p) else [])
+        if paths:
+            self.add_paths(paths)
+
+    # ================================================================ view
+    def _zoom(self, value: float) -> None:
+        self.prefs.set("article.zoom", round(value, 2), save=True)
+        self.tabs.set_zoom(float(self.prefs["article.zoom"]))
+        self._update_zoom_label()
+
+    def _zoom_in(self) -> None:
+        self._zoom(float(self.prefs["article.zoom"]) + 0.1)
+
+    def _zoom_out(self) -> None:
+        self._zoom(float(self.prefs["article.zoom"]) - 0.1)
+
+    def _zoom_reset(self) -> None:
+        self._zoom(1.0)
+
+    def _update_zoom_label(self) -> None:
+        self.zoom_label.setText(f"{round(float(self.prefs['article.zoom']) * 100)}%")
+
+    def _set_theme(self, theme: str) -> None:
+        self.prefs.set("appearance.theme", theme, save=True)
+        self.apply_prefs()
+        label = {"auto": "Otomatik", "light": "Açık", "dark": "Koyu"}[theme]
+        self.statusBar().showMessage(f"Tema: {label}", 2500)
+
+    def _cycle_theme(self) -> None:
+        order = ["auto", "light", "dark"]
+        cur = self.prefs["appearance.theme"]
+        self._set_theme(order[(order.index(cur) + 1) % 3 if cur in order else 0])
+
+    def _toggle_fullscreen(self, on: bool) -> None:
+        self.showFullScreen() if on else self.showNormal()
+
+    def _all_open(self, opened: bool) -> None:
+        v = self.tabs.current_view()
+        if v:
+            v.set_all_open(opened)
+
+    def _focus_search(self) -> None:
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
+    def _open_find(self) -> None:
+        self.find_bar.show()
+        self.find_box.setFocus()
+        self.find_box.selectAll()
+
+    def _close_find(self) -> None:
+        self.find_box.clear()
+        v = self.tabs.current_view()
+        if v:
+            v.find("")
+        self.find_bar.hide()
+
+    def _find(self, backward: bool) -> None:
+        if not self.find_bar.isVisible():
+            self._open_find()
+        v = self.tabs.current_view()
+        if v:
+            v.find(self.find_box.text(), backward, self.find_case.isChecked())
+
+    def _on_find_result(self, active: int, total: int) -> None:
+        if not self.find_box.text():
+            self.find_count.setText("")
+        else:
+            self.find_count.setText(f"{active}/{total}" if total else "bulunamadı")
+
+    # ================================================================ article actions
     def _copy_current_word(self) -> None:
         word = self.tabs.current_word()
-        if word and word != "Yeni sekme":
+        if word:
             QApplication.clipboard().setText(word)
             self.statusBar().showMessage(f"Kopyalandı: {word}", 2000)
+
+    def _copy_article(self, group: int | None = None) -> None:
+        v = self.tabs.current_view()
+        if v and v.entries:
+            QApplication.clipboard().setText(v.article_text(group if isinstance(group, int) else None))
+            self.statusBar().showMessage("Makale kopyalandı", 2000)
+
+    def _save_article(self) -> None:
+        v = self.tabs.current_view()
+        if not v or not v.entries:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Makaleyi kaydet", f"{v.word}.html",
+                                              "HTML (*.html);;Metin (*.txt)")
+        if not path:
+            return
+        text = v.article_text() if path.lower().endswith(".txt") else v.article_html()
+        Path(path).write_text(text, encoding="utf-8")
+        self.statusBar().showMessage(f"Kaydedildi: {path}", 4000)
 
     def _on_definition_link(self, url: str) -> None:
         from urllib.parse import unquote
 
         if url.startswith(("dict:", "bword:")):
-            word = unquote(url.split(":", 1)[1].lstrip("/"))
-            self._open_word(word)
+            self._open_word(unquote(url.split(":", 1)[1].lstrip("/")))
+            return
+        if url.startswith("dictz-action:"):
+            _, action, idx = url.split(":", 2)
+            v = self.tabs.current_view()
+            if v is None:
+                return
+            groups = group_by_dictionary(v.entries)
+            i = int(idx)
+            if action == "copy":
+                self._copy_article(i)
+            elif action == "only" and i < len(groups):
+                self._open_word(v.word, [groups[i][0]], new_tab=True)
             return
         audio = parse_audio_url(url)
         if audio is not None:
             self._play_audio(*audio)
             return
         if url.startswith(("http://", "https://", "mailto:")):
-            from PySide6.QtCore import QUrl
-            from PySide6.QtGui import QDesktopServices
-
             QDesktopServices.openUrl(QUrl(url))
             return
         if url.startswith("sound://") or media_kind(url) == "audio":
-            word = self.tabs.current_word()
-            entries = self.query_manager.search(word, exact=True) if word else []
-            if entries:
-                self._play_audio(entries[0].dictionary_id, url.removeprefix("sound://"))
+            v = self.tabs.current_view()
+            if v and v.entries:
+                self._play_audio(v.entries[0].dictionary_id, url.removeprefix("sound://"))
 
     def _play_audio(self, dictionary: str, name: str) -> None:
-        """Play a dictionary sound: in-app with QtMultimedia when available,
-        otherwise with the system's default player."""
         import hashlib
 
         resolver = self.query_manager.media(dictionary)
@@ -519,8 +1060,9 @@ class MainWindow(QMainWindow):
         if not target.exists():
             target.write_bytes(data)
         self.statusBar().showMessage(f"Çalınıyor: {name}", 3000)
-        from PySide6.QtCore import QUrl
-
+        if self.prefs["audio.system_player"]:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+            return
         try:
             from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 
@@ -528,41 +1070,89 @@ class MainWindow(QMainWindow):
                 self._audio_out = QAudioOutput(self)
                 self._player = QMediaPlayer(self)
                 self._player.setAudioOutput(self._audio_out)
+            self._audio_out.setVolume(int(self.prefs["audio.volume"]) / 100.0)
             self._player.stop()
             self._player.setSource(QUrl.fromLocalFile(str(target)))
             self._player.play()
         except Exception:  # noqa: BLE001 — no multimedia backend: hand it to the OS
-            from PySide6.QtGui import QDesktopServices
-
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
-    def _open_preferences(self) -> None:
-        dlg = PreferencesDialog(self.prefs, self)
-        dlg.preferences_changed.connect(self._on_prefs_changed)
-        dlg.exec()
+    # ================================================================ help
+    def _show_shortcuts(self) -> None:
+        from ..core.shortcuts import SHORTCUTS
 
-    def _on_prefs_changed(self, prefs: Preferences) -> None:
-        self.prefs = prefs
-        self._apply_prefs_to_ui()
+        rows = "".join(f"<tr><td><b>{k}</b></td><td>{v}</td></tr>" for k, v in SHORTCUTS)
+        QMessageBox.information(self, "Kısayollar", f"<table cellpadding=3>{rows}</table>")
+
+    def _show_cli_help(self) -> None:
+        from ..cli import COMMANDS
+
+        rows = "".join(f"<tr><td><code>dictz {c}</code></td><td>{d}</td></tr>" for c, d in COMMANDS)
+        QMessageBox.information(
+            self, "Komut satırı",
+            "<p>dictz komut satırından da tam olarak kullanılabilir (Rust sürümünde aynı komutlar):</p>"
+            f"<table cellpadding=2>{rows}</table>"
+            "<p>Ayrıntı: <code>dictz help</code>, <code>dictz &lt;komut&gt; --help</code></p>")
+
+    def _open_data_dir(self) -> None:
+        from ..app import user_data_dir
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(user_data_dir())))
+
+    def _check_updates(self, silent: bool) -> None:
+        if self._update_checker is not None and self._update_checker.isRunning():
+            return
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.result.connect(lambda latest, err: self._on_update_result(latest, err, silent))
+        self._update_checker.start()
+        if not silent:
+            self.statusBar().showMessage("Güncellemeler denetleniyor…", 3000)
+
+    def _on_update_result(self, latest: str, error: str, silent: bool) -> None:
+        from ..core.updater import detect_install, parse_version
+
+        if error:
+            if not silent:
+                QMessageBox.warning(self, "Güncelleme", f"Denetlenemedi:\n{error}")
+            return
+        if parse_version(latest) <= parse_version(__version__):
+            if not silent:
+                QMessageBox.information(self, "Güncelleme", f"dictz {__version__} güncel.")
+            return
+        inst = detect_install()
+        cmd = "dictz update"
+        msg = (f"Yeni sürüm var: <b>{latest}</b> (kurulu: {__version__}).<br><br>"
+               f"Kurulum: {inst.detail}<br>Güncellemek için terminalde:<br><code>{cmd}</code>")
+        if silent:
+            self.statusBar().showMessage(f"Yeni sürüm: dictz {latest} — terminalde `dictz update`", 15000)
+        else:
+            QMessageBox.information(self, "Güncelleme", msg)
 
     def _about(self) -> None:
-        from .. import __version__
+        QMessageBox.about(
+            self, "dictz hakkında",
+            f"<h3>dictz {__version__}</h3><p>Çok formatlı çevrimdışı sözlük — Python sürümü.</p>"
+            "<p>Rust sürümü aynı özelliklere sahiptir: <code>cargo install dictz</code></p>"
+            "<p>© 2026 Bayram Kotan · GPL-3.0+</p>"
+            '<p><a href="https://github.com/bayramkotan/dictz">github.com/bayramkotan/dictz</a></p>')
 
-        QMessageBox.about(self, "dictz hakkında",
-            f"""
-            <h3>dictz {__version__}</h3>
-            <p>Çok formatlı çevrimdışı sözlük uygulaması.</p>
-            <p>© 2026 Bayram Kotan · GPL-3.0+</p>
-            <p><a href="https://github.com/bayramkotan/dictz">github.com/bayramkotan/dictz</a></p>
-            """)
-
+    # ================================================================ close
     def closeEvent(self, event):  # noqa: N802
-        self.prefs.window_geometry = self.saveGeometry()
-        self.prefs.window_state = self.saveState()
-        self.prefs.last_search = self.search_box.text()
-        self.prefs.save()
-        self.query_manager.close_all()
-        if self.query_manager.index_store:
-            self.query_manager.index_store.close()
-        self.history.close()
+        if self.prefs["general.confirm_quit"] and QMessageBox.question(
+                self, "Çıkış", "dictz kapatılsın mı?") != QMessageBox.StandardButton.Yes:
+            event.ignore()
+            return
+        if self._loader is not None and self._loader.isRunning():
+            self._loader.requestInterruption()
+            self._loader.wait(3000)
+        qs = QSettings()
+        qs.setValue("window/geometry", self.saveGeometry())
+        qs.setValue("window/state", self.saveState())
+        self.prefs.set("state.last_search", self.search_box.text())
+        self.prefs.set("state.open_tabs", self.tabs.open_words())
+        self.prefs.set("state.current_tab", max(0, self.tabs.currentIndex()))
+        if self.prefs["history.clear_on_exit"]:
+            self.history.clear_history()
+        with contextlib.suppress(OSError):
+            self.prefs.save()
         super().closeEvent(event)

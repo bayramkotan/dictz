@@ -9,6 +9,14 @@ from typing import Iterator
 from ..parsers.base import Dictionary
 
 
+def file_mtime(path: Path | str) -> float:
+    """Modification time of a dictionary file (0 when missing)."""
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 class IndexStore:
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS dictionaries (
@@ -44,6 +52,8 @@ class IndexStore:
         self._conn.executescript(self.SCHEMA)
         with suppress(sqlite3.OperationalError):
             self._conn.execute("ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0")
+        with suppress(sqlite3.OperationalError):
+            self._conn.execute("ALTER TABLE dictionaries ADD COLUMN mtime REAL DEFAULT 0")
         self._conn.commit()
 
     def close(self) -> None:
@@ -67,18 +77,56 @@ class IndexStore:
             cur.close()
 
     def register_dictionary(self, dictionary: Dictionary) -> int:
+        """Insert or update the row of ``dictionary``.
+
+        An existing row keeps its ``enabled`` flag and ``sort_order``.
+        """
         meta = dictionary.metadata
         with self._cursor() as cur:
             cur.execute(
                 """
-                INSERT OR REPLACE INTO dictionaries
-                    (name, path, format, word_count, source_lang, target_lang, description, enabled)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO dictionaries
+                    (name, path, format, word_count, source_lang, target_lang, description,
+                     enabled, mtime)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    path = excluded.path, format = excluded.format,
+                    word_count = excluded.word_count, source_lang = excluded.source_lang,
+                    target_lang = excluded.target_lang, description = excluded.description,
+                    mtime = excluded.mtime
                 """,
                 (meta.name, str(meta.file_path), meta.format, meta.word_count,
-                 meta.source_language, meta.target_language, meta.description),
+                 meta.source_language, meta.target_language, meta.description,
+                 file_mtime(meta.file_path)),
             )
             return cur.lastrowid or 0
+
+    def get_dictionary(self, name: str) -> sqlite3.Row | None:
+        with self._cursor() as cur:
+            cur.execute("SELECT * FROM dictionaries WHERE name = ?", (name,))
+            return cur.fetchone()
+
+    def headwords(self, dictionaries: list[str]) -> list[str]:
+        """Headwords of ``dictionaries`` in that order (each in index order =
+        case-insensitive sorted), duplicates removed."""
+        seen: set[str] = set()
+        out: list[str] = []
+        with self._cursor() as cur:
+            for name in dictionaries:
+                cur.execute("SELECT headword FROM entries WHERE dictionary = ? ORDER BY rowid", (name,))
+                for (w,) in cur.fetchall():
+                    if w not in seen:
+                        seen.add(w)
+                        out.append(w)
+        return out
+
+    def stats(self) -> dict[str, int]:
+        with self._cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM dictionaries")
+            d = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM entries")
+            e = cur.fetchone()[0]
+        return {"dictionaries": d, "entries": e}
 
     def list_dictionaries(self, enabled_only: bool = True) -> list[sqlite3.Row]:
         with self._cursor() as cur:

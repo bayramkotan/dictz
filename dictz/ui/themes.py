@@ -1,127 +1,147 @@
-"""Light and dark Qt style sheets."""
+"""Light and dark Qt style sheets, built from the user's preferences."""
 from __future__ import annotations
 
-LIGHT_QSS = """
-* { font-family: "Segoe UI", "Inter", "Cantarell", "Helvetica Neue", sans-serif; }
-QMainWindow, QDialog, QWidget { background: #fafbfc; color: #1a1d23; }
-QToolBar { background: #ffffff; border: none; border-bottom: 1px solid #e3e6eb; padding: 4px 6px; spacing: 4px; }
-QToolBar QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; color: #2d3139; }
-QToolBar QToolButton:hover { background: #eef2f7; border-color: #dde3ea; }
-QToolBar QToolButton:pressed { background: #dfe6ef; }
-QToolBar QToolButton:checked { background: #dbeafe; border-color: #93c5fd; }
-QMenuBar { background: #ffffff; border-bottom: 1px solid #e3e6eb; }
-QMenuBar::item { padding: 6px 12px; background: transparent; }
-QMenuBar::item:selected { background: #eef2f7; }
-QMenu { background: #ffffff; border: 1px solid #d9dee5; padding: 4px; }
-QMenu::item { padding: 6px 24px; border-radius: 4px; }
-QMenu::item:selected { background: #dbeafe; color: #1e3a8a; }
-QLineEdit { background: #ffffff; border: 1px solid #d9dee5; border-radius: 8px; padding: 8px 12px; selection-background-color: #bfdbfe; font-size: 14px; }
-QLineEdit:focus { border-color: #60a5fa; }
-QListWidget, QTreeWidget, QTableWidget { background: #ffffff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 4px; outline: 0; }
-QListWidget::item, QTreeWidget::item { padding: 6px 8px; border-radius: 4px; }
-QListWidget::item:hover, QTreeWidget::item:hover { background: #f1f5f9; }
-QListWidget::item:selected, QTreeWidget::item:selected { background: #dbeafe; color: #1e3a8a; }
-QTabWidget::pane { border: 1px solid #e3e6eb; border-radius: 8px; background: #ffffff; top: -1px; }
-QTabBar::tab { background: #f1f5f9; color: #4b5563; border: 1px solid #e3e6eb; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 6px 14px; margin-right: 2px; min-width: 90px; }
-QTabBar::tab:selected { background: #ffffff; color: #1e3a8a; border-color: #60a5fa; }
-QTabBar::tab:hover:!selected { background: #e6ebf2; }
-QStatusBar { background: #ffffff; border-top: 1px solid #e3e6eb; color: #4b5563; }
-QDockWidget::title { background: #f1f5f9; padding: 6px 10px; border-bottom: 1px solid #e3e6eb; text-align: left; font-weight: 600; }
-QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #cbd5e1; border-radius: 5px; min-height: 20px; }
-QScrollBar::handle:vertical:hover { background: #94a3b8; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar:horizontal { background: transparent; height: 10px; }
-QScrollBar::handle:horizontal { background: #cbd5e1; border-radius: 5px; min-width: 20px; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
-QPushButton { background: #ffffff; border: 1px solid #d9dee5; border-radius: 6px; padding: 6px 14px; color: #1a1d23; }
-QPushButton:hover { background: #f1f5f9; border-color: #94a3b8; }
-QPushButton:default { background: #2563eb; color: white; border-color: #1d4ed8; }
-"""
-
-DARK_QSS = """
-* { font-family: "Segoe UI", "Inter", "Cantarell", "Helvetica Neue", sans-serif; }
-QMainWindow, QDialog, QWidget { background: #15181d; color: #e5e7eb; }
-QToolBar { background: #1b1f26; border: none; border-bottom: 1px solid #2a2f38; padding: 4px 6px; spacing: 4px; }
-QToolBar QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; color: #d1d5db; }
-QToolBar QToolButton:hover { background: #262b34; border-color: #343a45; }
-QToolBar QToolButton:checked { background: #1e3a5f; border-color: #3b82f6; }
-QMenuBar { background: #1b1f26; border-bottom: 1px solid #2a2f38; }
-QMenuBar::item { padding: 6px 12px; background: transparent; }
-QMenuBar::item:selected { background: #262b34; }
-QMenu { background: #1b1f26; border: 1px solid #2a2f38; padding: 4px; }
-QMenu::item { padding: 6px 24px; border-radius: 4px; color: #d1d5db; }
-QMenu::item:selected { background: #1e3a5f; color: #dbeafe; }
-QLineEdit { background: #1b1f26; border: 1px solid #343a45; border-radius: 8px; padding: 8px 12px; selection-background-color: #1e3a5f; color: #e5e7eb; font-size: 14px; }
-QLineEdit:focus { border-color: #3b82f6; }
-QListWidget, QTreeWidget, QTableWidget { background: #1b1f26; border: 1px solid #2a2f38; border-radius: 8px; padding: 4px; color: #d1d5db; outline: 0; }
-QListWidget::item, QTreeWidget::item { padding: 6px 8px; border-radius: 4px; }
-QListWidget::item:hover, QTreeWidget::item:hover { background: #262b34; }
-QListWidget::item:selected, QTreeWidget::item:selected { background: #1e3a5f; color: #dbeafe; }
-QTabWidget::pane { border: 1px solid #2a2f38; border-radius: 8px; background: #1b1f26; top: -1px; }
-QTabBar::tab { background: #15181d; color: #9ca3af; border: 1px solid #2a2f38; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 6px 14px; margin-right: 2px; min-width: 90px; }
-QTabBar::tab:selected { background: #1b1f26; color: #dbeafe; border-color: #3b82f6; }
-QTabBar::tab:hover:!selected { background: #262b34; }
-QStatusBar { background: #1b1f26; border-top: 1px solid #2a2f38; color: #9ca3af; }
-QDockWidget::title { background: #1b1f26; padding: 6px 10px; border-bottom: 1px solid #2a2f38; text-align: left; font-weight: 600; color: #d1d5db; }
-QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #3f4651; border-radius: 5px; min-height: 20px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar:horizontal { background: transparent; height: 10px; }
-QScrollBar::handle:horizontal { background: #3f4651; border-radius: 5px; min-width: 20px; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
-QPushButton { background: #1b1f26; border: 1px solid #343a45; border-radius: 6px; padding: 6px 14px; color: #e5e7eb; }
-QPushButton:hover { background: #262b34; border-color: #4b5563; }
-QPushButton:default { background: #2563eb; color: white; border-color: #1d4ed8; }
-QLabel { color: #d1d5db; }
-"""
+from ..storage.settings import Preferences
 
 
-def resolve(theme: str) -> str:
+def _mix(hex_color: str, other: str, t: float) -> str:
+    a = [int(hex_color[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(other[i:i + 2], 16) for i in (1, 3, 5)]
+    c = [round(x + (y - x) * t) for x, y in zip(a, b, strict=True)]
+    return "#" + "".join(f"{v:02x}" for v in c)
+
+
+def is_dark(theme: str) -> bool:
     if theme == "dark":
-        return DARK_QSS
+        return True
     if theme == "light":
-        return LIGHT_QSS
+        return False
     try:
+        from PySide6.QtCore import Qt
         from PySide6.QtGui import QGuiApplication
+
         app = QGuiApplication.instance()
         if app is not None:
-            palette = app.palette()
-            bg = palette.window().color()
-            if (bg.red() + bg.green() + bg.blue()) / 3 < 128:
-                return DARK_QSS
-    except Exception:
+            hints = app.styleHints()
+            if hasattr(hints, "colorScheme"):
+                scheme = hints.colorScheme()
+                if scheme == Qt.ColorScheme.Dark:
+                    return True
+                if scheme == Qt.ColorScheme.Light:
+                    return False
+            bg = app.palette().window().color()
+            return (bg.red() + bg.green() + bg.blue()) / 3 < 128
+    except Exception:  # noqa: BLE001
         pass
-    return LIGHT_QSS
+    return False
 
 
-def definition_css(dark: bool) -> str:
+def qss(prefs: Preferences) -> str:
+    dark = is_dark(prefs["appearance.theme"])
+    accent = prefs["appearance.accent_color"]
+    family = prefs["appearance.ui_font_family"]
+    size = int(prefs["appearance.ui_font_size"])
+    fam = f'"{family}", ' if family else ""
     if dark:
-        return """
-        body { background: #1b1f26; color: #e5e7eb; font-family: "Segoe UI", "Inter", sans-serif; line-height: 1.65; padding: 24px 32px; margin: 0; }
-        h1, h2, h3 { color: #93c5fd; font-weight: 600; }
-        a { color: #60a5fa; text-decoration: none; }
-        .dict-header { background: #262b34; border-left: 3px solid #3b82f6; padding: 8px 14px; margin: 24px 0 12px 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #93c5fd; border-radius: 4px; }
-        .headword { font-size: 22px; font-weight: 600; color: #dbeafe; margin: 4px 0 8px 0; }
-        .definition { padding: 4px 0 8px 12px; border-left: 2px solid #343a45; margin-left: 4px; }
-        .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
-        .definition img { max-width: 100%; max-height: 14em; vertical-align: middle; }
-        a.dz-audio { display: inline-block; padding: 1px 8px; margin: 0 2px; border-radius: 10px; background: #262b34; border: 1px solid #3b4250; font-size: 0.85em; }
-        ul.did-you-mean { list-style: none; padding-left: 0; }
-        ul.did-you-mean li { margin: 4px 0; font-size: 1.1em; }
-        .score { opacity: 0.55; font-size: 0.8em; margin-left: 6px; }
-        """
-    return """
-    body { background: #ffffff; color: #1a1d23; font-family: "Segoe UI", "Inter", sans-serif; line-height: 1.65; padding: 24px 32px; margin: 0; }
-    h1, h2, h3 { color: #1e3a8a; font-weight: 600; }
-    a { color: #2563eb; text-decoration: none; }
-    .dict-header { background: #eef2f7; border-left: 3px solid #2563eb; padding: 8px 14px; margin: 24px 0 12px 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #1e3a8a; border-radius: 4px; }
-    .headword { font-size: 22px; font-weight: 600; color: #1e3a8a; margin: 4px 0 8px 0; }
-    .definition { padding: 4px 0 8px 12px; border-left: 2px solid #e3e6eb; margin-left: 4px; }
-    .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
-    .definition img { max-width: 100%; max-height: 14em; vertical-align: middle; }
-    a.dz-audio { display: inline-block; padding: 1px 8px; margin: 0 2px; border-radius: 10px; background: #eef2f7; border: 1px solid #d5dbe5; font-size: 0.85em; }
-    ul.did-you-mean { list-style: none; padding-left: 0; }
-    ul.did-you-mean li { margin: 4px 0; font-size: 1.1em; }
-    .score { opacity: 0.55; font-size: 0.8em; margin-left: 6px; }
-    """
+        bg, panel, border, text, muted, hover = "#15181d", "#1b1f26", "#2a2f38", "#e5e7eb", "#9ca3af", "#262b34"
+        sel_bg, sel_fg = _mix(accent, "#000000", 0.55), "#ffffff"
+    else:
+        bg, panel, border, text, muted, hover = "#fafbfc", "#ffffff", "#e3e6eb", "#1a1d23", "#4b5563", "#eef2f7"
+        sel_bg, sel_fg = _mix(accent, "#ffffff", 0.8), _mix(accent, "#000000", 0.45)
+    return f"""
+* {{ font-family: {fam}"Segoe UI", "Inter", "Cantarell", "Noto Sans", "Helvetica Neue", sans-serif; font-size: {size}px; }}
+QMainWindow, QDialog, QWidget {{ background: {bg}; color: {text}; }}
+QToolBar {{ background: {panel}; border: none; border-bottom: 1px solid {border}; padding: 3px 6px; spacing: 3px; }}
+QToolBar QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px 9px; color: {text}; }}
+QToolBar QToolButton:hover {{ background: {hover}; border-color: {border}; }}
+QToolBar QToolButton:checked {{ background: {sel_bg}; border-color: {accent}; color: {sel_fg}; }}
+QToolBar#dictionary_bar QToolButton {{ border-radius: 11px; padding: 2px 10px; }}
+QToolBar#dictionary_bar QToolButton:!checked {{ color: {muted}; border: 1px dashed {border}; }}
+QMenuBar {{ background: {panel}; border-bottom: 1px solid {border}; }}
+QMenuBar::item {{ padding: 5px 11px; background: transparent; }}
+QMenuBar::item:selected {{ background: {hover}; }}
+QMenu {{ background: {panel}; border: 1px solid {border}; padding: 4px; }}
+QMenu::item {{ padding: 6px 26px 6px 22px; border-radius: 4px; }}
+QMenu::item:selected {{ background: {sel_bg}; color: {sel_fg}; }}
+QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QFontComboBox {{ background: {panel}; border: 1px solid {border}; border-radius: 7px; padding: 5px 9px; selection-background-color: {sel_bg}; selection-color: {sel_fg}; color: {text}; }}
+QLineEdit#search_box {{ padding: 7px 12px; font-size: {size + 1}px; }}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {accent}; }}
+QListWidget, QTreeWidget, QTableWidget {{ background: {panel}; border: 1px solid {border}; border-radius: 8px; padding: 3px; color: {text}; outline: 0; }}
+QListWidget::item, QTreeWidget::item {{ padding: 5px 8px; border-radius: 4px; }}
+QListWidget::item:hover, QTreeWidget::item:hover, QTableWidget::item:hover {{ background: {hover}; }}
+QListWidget::item:selected, QTreeWidget::item:selected, QTableWidget::item:selected {{ background: {sel_bg}; color: {sel_fg}; }}
+QHeaderView::section {{ background: {panel}; color: {muted}; border: none; border-bottom: 1px solid {border}; padding: 5px; }}
+QTabWidget::pane {{ border: 1px solid {border}; border-radius: 8px; background: {panel}; top: -1px; }}
+QTabBar::tab {{ background: {bg}; color: {muted}; border: 1px solid {border}; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 5px 12px; margin-right: 2px; min-width: 70px; }}
+QTabBar::tab:selected {{ background: {panel}; color: {text}; border-color: {accent}; }}
+QTabBar::tab:hover:!selected {{ background: {hover}; }}
+QStatusBar {{ background: {panel}; border-top: 1px solid {border}; color: {muted}; }}
+QDockWidget::title {{ background: {panel}; padding: 6px 10px; border-bottom: 1px solid {border}; text-align: left; font-weight: 600; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
+QScrollBar::handle:vertical {{ background: {_mix(border, text, 0.25)}; border-radius: 5px; min-height: 20px; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar:horizontal {{ background: transparent; height: 10px; }}
+QScrollBar::handle:horizontal {{ background: {_mix(border, text, 0.25)}; border-radius: 5px; min-width: 20px; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+QPushButton {{ background: {panel}; border: 1px solid {border}; border-radius: 6px; padding: 5px 13px; color: {text}; }}
+QPushButton:hover {{ background: {hover}; border-color: {muted}; }}
+QPushButton:default {{ background: {accent}; color: white; border-color: {accent}; }}
+QPushButton:checked {{ background: {sel_bg}; color: {sel_fg}; border-color: {accent}; }}
+QCheckBox {{ spacing: 7px; }}
+QLabel#section_title {{ font-size: {size + 5}px; font-weight: 600; color: {text}; }}
+QLabel#hint {{ color: {muted}; font-size: {max(9, size - 2)}px; }}
+QWidget#find_bar {{ background: {panel}; border-top: 1px solid {border}; }}
+QProgressBar {{ border: 1px solid {border}; border-radius: 4px; background: {bg}; height: 10px; text-align: center; }}
+QProgressBar::chunk {{ background: {accent}; border-radius: 3px; }}
+"""
+
+
+def definition_css(prefs: Preferences) -> str:
+    dark = is_dark(prefs["appearance.theme"])
+    accent = prefs["appearance.accent_color"]
+    fam = prefs["article.font_family"] or prefs["appearance.ui_font_family"]
+    family = f'"{fam}", ' if fam else ""
+    size = int(prefs["article.font_size"])
+    spacing = float(prefs["article.line_spacing"])
+    head = float(prefs["article.headword_scale"])
+    maxw = int(prefs["article.max_width"])
+    img_h = int(prefs["article.max_image_height"])
+    hl = prefs["article.highlight_color"]
+    if dark:
+        bg, fg, muted, card, border = "#1b1f26", "#e5e7eb", "#9ca3af", "#232832", "#343a45"
+        head_fg, link = _mix(accent, "#ffffff", 0.55), _mix(accent, "#ffffff", 0.35)
+    else:
+        bg, fg, muted, card, border = "#ffffff", "#1a1d23", "#6b7280", "#f3f6fa", "#e3e6eb"
+        head_fg, link = _mix(accent, "#000000", 0.35), accent
+    width = f"max-width: {maxw}px; margin: 0 auto;" if maxw else ""
+    return f"""
+body {{ background: {bg}; color: {fg}; font-family: {family}"Segoe UI", "Inter", "Noto Sans", sans-serif;
+        font-size: {size}px; line-height: {spacing}; padding: 18px 28px; margin: 0; }}
+main {{ {width} }}
+a {{ color: {link}; text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+h1, h2, h3 {{ color: {head_fg}; font-weight: 600; }}
+details.dict {{ margin: 0 0 14px 0; }}
+details.dict > summary {{ list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+        background: {card}; border-left: 3px solid {accent}; padding: 7px 12px; border-radius: 5px;
+        font-size: 0.78em; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: {head_fg}; }}
+details.dict > summary::-webkit-details-marker {{ display: none; }}
+details.dict > summary .chev {{ transition: transform .15s; display: inline-block; }}
+details.dict[open] > summary .chev {{ transform: rotate(90deg); }}
+details.dict > summary .count {{ color: {muted}; font-weight: 400; text-transform: none; letter-spacing: 0; }}
+details.dict > summary .actions {{ margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; white-space: nowrap; font-size: .95em; }}
+details.dict > summary .actions a {{ margin-left: 10px; }}
+.nohead > summary {{ display: none !important; }}
+.article {{ padding: 6px 0 10px 14px; border-left: 2px solid {border}; margin: 8px 0 12px 4px; }}
+.headword {{ font-size: {head:.2f}em; font-weight: 600; color: {head_fg}; margin: 2px 0 4px 0; }}
+.definition pre {{ white-space: pre-wrap; font-family: inherit; margin: 0; }}
+.definition img {{ max-width: 100%; max-height: {img_h}px; vertical-align: middle; }}
+a.dz-audio {{ display: inline-block; padding: 0 9px; margin: 0 2px; border-radius: 10px; background: {card};
+        border: 1px solid {border}; font-size: 0.85em; }}
+ul.did-you-mean {{ list-style: none; padding-left: 0; }}
+ul.did-you-mean li {{ margin: 5px 0; font-size: 1.1em; }}
+.score {{ color: {muted}; font-size: 0.8em; margin-left: 6px; }}
+.muted {{ color: {muted}; }}
+::selection {{ background: {hl}; color: #000; }}
+"""

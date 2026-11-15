@@ -77,6 +77,34 @@ impl HistoryStore {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// Delete one word from the history.
+    pub fn remove_history(&self, word: &str) -> Result<(), DictzError> {
+        self.conn
+            .execute("DELETE FROM history WHERE word = ?1", params![word])?;
+        Ok(())
+    }
+
+    /// Number of recorded lookups.
+    pub fn count(&self) -> Result<i64, DictzError> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0))?)
+    }
+
+    /// Keep only the newest `max_entries` lookups. Returns rows deleted.
+    pub fn purge(&self, max_entries: i64) -> Result<usize, DictzError> {
+        Ok(self.conn.execute(
+            "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY looked_up DESC, id DESC LIMIT ?1)",
+            params![max_entries],
+        )?)
+    }
+
+    /// Delete all favorites.
+    pub fn clear_favorites(&self) -> Result<(), DictzError> {
+        self.conn.execute("DELETE FROM favorites", [])?;
+        Ok(())
+    }
+
     /// Delete all history.
     pub fn clear_history(&self) -> Result<(), DictzError> {
         self.conn.execute("DELETE FROM history", [])?;

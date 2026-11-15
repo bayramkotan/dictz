@@ -13,12 +13,12 @@ This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The P
 ```bash
 cargo install dictz
 dictz                 # open the window
-dictz --selftest      # headless check, exit code 0 = OK
-dictz --version
 dictz En-Tr.dsl       # add a dictionary and open the window
+dictz lookup apple    # command line (see below)
+dictz update          # update this copy
 ```
 
-On Linux, building needs the ALSA headers for in-app sound: `sudo apt install libasound2-dev pkg-config` on Debian/Ubuntu (Arch/CachyOS: `alsa-lib`, usually already installed). To build without sound, run `cargo install dictz --no-default-features --features gui`; sounds then open in the system player.
+On Linux, building needs the ALSA headers for in-app sound: `sudo apt install libasound2-dev pkg-config` on Debian/Ubuntu (Arch/CachyOS: `alsa-lib`, usually already installed). To build without sound, run `cargo install dictz --no-default-features --features cli,gui,update`; sounds then open in the system player.
 
 Each [GitHub Release](https://github.com/bayramkotan/dictz/releases/latest) also has ready-made single-file builds: `dictz-rs-linux-x86_64.tar.gz`, `dictz-rs-windows-x86_64.zip` and `dictz-rs-macos-arm64.tar.gz`.
 
@@ -30,16 +30,55 @@ Each [GitHub Release](https://github.com/bayramkotan/dictz/releases/latest) also
 - **DSL pictures and sounds** are read from `X.dsl.files/` or `X.dsl.files.zip`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
 - **SQLite FTS5 index:** instant, diacritic-insensitive prefix suggestions.
 - **Interface:**
-  - tabs, back/forward, favorites and history
-  - light, dark and auto themes, zoom, and your own font file
+  - tabs, back/forward, random word, favorites and history (with filters)
+  - dictionary bar (one-click on/off, right-click = only this one) and a "found in" panel
+  - collapsible articles per dictionary with copy / "only this dictionary" buttons
+  - find in page with highlighting, save article as HTML / text
+  - background loading with progress; dictionary folders scanned on start
+  - light, dark and auto themes, accent color, fonts by name or file, zoom, full screen, always on top
   - drag and drop dictionary files onto the window
-  - the same shortcuts as the Python edition (Ctrl+F, Ctrl+T, Ctrl+W, Ctrl+D, Ctrl+B, Ctrl+±, Alt+←/→, Ctrl+O, Ctrl+M)
+  - the same shortcuts as the Python edition (F1 lists them)
+
+## Command line
+
+The same commands, options and output as the Python edition. `dictz help` and `dictz <command> --help` list everything.
+
+```bash
+dictz lookup apple            # articles as text (-d DICT, -p prefix, -f fuzzy, --json, --html)
+dictz suggest app             # headwords starting with "app" (+ ≈ fuzzy fill)
+dictz fuzzy aple              # "did you mean" with scores
+dictz random                  # a random article
+dictz shell                   # interactive prompt (:fuzzy, :suggest, :dicts, :random, :q)
+
+dictz add ~/sozlukler -r      # add files or whole folders
+dictz dicts                   # table: position, on/off, name, format, words, path
+dictz disable "Lingvo"        # names can be partial: enable / disable / remove / info
+dictz move "Lingvo" top       # up / down / top / bottom / position
+dictz info En-Tr.dsl          # metadata of a dictionary or a file
+dictz reindex                 # rebuild the search index
+dictz scan ~/Downloads --add  # find dictionary files, add the new ones
+dictz dump En-Tr.dsl -F txt   # export as tsv / json / txt
+
+dictz history  /  dictz favorites add WORD
+dictz config list             # every setting with its value, range and description
+dictz config set article.font_size 18
+dictz config export my.json   # import / reset / path / get
+dictz paths  /  dictz doctor  /  dictz selftest
+dictz update --check          # crates.io or GitHub release, depending on how it was installed
+eval "$(dictz completion bash)"   # also zsh, fish, powershell
+```
+
+Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COLOR`), `-v` / `--version`.
+
+## Settings
+
+54 settings in 7 pages (general, appearance, article, search, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 
 ```toml
 [dependencies]
-dictz = { version = "0.0.6", default-features = false }   # no GUI / audio deps
+dictz = { version = "0.0.7", default-features = false }   # no GUI / audio deps
 ```
 
 ```rust
@@ -61,15 +100,18 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `query` | lookups across dictionaries, suggestions, fuzzy matching, ordering |
 | `index` / `history` | SQLite FTS5 index; history and favorites (same schema as the Python edition) |
 | `media` | finds pictures and sounds of an article |
-| `html` | converts article HTML into styled lines (used by the GUI) |
+| `html` | converts article HTML into styled lines (GUI) or text (CLI) |
+| `settings` | the shared `settings.json` schema and `Preferences` |
 | `fuzzy` | RapidFuzz-compatible `ratio`, `extract` and `rank` |
 
 ## Feature flags
 
 | Flag | Default | Pulls in |
 |---|---|---|
+| `cli` | on | clap (the `dictz` command line; the binary needs it) |
 | `gui` | on | eframe/egui, rfd (file dialogs), image |
 | `audio` | on | rodio (needs ALSA headers on Linux) |
+| `update` | on | ureq, tar (`dictz update`) |
 
 ## License
 

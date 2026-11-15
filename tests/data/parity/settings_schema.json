@@ -1,0 +1,442 @@
+[
+ {
+  "key": "general.restore_tabs",
+  "kind": "bool",
+  "default": true,
+  "label": "Açık sekmeleri geri yükle",
+  "help": "Kapatırken açık olan sekmeler bir sonraki açılışta yeniden açılır."
+ },
+ {
+  "key": "general.restore_last_search",
+  "kind": "bool",
+  "default": true,
+  "label": "Son aramayı geri yükle",
+  "help": "Arama kutusu son yazılan kelimeyle açılır."
+ },
+ {
+  "key": "general.check_updates_on_start",
+  "kind": "bool",
+  "default": false,
+  "label": "Açılışta güncellemeleri denetle",
+  "help": "Yeni sürüm varsa durum çubuğunda haber verir (internet gerekir)."
+ },
+ {
+  "key": "general.confirm_quit",
+  "kind": "bool",
+  "default": false,
+  "label": "Çıkarken onay iste",
+  "help": ""
+ },
+ {
+  "key": "general.remember_window",
+  "kind": "bool",
+  "default": true,
+  "label": "Pencere boyutunu ve konumunu hatırla",
+  "help": ""
+ },
+ {
+  "key": "general.always_on_top",
+  "kind": "bool",
+  "default": false,
+  "label": "Pencere her zaman üstte",
+  "help": ""
+ },
+ {
+  "key": "general.load_in_background",
+  "kind": "bool",
+  "default": true,
+  "label": "Sözlükleri arka planda yükle",
+  "help": "Pencere hemen açılır; sözlükler yüklendikçe kullanılabilir olur."
+ },
+ {
+  "key": "appearance.theme",
+  "kind": "choice",
+  "default": "auto",
+  "label": "Tema",
+  "help": "",
+  "choices": [
+   [
+    "auto",
+    "Otomatik (sistem)"
+   ],
+   [
+    "light",
+    "Açık"
+   ],
+   [
+    "dark",
+    "Koyu"
+   ]
+  ]
+ },
+ {
+  "key": "appearance.accent_color",
+  "kind": "color",
+  "default": "#2563eb",
+  "label": "Vurgu rengi",
+  "help": "Bağlantılar, sözlük başlıkları ve seçimler bu renkle gösterilir."
+ },
+ {
+  "key": "appearance.ui_font_family",
+  "kind": "str",
+  "default": "",
+  "label": "Arayüz yazı tipi",
+  "help": "Boş = sistem yazı tipi. Rust sürümünde yazı tipi adı veya .ttf/.otf dosya yolu."
+ },
+ {
+  "key": "appearance.ui_font_size",
+  "kind": "int",
+  "default": 14,
+  "label": "Arayüz yazı boyutu",
+  "help": "",
+  "min": 8,
+  "max": 32
+ },
+ {
+  "key": "appearance.show_toolbar",
+  "kind": "bool",
+  "default": true,
+  "label": "Araç çubuğunu göster",
+  "help": ""
+ },
+ {
+  "key": "appearance.show_dictionary_bar",
+  "kind": "bool",
+  "default": true,
+  "label": "Sözlük çubuğunu göster",
+  "help": "Her sözlük için tek tıkla aç/kapat düğmesi."
+ },
+ {
+  "key": "appearance.show_found_in",
+  "kind": "bool",
+  "default": true,
+  "label": "“Bulunduğu sözlükler” panelini göster",
+  "help": "Kelimenin geçtiği sözlükler; tıklayınca o makaleye gider."
+ },
+ {
+  "key": "appearance.show_sidebar",
+  "kind": "bool",
+  "default": true,
+  "label": "Yan paneli göster",
+  "help": ""
+ },
+ {
+  "key": "appearance.sidebar_side",
+  "kind": "choice",
+  "default": "left",
+  "label": "Yan panel konumu",
+  "help": "",
+  "choices": [
+   [
+    "left",
+    "Sol"
+   ],
+   [
+    "right",
+    "Sağ"
+   ]
+  ]
+ },
+ {
+  "key": "appearance.show_statusbar",
+  "kind": "bool",
+  "default": true,
+  "label": "Durum çubuğunu göster",
+  "help": ""
+ },
+ {
+  "key": "appearance.tab_title_length",
+  "kind": "int",
+  "default": 28,
+  "label": "Sekme başlığı en fazla",
+  "help": "karakter",
+  "min": 8,
+  "max": 80
+ },
+ {
+  "key": "article.font_family",
+  "kind": "str",
+  "default": "",
+  "label": "Makale yazı tipi",
+  "help": "Boş = arayüz yazı tipi. Rust sürümünde yazı tipi adı veya dosya yolu."
+ },
+ {
+  "key": "article.font_size",
+  "kind": "int",
+  "default": 16,
+  "label": "Makale yazı boyutu",
+  "help": "",
+  "min": 8,
+  "max": 48
+ },
+ {
+  "key": "article.line_spacing",
+  "kind": "float",
+  "default": 1.6,
+  "label": "Satır aralığı",
+  "help": "",
+  "min": 1.0,
+  "max": 3.0
+ },
+ {
+  "key": "article.headword_scale",
+  "kind": "float",
+  "default": 1.4,
+  "label": "Başlık kelime büyüklüğü",
+  "help": "Makale yazı boyutunun katı.",
+  "min": 1.0,
+  "max": 3.0
+ },
+ {
+  "key": "article.zoom",
+  "kind": "float",
+  "default": 1.0,
+  "label": "Yakınlaştırma",
+  "help": "",
+  "min": 0.5,
+  "max": 3.0
+ },
+ {
+  "key": "article.max_width",
+  "kind": "int",
+  "default": 0,
+  "label": "Makale en fazla genişliği",
+  "help": "piksel; 0 = tam genişlik",
+  "min": 0,
+  "max": 4000
+ },
+ {
+  "key": "article.show_dict_headers",
+  "kind": "bool",
+  "default": true,
+  "label": "Sözlük başlıklarını göster",
+  "help": ""
+ },
+ {
+  "key": "article.collapsed",
+  "kind": "bool",
+  "default": false,
+  "label": "Makaleleri kapalı aç",
+  "help": "Her sözlüğün makalesi başlığına tıklanınca açılır."
+ },
+ {
+  "key": "article.show_images",
+  "kind": "bool",
+  "default": true,
+  "label": "Resimleri göster",
+  "help": ""
+ },
+ {
+  "key": "article.max_image_height",
+  "kind": "int",
+  "default": 240,
+  "label": "Resim en fazla yüksekliği",
+  "help": "piksel",
+  "min": 32,
+  "max": 2000
+ },
+ {
+  "key": "article.highlight_color",
+  "kind": "color",
+  "default": "#facc15",
+  "label": "Sayfada bul vurgu rengi",
+  "help": ""
+ },
+ {
+  "key": "search.live",
+  "kind": "bool",
+  "default": true,
+  "label": "Yazarken ara",
+  "help": "Kapalıysa yalnızca Enter ile aranır (öneriler yine gösterilir)."
+ },
+ {
+  "key": "search.debounce_ms",
+  "kind": "int",
+  "default": 150,
+  "label": "Arama gecikmesi",
+  "help": "milisaniye",
+  "min": 0,
+  "max": 2000
+ },
+ {
+  "key": "search.min_chars",
+  "kind": "int",
+  "default": 1,
+  "label": "Öneri için en az harf",
+  "help": "",
+  "min": 1,
+  "max": 10
+ },
+ {
+  "key": "search.suggestion_limit",
+  "kind": "int",
+  "default": 100,
+  "label": "En fazla öneri",
+  "help": "",
+  "min": 5,
+  "max": 1000
+ },
+ {
+  "key": "search.prefix_fallback",
+  "kind": "bool",
+  "default": true,
+  "label": "Tam eşleşme yoksa ile başlayanları göster",
+  "help": ""
+ },
+ {
+  "key": "search.fuzzy",
+  "kind": "bool",
+  "default": true,
+  "label": "Bulanık arama (“Bunu mu demek istediniz?”)",
+  "help": ""
+ },
+ {
+  "key": "search.fuzzy_cutoff",
+  "kind": "float",
+  "default": 60.0,
+  "label": "Bulanık eşleşme eşiği",
+  "help": "% benzerlik",
+  "min": 0,
+  "max": 100
+ },
+ {
+  "key": "search.fuzzy_limit",
+  "kind": "int",
+  "default": 10,
+  "label": "En fazla bulanık öneri",
+  "help": "",
+  "min": 1,
+  "max": 100
+ },
+ {
+  "key": "search.fuzzy_fill_below",
+  "kind": "int",
+  "default": 10,
+  "label": "Öneri sayısı bunun altındaysa bulanık eşleşme ekle",
+  "help": "",
+  "min": 0,
+  "max": 1000
+ },
+ {
+  "key": "search.max_articles",
+  "kind": "int",
+  "default": 100,
+  "label": "Bir aramada en fazla makale",
+  "help": "",
+  "min": 1,
+  "max": 5000
+ },
+ {
+  "key": "search.enter_new_tab",
+  "kind": "bool",
+  "default": false,
+  "label": "Enter sonucu yeni sekmede açsın",
+  "help": ""
+ },
+ {
+  "key": "search.select_all_on_focus",
+  "kind": "bool",
+  "default": true,
+  "label": "Arama kutusuna gelince metni seç",
+  "help": ""
+ },
+ {
+  "key": "search.ignore_case",
+  "kind": "bool",
+  "default": true,
+  "label": "Büyük/küçük harf duyarsız eşleşme",
+  "help": "Tam eşleşme yoksa büyük/küçük harf farkını yok sayarak arar."
+ },
+ {
+  "key": "dictionaries.folders",
+  "kind": "list",
+  "default": [],
+  "label": "Sözlük klasörleri",
+  "help": "Açılışta bu klasörlerdeki .ifo / .dsl / .dsl.dz / .bgl dosyaları otomatik eklenir."
+ },
+ {
+  "key": "dictionaries.recursive",
+  "kind": "bool",
+  "default": true,
+  "label": "Alt klasörleri de tara",
+  "help": ""
+ },
+ {
+  "key": "dictionaries.scan_on_startup",
+  "kind": "bool",
+  "default": true,
+  "label": "Açılışta klasörleri tara",
+  "help": ""
+ },
+ {
+  "key": "dictionaries.reindex_on_change",
+  "kind": "bool",
+  "default": true,
+  "label": "Değişen sözlüğün indeksini yenile",
+  "help": "Dosya değiştiyse açılışta indeksi yeniden oluşturur."
+ },
+ {
+  "key": "audio.auto_play",
+  "kind": "bool",
+  "default": false,
+  "label": "Aramada ilk sesi otomatik çal",
+  "help": ""
+ },
+ {
+  "key": "audio.volume",
+  "kind": "int",
+  "default": 80,
+  "label": "Ses düzeyi",
+  "help": "%",
+  "min": 0,
+  "max": 100
+ },
+ {
+  "key": "audio.system_player",
+  "kind": "bool",
+  "default": false,
+  "label": "Sistem oynatıcısını kullan",
+  "help": "Sesler uygulama içinde değil, işletim sisteminin oynatıcısıyla açılır."
+ },
+ {
+  "key": "history.enabled",
+  "kind": "bool",
+  "default": true,
+  "label": "Arama geçmişini kaydet",
+  "help": ""
+ },
+ {
+  "key": "history.limit",
+  "kind": "int",
+  "default": 200,
+  "label": "Yan panelde gösterilen geçmiş",
+  "help": "",
+  "min": 10,
+  "max": 5000
+ },
+ {
+  "key": "history.max_entries",
+  "kind": "int",
+  "default": 10000,
+  "label": "Veritabanında tutulan en fazla kayıt",
+  "help": "Eskiler silinir.",
+  "min": 100,
+  "max": 1000000
+ },
+ {
+  "key": "history.clear_on_exit",
+  "kind": "bool",
+  "default": false,
+  "label": "Çıkarken geçmişi temizle",
+  "help": ""
+ },
+ {
+  "key": "history.favorites_limit",
+  "kind": "int",
+  "default": 500,
+  "label": "Yan panelde gösterilen favori",
+  "help": "",
+  "min": 10,
+  "max": 10000
+ }
+]

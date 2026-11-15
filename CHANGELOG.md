@@ -5,6 +5,65 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7] — 2026-11-15
+
+Everything below is in **both editions** (Python `pip install dictz`, Rust `cargo install dictz`), with the same commands, settings and output.
+
+### Fixed
+- **Python 3.14: Babylon (`.bgl`) dictionaries could not be opened and start-up hung for 5–10 s.**
+  - Python 3.14 moved the `_compression` module. PyGlossary's Babylon plugin failed with "Module '_compression' not found … skipping plugin 'babylon_bgl'". dictz now registers the new module under the old name before PyGlossary loads.
+  - PyGlossary's log noise is silenced; set `DICTZ_DEBUG=1` to see it again.
+  - Dictionaries are loaded **in the background**: the window opens at once and a progress bar shows the loading.
+- `dictz add` stored relative paths, so a dictionary added from another folder was "missing" later. Paths are now stored as absolute paths.
+- Re-adding dictionaries could switch disabled dictionaries back on.
+
+### Added — command line (`dictz <command>`)
+- A detailed command line, like venvstudio / isnady. Without a command the window opens, as before; `dictz FILE…` still opens the window with those dictionaries.
+- Commands:
+  - looking things up: `lookup` (alias `l`), `suggest` (`s`), `fuzzy` (`f`), `random`, `shell` (interactive prompt)
+  - dictionaries: `dicts` (`ls`), `add`, `remove` (`rm`), `enable`, `disable`, `move`, `info`, `reindex`, `scan`, `dump` (tsv / json / txt)
+  - your data: `history`, `favorites` (`fav`), `config` (`list` / `get` / `set` / `reset` / `path` / `export` / `import`), `paths`
+  - maintenance: `doctor`, `selftest`, **`update`** (`upgrade`), `version`, `completion` (bash / zsh / fish / powershell), `help`
+- **`dictz update`** finds out how this copy was installed and updates it in place:
+  - Python: pip, pipx, venv, `--user`, editable checkout, system install (with `sudo`) or a portable / AppImage build (downloaded from the GitHub release)
+  - Rust: `cargo install` or a portable binary (downloaded and swapped; Windows keeps a `.old` copy until the next start)
+  - `--check` only looks; `--yes` does not ask.
+- Global options: `--data-dir DIR` (also `DICTZ_DATA_DIR`), `--no-color` (also `NO_COLOR`), `-v/--version`. Most commands have `--json`.
+- The Rust Windows build attaches to the calling console, so CLI output shows up in cmd / PowerShell.
+
+### Added — settings (more detailed than GoldenDict)
+- **54 settings in 7 pages** (Genel, Görünüm, Makale, Arama, Sözlükler, Ses, Geçmiş ve Favoriler), stored in one **`settings.json`** that both editions read and write.
+  - general: restore tabs, restore last search, check for updates on start, confirm quit, remember window, always on top, load in background
+  - appearance: theme, accent color, UI font and size, toolbar / dictionary bar / found-in panel / sidebar / status bar on-off, sidebar side, tab title length
+  - article: font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, max picture height, find highlight color
+  - search: live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off, threshold, count and fill, max articles, Enter opens a new tab, select all on focus, ignore case
+  - dictionaries: dictionary folders (scanned on start), recursive, scan on start, reindex changed files
+  - sound: auto-play, volume, system player
+  - history: on/off, sidebar counts, database limit (old rows purged), clear on exit
+- The **Preferences window** is built from the schema:
+  - a search box across all settings
+  - ↺ reset per setting, "reset this page" and "reset all"
+  - a **Shortcuts** page
+  - an **Advanced** page: open data folder, rebuild all indexes, check for updates, clear history / favorites, export / import settings
+  - Uygula / Tamam / İptal
+- Old settings (Python QSettings, Rust `dictz-rs.ini`) are imported once.
+
+### Added — interface
+- **Dictionary bar**: one toggle per dictionary; right-click = only this one; "Tümü" turns all on.
+- **"Bulunduğu sözlükler" panel**: which dictionaries have the word; click to jump to that article.
+- **Collapsible articles** per dictionary, with "kopyala" (copy as text) and "yalnızca bu" (search only this dictionary in a new tab).
+- **Find in page** (Ctrl+Shift+F, F3 / Shift+F3) with highlighting and an n/m counter.
+- Save article as HTML or text (Ctrl+S), copy article (Ctrl+Shift+A), random word (Ctrl+R), full screen (F11), always on top, view toggles, theme menu.
+- Menus: Dosya, Düzen, Görünüm, **Git**, **Sözlükler**, Yardım (shortcuts F1, command-line help, check for updates, data folder, about).
+- Sidebar: filter boxes, counts, right-click remove, favorites export; double-click a dictionary for its details.
+- Dictionary manager: table (on, name, format, words, languages, file), add files / folder, top / up / down / bottom, reindex, info, remove with confirmation.
+- Status bar: loading progress, "n madde · n sözlük · n ms", enabled dictionaries, zoom.
+- Dictionary folders are scanned on start; files changed since indexing are reindexed.
+
+### Changed
+- CI tests Python 3.14 as well; the 3.14 classifier was added.
+- More parity golden files (`tests/data/parity/`): article text, settings schema, CLI command list, shell completion scripts and shortcuts. Both editions are tested against them.
+
 ## [0.0.6] — 2026-11-15
 
 **dictz now ships as two full editions with the same features:** Python (`pip install dictz`, Qt) and Rust (`cargo install dictz`, egui). Both are released from the same tag with the same version.

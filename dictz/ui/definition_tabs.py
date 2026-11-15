@@ -1,58 +1,66 @@
-"""Tabbed definition area."""
+"""Tabbed article area."""
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QTabWidget, QWidget
 
 from ..parsers.base import DictionaryEntry
+from ..storage.settings import Preferences
 from .definition_view import DefinitionView
+
+NEW_TAB = "Yeni sekme"
 
 
 class DefinitionTabs(QTabWidget):
     current_word_changed = Signal(str)
     link_activated = Signal(str)
+    find_result = Signal(int, int)
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, prefs: Preferences, parent: QWidget | None = None):
         super().__init__(parent)
+        self.prefs = prefs
         self.setMovable(True)
         self.setTabsClosable(True)
         self.setDocumentMode(True)
         self.tabCloseRequested.connect(self._on_tab_close_requested)
         self.currentChanged.connect(self._on_current_changed)
-        self._dark = False
-        self._zoom = 1.0
 
-    def set_dark(self, dark: bool) -> None:
-        self._dark = dark
+    def views(self) -> list[DefinitionView]:
+        return [w for i in range(self.count()) if isinstance(w := self.widget(i), DefinitionView)]
+
+    def apply_prefs(self) -> None:
+        for v in self.views():
+            v.set_zoom(float(self.prefs["article.zoom"]))
+            v.refresh_style()
         for i in range(self.count()):
-            view = self.widget(i)
-            if isinstance(view, DefinitionView):
-                view.set_dark(dark)
+            v = self.widget(i)
+            if isinstance(v, DefinitionView):
+                self.setTabText(i, self._title(v.word, bool(v.entries)))
 
     def set_zoom(self, factor: float) -> None:
-        self._zoom = factor
-        for i in range(self.count()):
-            view = self.widget(i)
-            if isinstance(view, DefinitionView):
-                view.set_zoom(factor)
+        for v in self.views():
+            v.set_zoom(factor)
 
     def current_view(self) -> DefinitionView | None:
         w = self.currentWidget()
         return w if isinstance(w, DefinitionView) else None
 
     def current_word(self) -> str:
-        idx = self.currentIndex()
-        if idx < 0:
-            return ""
-        return self.tabText(idx)
+        v = self.current_view()
+        return v.word if v else ""
+
+    def _title(self, word: str, found: bool) -> str:
+        if not word:
+            return NEW_TAB
+        n = int(self.prefs["appearance.tab_title_length"])
+        t = word if len(word) <= n else word[:n] + "…"
+        return t if found else f"{t} ✗"
 
     def new_tab(self, word: str = "") -> DefinitionView:
-        view = DefinitionView(self)
-        view.set_dark(self._dark)
-        view.set_zoom(self._zoom)
+        view = DefinitionView(self.prefs, self)
         view.link_activated.connect(self.link_activated)
-        label = word or "Yeni sekme"
-        self.addTab(view, label)
+        view.find_result.connect(self.find_result)
+        self.addTab(view, self._title(word, True))
         self.setCurrentWidget(view)
         if not word:
             view.show_welcome()
@@ -60,24 +68,26 @@ class DefinitionTabs(QTabWidget):
 
     def show_in_current(self, word: str, entries: list[DictionaryEntry],
                         suggestions: list[tuple[str, float]] | None = None) -> None:
-        view = self.current_view()
-        if view is None:
-            view = self.new_tab(word)
-        if entries:
-            view.show_entries(entries)
-        else:
-            view.show_not_found(word, suggestions)
-        idx = self.currentIndex()
-        if idx >= 0:
-            self.setTabText(idx, word or "Sonuç yok")
+        view = self.current_view() or self.new_tab(word)
+        self._show(view, word, entries, suggestions)
 
     def show_in_new_tab(self, word: str, entries: list[DictionaryEntry],
                         suggestions: list[tuple[str, float]] | None = None) -> None:
-        view = self.new_tab(word)
+        self._show(self.new_tab(word), word, entries, suggestions)
+
+    def _show(self, view: DefinitionView, word: str, entries, suggestions) -> None:
         if entries:
-            view.show_entries(entries)
+            view.show_entries(word, entries)
         else:
             view.show_not_found(word, suggestions)
+        idx = self.indexOf(view)
+        if idx >= 0:
+            self.setTabText(idx, self._title(word, bool(entries)))
+            self.setTabToolTip(idx, word)
+        self.current_word_changed.emit(self.current_word())
+
+    def open_words(self) -> list[str]:
+        return [v.word for v in self.views() if v.word]
 
     def close_current_tab(self) -> None:
         idx = self.currentIndex()
@@ -89,7 +99,7 @@ class DefinitionTabs(QTabWidget):
             view = self.widget(index)
             if isinstance(view, DefinitionView):
                 view.show_welcome()
-            self.setTabText(index, "Yeni sekme")
+            self.setTabText(index, NEW_TAB)
             self.current_word_changed.emit("")
             return
         widget = self.widget(index)
@@ -98,7 +108,4 @@ class DefinitionTabs(QTabWidget):
             widget.deleteLater()
 
     def _on_current_changed(self, index: int) -> None:
-        if index < 0:
-            self.current_word_changed.emit("")
-            return
-        self.current_word_changed.emit(self.tabText(index))
+        self.current_word_changed.emit(self.current_word() if index >= 0 else "")

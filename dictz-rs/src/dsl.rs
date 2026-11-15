@@ -374,12 +374,10 @@ impl Transformer {
         self.attrs.clear();
     }
     fn follows(&self, st: &str) -> bool {
-        let mut p = self.pos;
-        for c in st.chars() {
+        for (p, c) in (self.pos..).zip(st.chars()) {
             if p >= self.input.len() || self.input[p] != c {
                 return false;
             }
-            p += 1;
         }
         true
     }

@@ -93,7 +93,8 @@ pub fn plain_to_lines(text: &str) -> Vec<Line> {
         .collect()
 }
 
-/// Decode `&name;`, `&#NN;`, `&#xHH;`.
+/// Decode `&name;`, `&#NN;`, `&#xHH;`; anything else is kept as it is.
+/// (Same rules as the Python edition's `dictz/core/htmltext.py`.)
 pub fn decode_entities(s: &str) -> String {
     if !s.contains('&') {
         return s.to_string();
@@ -104,7 +105,7 @@ pub fn decode_entities(s: &str) -> String {
         out.push_str(&rest[..i]);
         let tail = &rest[i..];
         let end = tail[1..]
-            .find(|c: char| c == ';' || c == '&' || c.is_whitespace() || c == '<')
+            .find(|c: char| c == ';' || c == '&' || c == '<' || c.is_whitespace())
             .map(|p| p + 1);
         let decoded = end
             .filter(|&e| tail.as_bytes().get(e) == Some(&b';'))
@@ -112,9 +113,13 @@ pub fn decode_entities(s: &str) -> String {
                 let name = &tail[1..e];
                 let cp =
                     if let Some(h) = name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
-                        u32::from_str_radix(h, 16).ok()
+                        (!h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()))
+                            .then(|| u32::from_str_radix(h, 16).ok())
+                            .flatten()
                     } else if let Some(d) = name.strip_prefix('#') {
-                        d.parse().ok()
+                        (!d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()))
+                            .then(|| d.parse::<u32>().ok())
+                            .flatten()
                     } else {
                         entity_codepoint(name).or_else(|| entity_codepoint(&name.to_lowercase()))
                     };
@@ -133,6 +138,39 @@ pub fn decode_entities(s: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// Lines → terminal text: two spaces per em of indent, pictures as
+/// `[file]`, sounds as `[♪ file]`. Identical to the Python edition.
+pub fn lines_to_text(lines: &[Line]) -> String {
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    for line in lines {
+        if line.items.is_empty() {
+            out.push(String::new());
+            continue;
+        }
+        let pad = (line.indent as f64 * 2.0 + 0.5).floor().max(0.0) as usize;
+        let mut s = " ".repeat(pad);
+        for item in &line.items {
+            match item {
+                Inline::Text(t, _) => s.push_str(t),
+                Inline::Image(src) => s.push_str(&format!("[{}]", src)),
+                Inline::Audio(src) => s.push_str(&format!("[♪ {}]", src)),
+            }
+        }
+        out.push(s);
+    }
+    out.join("\n")
+}
+
+/// A definition (HTML or plain text) as terminal text.
+pub fn to_text(definition: &str) -> String {
+    let lines = if looks_like_html(definition) {
+        parse(definition)
+    } else {
+        plain_to_lines(definition)
+    };
+    lines_to_text(&lines)
 }
 
 /// Parse a CSS / HTML color.

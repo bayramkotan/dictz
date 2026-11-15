@@ -179,6 +179,20 @@ def golden_for(path: Path) -> dict:
     }
 
 
+TEXT_SNIPPETS = [
+    "plain text\nsecond line\n\n  indented",
+    "<b>apple</b> <i>n.</i><br/>elma<p style=\"padding-left:2em;margin:0\">meyve</p>",
+    "<ul><li>one</li><li>two <a href=\"bword://x\">x</a></li></ul><hr/>end",
+    "a &amp; b &lt;c&gt; &#65;&#x42; &nbsp;x &foo; &#xZZ; &#; & z",
+    "<div style=\"margin-left: 24px\">px indent</div><blockquote>quoted</blockquote>",
+    "<pre>keep   spaces\n  and lines</pre>after",
+    "<p>open<p>second <u>under</u> <a href=\"sound://s.wav\">play</a></p>",
+    "<style>b{}</style><script>x</script><!-- c --><img src=\"p.png\"/> text <object data=\"a.mp3\"><param/></object>",
+    "<font color=red>c</font>   many    spaces\t\ttabs",
+    "x < y and y > z",
+]
+
+
 def write_golden() -> None:
     from rapidfuzz import fuzz
 
@@ -188,6 +202,33 @@ def write_golden() -> None:
         (HERE / f"{stem}_golden.json").write_text(
             json.dumps(g, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
         )
+    from dictz.core.htmltext import to_text
+
+    texts = list(TEXT_SNIPPETS)
+    for name in ("dsl_golden.json", "bgl_golden.json"):
+        texts += [e[1] for e in json.loads((HERE / name).read_text(encoding="utf-8"))["entries"]]
+    seen: set[str] = set()
+    pairs = [[t, to_text(t)] for t in texts if not (t in seen or seen.add(t))]
+    (HERE / "text_golden.json").write_text(json.dumps(pairs, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    from dictz.storage.settings import schema_as_json
+
+    (HERE / "settings_schema.json").write_text(
+        json.dumps(schema_as_json(), ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    from dictz.cli import COMMANDS, completion_script
+
+    rs_dir = ROOT / "dictz-rs" / "src" / "completion"
+    rs_dir.mkdir(exist_ok=True)
+    for shell in ("bash", "zsh", "fish", "powershell"):
+        text = completion_script(shell)
+        (HERE / f"completion_{shell}.txt").write_text(text, encoding="utf-8", newline="\n")
+        # the Rust edition embeds the same scripts (include_str!)
+        (rs_dir / f"{shell}.txt").write_text(text, encoding="utf-8", newline="\n")
+    (HERE / "cli_commands.json").write_text(json.dumps(COMMANDS, ensure_ascii=False, indent=1) + "\n",
+                                            encoding="utf-8")
+    from dictz.core.shortcuts import SHORTCUTS
+
+    (HERE / "shortcuts.json").write_text(json.dumps(SHORTCUTS, ensure_ascii=False, indent=1) + "\n",
+                                         encoding="utf-8")
     fz = [[a, b, fuzz.ratio(a.lower(), b.lower())] for a, b in FUZZY_PAIRS]
     (HERE / "fuzzy_golden.json").write_text(json.dumps(fz, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 

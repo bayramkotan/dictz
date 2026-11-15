@@ -35,6 +35,63 @@ pub fn open_dictionary(path: &Path) -> Result<Box<dyn Dictionary>, DictzError> {
     }
 }
 
+/// `true` for `.ifo`, `.dsl`, `.dsl.dz` and `.bgl` files.
+pub fn is_dictionary_file(path: &Path) -> bool {
+    let n = path
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    n.ends_with(".ifo") || n.ends_with(".dsl") || n.ends_with(".dsl.dz") || n.ends_with(".bgl")
+}
+
+/// Dictionary files under `folder`, sorted (same rules as the Python
+/// edition's `scan_folder`): hidden folders and `*.files` media folders are
+/// skipped.
+pub fn scan_folder(folder: &Path, recursive: bool) -> Vec<PathBuf> {
+    if folder.is_file() {
+        return if is_dictionary_file(folder) {
+            vec![folder.to_path_buf()]
+        } else {
+            Vec::new()
+        };
+    }
+    let mut out = Vec::new();
+    let mut stack = vec![folder.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
+        entries.sort();
+        for e in entries {
+            let name = e
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if e.is_dir() {
+                if recursive && !name.starts_with('.') && !name.to_lowercase().ends_with(".files") {
+                    stack.push(e);
+                }
+            } else if is_dictionary_file(&e) {
+                out.push(e);
+            }
+        }
+    }
+    out.sort_by_key(|p| p.to_string_lossy().to_lowercase());
+    out
+}
+
+/// Options for [`QueryManager::restore_from_index`].
+#[derive(Debug, Clone, Default)]
+pub struct RestoreOptions {
+    /// Only these dictionaries.
+    pub names: Option<Vec<String>>,
+    /// Skip disabled dictionaries.
+    pub enabled_only: bool,
+    /// Rebuild the index of files modified since they were indexed.
+    pub reindex_changed: bool,
+}
+
 /// A suggestion under the search box.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
@@ -110,33 +167,78 @@ impl QueryManager {
     /// Reload every dictionary recorded in the index (start-up).
     /// Returns (loaded names, errors).
     pub fn restore_from_index(&mut self) -> (Vec<String>, Vec<String>) {
+        self.restore_with(&RestoreOptions::default(), |_, _, _| {})
+    }
+
+    /// Reload dictionaries recorded in the index. `progress(i, total, name)`
+    /// is called before each one.
+    pub fn restore_with(
+        &mut self,
+        opts: &RestoreOptions,
+        mut progress: impl FnMut(usize, usize, &str),
+    ) -> (Vec<String>, Vec<String>) {
         let rows = match self.index.as_ref().map(|i| i.list_dictionaries(false)) {
             Some(Ok(r)) => r,
             Some(Err(e)) => return (Vec::new(), vec![e.to_string()]),
             None => return (Vec::new(), Vec::new()),
         };
+        let rows: Vec<_> = rows
+            .into_iter()
+            .filter(|r| {
+                opts.names
+                    .as_ref()
+                    .map(|n| n.contains(&r.name))
+                    .unwrap_or(true)
+            })
+            .filter(|r| !opts.enabled_only || r.enabled)
+            .filter(|r| self.position(&r.name).is_none())
+            .collect();
         let mut ok = Vec::new();
         let mut errors = Vec::new();
-        for row in rows {
-            if self.position(&row.name).is_some() {
-                continue;
-            }
-            let loaded = open_dictionary(&row.path).and_then(|mut d| d.load().map(|_| d));
-            match loaded {
+        let total = rows.len();
+        for (i, row) in rows.into_iter().enumerate() {
+            progress(i, total, &row.name);
+            match Self::open_file(&row.path) {
                 Ok(dict) => {
-                    let media = MediaResolver::for_dictionary(&row.path);
+                    if opts.reindex_changed && row.changed() {
+                        if let Some(index) = self.index.as_mut() {
+                            let _ = index.index_dictionary(dict.as_ref());
+                        }
+                    }
                     ok.push(dict.metadata().name.clone());
-                    self.dicts.push(Loaded {
-                        dict,
-                        enabled: row.enabled,
-                        media,
-                    });
+                    self.attach(dict, &row.path, row.enabled);
                 }
                 Err(e) => errors.push(format!("{}: {}", row.path.display(), e)),
             }
         }
-        self.headword_cache = None;
         (ok, errors)
+    }
+
+    /// Parse a dictionary file (safe to call from a worker thread).
+    pub fn open_file(path: &Path) -> Result<Box<dyn Dictionary>, DictzError> {
+        let mut dict = open_dictionary(path)?;
+        dict.load()?;
+        Ok(dict)
+    }
+
+    /// Append an already-loaded dictionary (no indexing).
+    pub fn attach(&mut self, dict: Box<dyn Dictionary>, path: &Path, enabled: bool) {
+        let name = dict.metadata().name.clone();
+        if let Some(i) = self.position(&name) {
+            self.dicts.remove(i);
+        }
+        let media = MediaResolver::for_dictionary(path);
+        self.dicts.push(Loaded {
+            dict,
+            enabled,
+            media,
+        });
+        self.headword_cache = None;
+    }
+
+    /// Write list positions and enabled flags to the index.
+    pub fn save_order(&self) {
+        self.persist_order();
     }
 
     /// Unload a dictionary and drop it from the index.
@@ -228,14 +330,67 @@ impl QueryManager {
 
     /// Look `word` up in every enabled dictionary, in list order.
     pub fn search(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {
+        self.search_in(word, exact, None, None)
+    }
+
+    /// [`QueryManager::search`] limited to `dictionaries` and `max_articles`.
+    pub fn search_in(
+        &self,
+        word: &str,
+        exact: bool,
+        dictionaries: Option<&[String]>,
+        max_articles: Option<usize>,
+    ) -> Vec<DictionaryEntry> {
         if word.trim().is_empty() {
             return Vec::new();
         }
+        let mut out = Vec::new();
+        for d in self.dicts.iter().filter(|d| d.enabled) {
+            if let Some(names) = dictionaries {
+                if !names.iter().any(|n| *n == d.dict.metadata().name) {
+                    continue;
+                }
+            }
+            if max_articles.map(|m| out.len() >= m).unwrap_or(false) {
+                break;
+            }
+            out.extend(d.dict.lookup(word, exact));
+        }
+        if let Some(m) = max_articles {
+            out.truncate(m);
+        }
+        out
+    }
+
+    /// Enabled dictionaries that have `word` (exact or case-insensitive).
+    pub fn found_in(&self, word: &str) -> Vec<String> {
         self.dicts
             .iter()
-            .filter(|d| d.enabled)
-            .flat_map(|d| d.dict.lookup(word, exact))
+            .filter(|d| d.enabled && !d.dict.lookup(word, true).is_empty())
+            .map(|d| d.dict.metadata().name.clone())
             .collect()
+    }
+
+    /// A random article from one (or any enabled) dictionary.
+    pub fn random_entry(&self, dictionary: Option<&str>) -> Option<DictionaryEntry> {
+        let pool: Vec<&Loaded> = self
+            .dicts
+            .iter()
+            .filter(|d| match dictionary {
+                Some(n) => d.dict.metadata().name == n,
+                None => d.enabled,
+            })
+            .filter(|d| !d.dict.words().is_empty())
+            .collect();
+        if pool.is_empty() {
+            return None;
+        }
+        let mut r = random_u64();
+        let d = pool[(r % pool.len() as u64) as usize];
+        r = r.rotate_left(29) ^ 0x9E37_79B9_7F4A_7C15;
+        let words = d.dict.words().sorted();
+        let w = &words[(r % words.len() as u64) as usize];
+        d.dict.lookup(w, true).into_iter().next()
     }
 
     fn enabled_names(&self) -> Vec<String> {
@@ -278,6 +433,24 @@ impl QueryManager {
     /// filled up with fuzzy matches when there are fewer than
     /// [`FUZZY_FILL_BELOW`].
     pub fn suggest(&mut self, prefix: &str, limit: usize) -> Vec<Suggestion> {
+        self.suggest_with(
+            prefix,
+            limit,
+            FUZZY_FILL_BELOW,
+            fuzzy::DEFAULT_LIMIT,
+            fuzzy::DEFAULT_CUTOFF,
+        )
+    }
+
+    /// [`QueryManager::suggest`] with explicit fuzzy settings.
+    pub fn suggest_with(
+        &mut self,
+        prefix: &str,
+        limit: usize,
+        fuzzy_fill_below: usize,
+        fuzzy_limit: usize,
+        fuzzy_cutoff: f64,
+    ) -> Vec<Suggestion> {
         let prefix = prefix.trim().to_string();
         if prefix.is_empty() {
             return Vec::new();
@@ -310,8 +483,8 @@ impl QueryManager {
             .into_iter()
             .map(|word| Suggestion { word, fuzzy: false })
             .collect();
-        if out.len() < FUZZY_FILL_BELOW {
-            for (w, _) in self.fuzzy(&prefix, fuzzy::DEFAULT_LIMIT, fuzzy::DEFAULT_CUTOFF) {
+        if out.len() < fuzzy_fill_below {
+            for (w, _) in self.fuzzy(&prefix, fuzzy_limit, fuzzy_cutoff) {
                 if out.len() >= limit {
                     break;
                 }
@@ -334,6 +507,18 @@ impl QueryManager {
         self.dicts.clear();
         self.headword_cache = None;
     }
+}
+
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
+    h.finish()
 }
 
 #[cfg(test)]
