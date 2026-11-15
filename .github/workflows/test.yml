@@ -23,6 +23,7 @@ jobs:
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +50,7 @@ jobs:
     name: Test · ${{ matrix.os }} · py${{ matrix.python-version }}
     needs: lint
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -61,14 +63,17 @@ jobs:
           - macos-latest   # ARM64 (Apple Silicon)
         python-version: ['3.10', '3.11', '3.12', '3.13']
         exclude:
-          # Trim the matrix: ubuntu-22.04 + windows-2022 carry the full matrix
+          # Trim the matrix. Ubuntu 22.04 + windows-2022 carry the full matrix
           # across Python versions; the newer OS images sample one Python only.
+          # macos-13 Intel runners are the most contended pool on GitHub-hosted —
+          # keep it to a single Python version to reduce queue time.
           - { os: ubuntu-24.04, python-version: '3.10' }
           - { os: ubuntu-24.04, python-version: '3.11' }
           - { os: windows-latest, python-version: '3.10' }
           - { os: windows-latest, python-version: '3.11' }
           - { os: macos-13, python-version: '3.10' }
           - { os: macos-13, python-version: '3.11' }
+          - { os: macos-13, python-version: '3.13' }
           - { os: macos-latest, python-version: '3.10' }
           - { os: macos-latest, python-version: '3.11' }
 
@@ -139,6 +144,7 @@ jobs:
     name: Install smoke · py${{ matrix.python-version }}
     needs: test
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
