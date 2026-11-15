@@ -97,7 +97,7 @@ def test_release_workflow_is_valid_yaml() -> None:
 
 def test_release_workflow_builds_four_platforms() -> None:
     text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    for runner in ("ubuntu-22.04", "windows-latest", "macos-13", "macos-14"):
+    for runner in ("ubuntu-22.04", "windows-latest", "macos-13", "macos-latest"):
         assert runner in text, f"release.yml does not include {runner}"
 
 

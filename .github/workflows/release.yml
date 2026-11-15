@@ -22,7 +22,7 @@ jobs:
             artifact: dictz-windows-x86_64
           - os: macos-13           # Intel macOS
             artifact: dictz-macos-x86_64
-          - os: macos-14           # Apple Silicon
+          - os: macos-latest       # Apple Silicon (ARM64)
             artifact: dictz-macos-arm64
 
     steps:
