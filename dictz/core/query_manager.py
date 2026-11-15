@@ -18,32 +18,25 @@ _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
 
 
 def parser_for(path: Path | str) -> type[Dictionary]:
-    """Pick a parser class based on file extension."""
     p = Path(path)
     suffix = p.suffix.lower()
-
     if suffix == ".dz":
         inner_suffix = p.with_suffix("").suffix.lower()
         if inner_suffix in _PARSER_REGISTRY:
             return _PARSER_REGISTRY[inner_suffix]
-
     if suffix in _PARSER_REGISTRY:
         return _PARSER_REGISTRY[suffix]
-
     raise ValueError(f"No parser registered for file: {p}")
 
 
 def supported_extensions() -> list[str]:
-    """List of extensions the current build can open."""
     return sorted(_PARSER_REGISTRY.keys())
 
 
 class QueryManager:
-    """Orchestrates dictionary loading and multi-dictionary lookups."""
-
     def __init__(self, index_store: IndexStore | None = None):
         self.dictionaries: dict[str, Dictionary] = {}
-        self.enabled_names: set[str] = set()  # subset of dictionaries that are active
+        self.enabled_names: set[str] = set()
         self.index_store = index_store
 
     def add_dictionary(self, path: Path | str, reindex: bool = False) -> Dictionary:
@@ -52,12 +45,10 @@ class QueryManager:
         dictionary.load()
         self.dictionaries[dictionary.metadata.name] = dictionary
         self.enabled_names.add(dictionary.metadata.name)
-
         if self.index_store is not None:
             already_indexed = self.index_store.is_indexed(dictionary.metadata.name)
             if reindex or not already_indexed:
                 self.index_store.index_dictionary(dictionary)
-
         return dictionary
 
     def remove_dictionary(self, name: str) -> None:
@@ -85,7 +76,6 @@ class QueryManager:
     def search(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
         if not word.strip():
             return []
-
         results: list[DictionaryEntry] = []
         for name, dictionary in self.dictionaries.items():
             if name not in self.enabled_names:
@@ -101,13 +91,9 @@ class QueryManager:
     def suggest(self, prefix: str, limit: int = 30) -> list[str]:
         if not prefix.strip():
             return []
-
         enabled = list(self.enabled_names) if self.enabled_names else None
-
         if self.index_store is not None:
-            rows = self.index_store.search_headword(
-                prefix, limit=limit, dictionaries=enabled
-            )
+            rows = self.index_store.search_headword(prefix, limit=limit, dictionaries=enabled)
             seen: set[str] = set()
             out: list[str] = []
             for headword, _ in rows:
@@ -115,7 +101,6 @@ class QueryManager:
                     seen.add(headword)
                     out.append(headword)
             return out
-
         seen = set()
         out = []
         for dictionary in self.dictionaries.values():

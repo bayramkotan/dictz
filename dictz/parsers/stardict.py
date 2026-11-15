@@ -1,12 +1,4 @@
-"""StarDict format parser.
-
-StarDict files come in groups of 3-4 files sharing a basename:
-    name.ifo   — plain text header with metadata
-    name.idx   — binary index: [word\\0][offset:4 bytes BE][size:4 bytes BE]...
-    name.dict  — concatenated definitions (raw bytes)
-    name.dict.dz — same, compressed with dictzip (gzip variant w/ random access)
-    name.syn   — optional synonyms index (binary)
-"""
+"""StarDict format parser."""
 from __future__ import annotations
 
 import gzip
@@ -22,8 +14,6 @@ class StarDictError(Exception):
 
 
 class StarDictDictionary(Dictionary):
-    """Native StarDict parser. Reads .ifo, .idx, .dict (or .dict.dz)."""
-
     def __init__(self, path: Path | str):
         super().__init__(path)
         if self.path.suffix.lower() != ".ifo":
@@ -56,24 +46,20 @@ class StarDictDictionary(Dictionary):
         lines = text.splitlines()
         if not lines or not lines[0].startswith("StarDict's dict ifo file"):
             raise StarDictError(f"Not a valid StarDict .ifo: {ifo_path}")
-
         kv: dict[str, str] = {}
         for line in lines[1:]:
             if "=" not in line:
                 continue
             key, _, value = line.partition("=")
             kv[key.strip()] = value.strip()
-
         self.metadata.name = kv.get("bookname", self.path.stem)
         self.metadata.description = kv.get("description", "")
         self.metadata.author = kv.get("author", "")
-
         offset_bits = kv.get("idxoffsetbits", "32")
         try:
             self._idx_offset_bits = int(offset_bits)
         except ValueError:
             self._idx_offset_bits = 32
-
         if self._idx_offset_bits not in (32, 64):
             raise StarDictError(f"Unsupported idxoffsetbits: {self._idx_offset_bits}")
 
@@ -88,11 +74,9 @@ class StarDictDictionary(Dictionary):
                 raise StarDictError(f"Missing .idx file: {idx_path}")
         else:
             data = idx_path.read_bytes()
-
         offset_size = self._idx_offset_bits // 8
         entry_tail_size = offset_size + 4
         offset_fmt = ">I" if self._idx_offset_bits == 32 else ">Q"
-
         pos = 0
         n = len(data)
         while pos < n:
@@ -103,20 +87,16 @@ class StarDictDictionary(Dictionary):
                 word = data[pos:null_pos].decode("utf-8")
             except UnicodeDecodeError:
                 word = data[pos:null_pos].decode("utf-8", errors="replace")
-
             tail_start = null_pos + 1
             offset = struct.unpack(offset_fmt, data[tail_start : tail_start + offset_size])[0]
             size = struct.unpack(">I", data[tail_start + offset_size : tail_start + entry_tail_size])[0]
-
             if word and word not in self._index:
                 self._index[word] = (offset, size)
-
             pos = tail_start + entry_tail_size
 
     def _load_dict_data(self) -> None:
         dict_path = self._basepath.with_suffix(".dict")
         dz_path = Path(str(self._basepath) + ".dict.dz")
-
         if dict_path.exists():
             self._dict_data = dict_path.read_bytes()
         elif dz_path.exists():
@@ -128,19 +108,15 @@ class StarDictDictionary(Dictionary):
     def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
         if not self._loaded:
             self.load()
-
         results: list[DictionaryEntry] = []
-
         if word in self._index:
             results.append(self._entry_for(word))
-
         if not results:
             word_lower = word.lower()
             for indexed_word in self._sorted_words:
                 if indexed_word.lower() == word_lower:
                     results.append(self._entry_for(indexed_word))
                     break
-
         if not exact and not results:
             word_lower = word.lower()
             for indexed_word in self._sorted_words:
@@ -148,7 +124,6 @@ class StarDictDictionary(Dictionary):
                     results.append(self._entry_for(indexed_word))
                     if len(results) >= 50:
                         break
-
         return results
 
     def _entry_for(self, word: str) -> DictionaryEntry:

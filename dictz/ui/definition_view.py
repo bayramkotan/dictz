@@ -1,9 +1,4 @@
-"""Rich-HTML definition viewer.
-
-Uses QWebEngineView when available (zengin HTML, fonts, images), otherwise
-falls back to QTextBrowser so dictz still runs in environments that lack
-QtWebEngine (minimal PySide6 installs, some PyInstaller builds).
-"""
+"""Rich-HTML definition viewer."""
 from __future__ import annotations
 
 import html
@@ -18,28 +13,24 @@ from . import themes
 try:
     from PySide6.QtWebEngineWidgets import QWebEngineView
     HAS_WEBENGINE = True
-except ImportError:  # pragma: no cover
+except ImportError:
     QWebEngineView = None  # type: ignore
     HAS_WEBENGINE = False
 
 
 class DefinitionView(QWidget):
-    """A single tab's definition area."""
-
-    link_activated = Signal(str)  # emitted when user clicks a dict:// link
+    link_activated = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         from PySide6.QtWidgets import QVBoxLayout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-
         self._dark = False
         self._zoom = 1.0
 
         if HAS_WEBENGINE:
-            self._view: QTextBrowser | "QWebEngineView" = QWebEngineView(self)
-            self._view.page().setUrlRequestInterceptor(None)
+            self._view = QWebEngineView(self)
             layout.addWidget(self._view)
             self._html_mode = "web"
         else:
@@ -57,18 +48,6 @@ class DefinitionView(QWidget):
         self._zoom = max(0.5, min(3.0, factor))
         if self._html_mode == "web":
             self._view.setZoomFactor(self._zoom)  # type: ignore[attr-defined]
-        else:
-            # QTextBrowser doesn't have zoomFactor; re-render with CSS scale
-            pass
-
-    def zoom_in(self) -> None:
-        self.set_zoom(self._zoom + 0.1)
-
-    def zoom_out(self) -> None:
-        self.set_zoom(self._zoom - 0.1)
-
-    def reset_zoom(self) -> None:
-        self.set_zoom(1.0)
 
     def show_welcome(self) -> None:
         body = """
@@ -78,7 +57,7 @@ class DefinitionView(QWidget):
             <p style="font-size: 13px;">Başlamak için <b>Dosya → Sözlük Ekle</b> menüsünden<br>
             bir StarDict (.ifo), DSL (.dsl) veya Babylon (.bgl) dosyası yükleyin.</p>
             <p style="font-size: 12px; margin-top: 40px; opacity: 0.7;">
-                Kısayollar — <b>Ctrl+F</b> ara · <b>Ctrl+T</b> yeni sekme ·
+                <b>Ctrl+F</b> ara · <b>Ctrl+T</b> yeni sekme ·
                 <b>Ctrl+D</b> favoriye ekle · <b>Ctrl++</b>/<b>Ctrl+-</b> yakınlaştır
             </p>
         </div>
@@ -98,24 +77,18 @@ class DefinitionView(QWidget):
         if not entries:
             self.show_not_found("")
             return
-
         parts: list[str] = []
         current_dict = None
         for entry in entries:
             if entry.dictionary_id != current_dict:
                 current_dict = entry.dictionary_id
-                parts.append(
-                    f'<div class="dict-header">{html.escape(current_dict)}</div>'
-                )
+                parts.append(f'<div class="dict-header">{html.escape(current_dict)}</div>')
             parts.append(f'<div class="headword">{html.escape(entry.headword)}</div>')
             definition = entry.definition
             if "<" in definition and ">" in definition:
                 parts.append(f'<div class="definition">{definition}</div>')
             else:
-                parts.append(
-                    f'<div class="definition"><pre>{html.escape(definition)}</pre></div>'
-                )
-
+                parts.append(f'<div class="definition"><pre>{html.escape(definition)}</pre></div>')
         self.set_html("\n".join(parts))
 
     def set_html(self, body_html: str) -> None:

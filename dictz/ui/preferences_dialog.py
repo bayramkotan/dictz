@@ -1,32 +1,24 @@
-"""Preferences dialog — theme, font, search behavior."""
+"""Preferences dialog."""
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox,
-    QDialog,
-    QDialogButtonBox,
-    QFontComboBox,
-    QFormLayout,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
+    QComboBox, QDialog, QDialogButtonBox, QFontComboBox,
+    QFormLayout, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from ..storage.settings import Preferences
 
 
 class PreferencesDialog(QDialog):
-    preferences_changed = Signal(object)  # Preferences
+    preferences_changed = Signal(object)
 
     def __init__(self, prefs: Preferences, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Tercihler")
         self.resize(420, 300)
         self._prefs = prefs
-
         root = QVBoxLayout(self)
-
         form = QFormLayout()
         form.setSpacing(10)
 
@@ -58,10 +50,7 @@ class PreferencesDialog(QDialog):
 
         root.addLayout(form)
         root.addStretch(1)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._apply_and_accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)

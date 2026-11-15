@@ -1,8 +1,4 @@
-"""User preferences — QSettings wrapper with typed defaults.
-
-QSettings stores to the native per-user settings location on each platform
-(registry on Windows, .plist on macOS, INI on Linux).
-"""
+"""User preferences — QSettings wrapper with typed defaults."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,10 +9,8 @@ from PySide6.QtCore import QSettings
 
 @dataclass
 class Preferences:
-    """Typed view over QSettings for dictz."""
-
-    theme: str = "auto"  # "auto" | "light" | "dark"
-    font_family: str = ""  # empty = use system default
+    theme: str = "auto"
+    font_family: str = ""
     font_size: int = 14
     zoom_factor: float = 1.0
     search_debounce_ms: int = 150
@@ -34,9 +28,7 @@ class Preferences:
         p.font_family = qs.value("ui/font_family", p.font_family, type=str)
         p.font_size = qs.value("ui/font_size", p.font_size, type=int)
         p.zoom_factor = float(qs.value("ui/zoom_factor", p.zoom_factor))
-        p.search_debounce_ms = qs.value(
-            "search/debounce_ms", p.search_debounce_ms, type=int
-        )
+        p.search_debounce_ms = qs.value("search/debounce_ms", p.search_debounce_ms, type=int)
         p.show_sidebar = qs.value("ui/show_sidebar", p.show_sidebar, type=bool)
         p.sidebar_width = qs.value("ui/sidebar_width", p.sidebar_width, type=int)
         p.window_geometry = qs.value("window/geometry", None)
@@ -60,6 +52,5 @@ class Preferences:
         qs.setValue("search/last", self.last_search)
 
     def set(self, key: str, value: Any) -> None:
-        """Set a single field and persist."""
         setattr(self, key, value)
         self.save()

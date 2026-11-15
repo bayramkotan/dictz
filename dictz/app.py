@@ -1,10 +1,4 @@
-"""dictz application entry point.
-
-Run with:
-    python -m dictz
-    # or after `pip install -e .`:
-    dictz
-"""
+"""dictz application entry point."""
 from __future__ import annotations
 
 import os
@@ -19,12 +13,11 @@ from .storage.indexer import IndexStore
 from .storage.settings import Preferences
 from .ui.main_window import MainWindow
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 APP_NAME = "dictz"
 
 
 def user_data_dir() -> Path:
-    """Cross-platform per-user data directory."""
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         return base / APP_NAME
@@ -55,7 +48,6 @@ def main() -> int:
     history_store.open()
 
     prefs = Preferences.load()
-
     query_manager = QueryManager(index_store=index_store)
 
     window = MainWindow(query_manager, history_store, prefs)

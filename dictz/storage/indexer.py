@@ -10,8 +10,6 @@ from ..parsers.base import Dictionary
 
 
 class IndexStore:
-    """Wraps a SQLite database with FTS5 for headword search."""
-
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS dictionaries (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,13 +23,11 @@ class IndexStore:
         enabled      INTEGER DEFAULT 1,
         sort_order   INTEGER DEFAULT 0
     );
-
     CREATE VIRTUAL TABLE IF NOT EXISTS entries USING fts5(
         headword,
         dictionary UNINDEXED,
         tokenize = 'unicode61 remove_diacritics 2'
     );
-
     CREATE INDEX IF NOT EXISTS idx_dict_name ON dictionaries(name);
     """
 
@@ -46,7 +42,6 @@ class IndexStore:
         self._conn = sqlite3.connect(str(self.db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self.SCHEMA)
-        # Add sort_order column if upgrading from older schema
         try:
             self._conn.execute("ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
@@ -82,15 +77,8 @@ class IndexStore:
                     (name, path, format, word_count, source_lang, target_lang, description, enabled)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                 """,
-                (
-                    meta.name,
-                    str(meta.file_path),
-                    meta.format,
-                    meta.word_count,
-                    meta.source_language,
-                    meta.target_language,
-                    meta.description,
-                ),
+                (meta.name, str(meta.file_path), meta.format, meta.word_count,
+                 meta.source_language, meta.target_language, meta.description),
             )
             return cur.lastrowid or 0
 
@@ -104,17 +92,11 @@ class IndexStore:
 
     def set_enabled(self, name: str, enabled: bool) -> None:
         with self._cursor() as cur:
-            cur.execute(
-                "UPDATE dictionaries SET enabled = ? WHERE name = ?",
-                (1 if enabled else 0, name),
-            )
+            cur.execute("UPDATE dictionaries SET enabled = ? WHERE name = ?", (1 if enabled else 0, name))
 
     def set_sort_order(self, name: str, order: int) -> None:
         with self._cursor() as cur:
-            cur.execute(
-                "UPDATE dictionaries SET sort_order = ? WHERE name = ?",
-                (order, name),
-            )
+            cur.execute("UPDATE dictionaries SET sort_order = ? WHERE name = ?", (order, name))
 
     def remove_dictionary(self, name: str) -> None:
         with self._cursor() as cur:
@@ -124,12 +106,9 @@ class IndexStore:
     def index_dictionary(self, dictionary: Dictionary) -> int:
         if not dictionary.loaded:
             dictionary.load()
-
         self.register_dictionary(dictionary)
-
         with self._cursor() as cur:
             cur.execute("DELETE FROM entries WHERE dictionary = ?", (dictionary.metadata.name,))
-
         batch: list[tuple[str, str]] = []
         count = 0
         BATCH_SIZE = 5000
@@ -137,44 +116,26 @@ class IndexStore:
             for entry in dictionary.iter_entries():
                 batch.append((entry.headword, dictionary.metadata.name))
                 if len(batch) >= BATCH_SIZE:
-                    cur.executemany(
-                        "INSERT INTO entries (headword, dictionary) VALUES (?, ?)",
-                        batch,
-                    )
+                    cur.executemany("INSERT INTO entries (headword, dictionary) VALUES (?, ?)", batch)
                     count += len(batch)
                     batch.clear()
             if batch:
-                cur.executemany(
-                    "INSERT INTO entries (headword, dictionary) VALUES (?, ?)",
-                    batch,
-                )
+                cur.executemany("INSERT INTO entries (headword, dictionary) VALUES (?, ?)", batch)
                 count += len(batch)
-
         return count
 
-    def search_headword(
-        self,
-        query: str,
-        limit: int = 100,
-        dictionaries: list[str] | None = None,
-    ) -> list[tuple[str, str]]:
+    def search_headword(self, query: str, limit: int = 100, dictionaries: list[str] | None = None) -> list[tuple[str, str]]:
         safe = query.replace('"', '""')
         fts_query = f'"{safe}"*'
-
-        sql = """
-            SELECT headword, dictionary FROM entries
-            WHERE entries MATCH ?
-            ORDER BY rank
-            LIMIT ?
-        """
         with self._cursor() as cur:
-            cur.execute(sql, (fts_query, limit))
+            cur.execute(
+                "SELECT headword, dictionary FROM entries WHERE entries MATCH ? ORDER BY rank LIMIT ?",
+                (fts_query, limit),
+            )
             rows = cur.fetchall()
-
         if dictionaries:
             allowed = set(dictionaries)
             rows = [r for r in rows if r["dictionary"] in allowed]
-
         return [(r["headword"], r["dictionary"]) for r in rows]
 
     def is_indexed(self, name: str) -> bool:

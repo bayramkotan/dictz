@@ -1,8 +1,4 @@
-"""Tabbed definition area — each tab holds one looked-up word.
-
-Mirrors the browser tab model: new tab (Ctrl+T), close tab (Ctrl+W), navigate
-between tabs (Ctrl+Tab / Ctrl+Shift+Tab).
-"""
+"""Tabbed definition area."""
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
@@ -13,8 +9,6 @@ from .definition_view import DefinitionView
 
 
 class DefinitionTabs(QTabWidget):
-    """A tab bar + stack of DefinitionViews, one per looked-up word."""
-
     current_word_changed = Signal(str)
     link_activated = Signal(str)
 
@@ -42,18 +36,6 @@ class DefinitionTabs(QTabWidget):
             if isinstance(view, DefinitionView):
                 view.set_zoom(factor)
 
-    def zoom_in(self) -> None:
-        self._zoom = min(3.0, self._zoom + 0.1)
-        self.set_zoom(self._zoom)
-
-    def zoom_out(self) -> None:
-        self._zoom = max(0.5, self._zoom - 0.1)
-        self.set_zoom(self._zoom)
-
-    def reset_zoom(self) -> None:
-        self._zoom = 1.0
-        self.set_zoom(1.0)
-
     def current_view(self) -> DefinitionView | None:
         w = self.currentWidget()
         return w if isinstance(w, DefinitionView) else None
@@ -76,10 +58,7 @@ class DefinitionTabs(QTabWidget):
             view.show_welcome()
         return view
 
-    def show_in_current(
-        self, word: str, entries: list[DictionaryEntry]
-    ) -> None:
-        """Show entries in the current tab, or make a new one if none."""
+    def show_in_current(self, word: str, entries: list[DictionaryEntry]) -> None:
         view = self.current_view()
         if view is None:
             view = self.new_tab(word)
@@ -88,9 +67,7 @@ class DefinitionTabs(QTabWidget):
         if idx >= 0:
             self.setTabText(idx, word or "Sonuç yok")
 
-    def show_in_new_tab(
-        self, word: str, entries: list[DictionaryEntry]
-    ) -> None:
+    def show_in_new_tab(self, word: str, entries: list[DictionaryEntry]) -> None:
         view = self.new_tab(word)
         view.show_entries(entries)
 
@@ -101,7 +78,6 @@ class DefinitionTabs(QTabWidget):
 
     def _on_tab_close_requested(self, index: int) -> None:
         if self.count() <= 1:
-            # Keep at least one tab — reset it to the welcome state
             view = self.widget(index)
             if isinstance(view, DefinitionView):
                 view.show_welcome()

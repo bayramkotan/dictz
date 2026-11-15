@@ -1,4 +1,4 @@
-"""Tests for the parser-registry dispatch in query_manager.parser_for."""
+"""Tests for parser-registry dispatch."""
 from __future__ import annotations
 
 from pathlib import Path
