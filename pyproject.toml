@@ -4,17 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dictz"
-version = "0.0.3"
+version = "0.0.4"
 description = "dictz — a cross-platform multi-format offline dictionary application (GoldenDict-style)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
-authors = [
-    { name = "Bayram Kotan", email = "bayramkotan@gmail.com" },
-]
-maintainers = [
-    { name = "Bayram Kotan", email = "bayramkotan@gmail.com" },
-]
+authors = [{ name = "Bayram Kotan", email = "bayramkotan@gmail.com" }]
+maintainers = [{ name = "Bayram Kotan", email = "bayramkotan@gmail.com" }]
 keywords = [
     "dictionary", "stardict", "dsl", "babylon", "goldendict",
     "offline", "lexicography", "translation", "pyside6", "qt",
@@ -48,21 +44,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tts = [
-    "edge-tts>=6.1.0",
-    "pyttsx3>=2.90",
-]
-ocr = [
-    "mss>=9.0.0",
-    "pytesseract>=0.3.10",
-    "Pillow>=10.0.0",
-]
-anki = [
-    "requests>=2.31.0",
-]
-all = [
-    "dictz[tts,ocr,anki]",
-]
+tts = ["edge-tts>=6.1.0", "pyttsx3>=2.90"]
+ocr = ["mss>=9.0.0", "pytesseract>=0.3.10", "Pillow>=10.0.0"]
+anki = ["requests>=2.31.0"]
+all = ["dictz[tts,ocr,anki]"]
 dev = [
     "pytest>=7.4.0",
     "pytest-qt>=4.3.0",
@@ -79,6 +64,7 @@ Repository = "https://github.com/bayramkotan/dictz"
 Issues = "https://github.com/bayramkotan/dictz/issues"
 Documentation = "https://github.com/bayramkotan/dictz#readme"
 Changelog = "https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md"
+Releases = "https://github.com/bayramkotan/dictz/releases"
 
 [tool.setuptools.packages.find]
 where = ["."]

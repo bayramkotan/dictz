@@ -27,7 +27,7 @@ htmlcov/
 .mypy_cache/
 
 # PyInstaller
-*.spec
+*.spec.bak
 *.manifest
 
 # IDE
@@ -46,3 +46,7 @@ dictz_index.db
 dictz_history.db
 *.log
 test_dicts/
+
+# AppImage build cache
+build/appimage-tools/
+*.AppImage

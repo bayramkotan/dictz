@@ -9,8 +9,6 @@ from typing import Iterator
 
 @dataclass
 class DictionaryEntry:
-    """A single headword + definition pair from a dictionary."""
-
     headword: str
     definition: str
     dictionary_id: str = ""
@@ -23,8 +21,6 @@ class DictionaryEntry:
 
 @dataclass
 class DictionaryMetadata:
-    """Information about a loaded dictionary."""
-
     name: str
     source_language: str = ""
     target_language: str = ""
@@ -42,8 +38,6 @@ class DictionaryMetadata:
 
 
 class Dictionary(ABC):
-    """Abstract base for all dictionary format parsers."""
-
     def __init__(self, path: Path | str):
         self.path = Path(path)
         self.metadata = DictionaryMetadata(name=self.path.stem, file_path=self.path)

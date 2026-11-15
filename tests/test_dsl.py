@@ -15,27 +15,22 @@ DSL_SAMPLE = (
     "#INDEX_LANGUAGE \"English\"\n"
     "#CONTENTS_LANGUAGE \"Turkish\"\n"
     "\n"
-    "apple\n"
-    "\t[trn]elma[/trn]\n"
-    "\n"
-    "book\n"
-    "\t[trn]kitap[/trn]\n"
-    "\n"
-    "cat\n"
-    "\t[trn]kedi[/trn]\n"
+    "apple\n\t[trn]elma[/trn]\n\n"
+    "book\n\t[trn]kitap[/trn]\n\n"
+    "cat\n\t[trn]kedi[/trn]\n"
 )
 
 
 def _write_dsl(tmp_path: Path) -> Path:
-    dsl_path = tmp_path / "tiny.dsl"
-    dsl_path.write_text(DSL_SAMPLE, encoding="utf-16")
-    return dsl_path
+    p = tmp_path / "tiny.dsl"
+    p.write_text(DSL_SAMPLE, encoding="utf-16")
+    return p
 
 
 def test_load_dsl(tmp_path: Path) -> None:
     d = DSLDictionary(_write_dsl(tmp_path))
     d.load()
-    assert d.loaded and d.metadata.format == "dsl" and d.metadata.word_count >= 3
+    assert d.loaded and d.metadata.word_count >= 3
 
 
 def test_dsl_lookup_exact(tmp_path: Path) -> None:

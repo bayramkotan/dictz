@@ -26,12 +26,10 @@ def _ensure_init() -> None:
 
 
 class PyGlossaryError(Exception):
-    """Raised when PyGlossary fails to read a dictionary file."""
+    pass
 
 
 class PyGlossaryDictionary(Dictionary):
-    """Generic PyGlossary-backed dictionary."""
-
     _format: str = ""
     format_label: str = ""
 
@@ -45,9 +43,7 @@ class PyGlossaryDictionary(Dictionary):
         if self._loaded:
             return
         if not self._format:
-            raise PyGlossaryError(
-                f"{self.__class__.__name__} did not set _format"
-            )
+            raise PyGlossaryError(f"{self.__class__.__name__} did not set _format")
         if not self.path.exists():
             raise PyGlossaryError(f"File not found: {self.path}")
 
@@ -58,14 +54,10 @@ class PyGlossaryDictionary(Dictionary):
         try:
             opened = glos.directRead(str(self.path), formatName=self._format)
         except Exception as exc:
-            raise PyGlossaryError(
-                f"PyGlossary could not read {self.path}: {exc}"
-            ) from exc
+            raise PyGlossaryError(f"PyGlossary could not read {self.path}: {exc}") from exc
 
         if not opened:
-            raise PyGlossaryError(
-                f"PyGlossary refused to open {self.path} as {self._format}"
-            )
+            raise PyGlossaryError(f"PyGlossary refused to open {self.path} as {self._format}")
 
         self.metadata.name = glos.getInfo("name") or glos.getInfo("title") or self.path.stem
         self.metadata.author = glos.getInfo("author") or ""
@@ -96,19 +88,15 @@ class PyGlossaryDictionary(Dictionary):
     def lookup(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
         if not self._loaded:
             self.load()
-
         results: list[DictionaryEntry] = []
-
         if word in self._entries:
             results.append(self._entry_for(word))
-
         if not results:
             word_lower = word.lower()
             for indexed_word in self._sorted_words:
                 if indexed_word.lower() == word_lower:
                     results.append(self._entry_for(indexed_word))
                     break
-
         if not exact and not results:
             word_lower = word.lower()
             for indexed_word in self._sorted_words:
@@ -116,7 +104,6 @@ class PyGlossaryDictionary(Dictionary):
                     results.append(self._entry_for(indexed_word))
                     if len(results) >= 50:
                         break
-
         return results
 
     def _entry_for(self, word: str) -> DictionaryEntry:

@@ -3,13 +3,28 @@
 [![PyPI version](https://img.shields.io/pypi/v/dictz.svg)](https://pypi.org/project/dictz/)
 [![Python versions](https://img.shields.io/pypi/pyversions/dictz.svg)](https://pypi.org/project/dictz/)
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/bayramkotan/dictz)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/bayramkotan/dictz/releases)
+[![GitHub release](https://img.shields.io/github/v/release/bayramkotan/dictz?include_prereleases)](https://github.com/bayramkotan/dictz/releases)
 [![Downloads](https://img.shields.io/pypi/dm/dictz.svg)](https://pypi.org/project/dictz/)
 [![GitHub stars](https://img.shields.io/github/stars/bayramkotan/dictz?style=social)](https://github.com/bayramkotan/dictz)
 
 Cross-platform, multi-format, offline dictionary application — a modern GoldenDict-style desktop tool built with Python and Qt.
 
 > [Türkçe açıklama aşağıda](#türkçe)
+
+## Download
+
+Portable builds for every release live on the [GitHub Releases page](https://github.com/bayramkotan/dictz/releases/latest):
+
+| Platform | Artifact | Notes |
+|----------|----------|-------|
+| **Windows 10/11** | `dictz-windows-x86_64.zip` | Unzip anywhere, run `dictz.exe`. Unsigned — accept the SmartScreen prompt. |
+| **Linux (any)** | `dictz-linux-x86_64.AppImage` | `chmod +x dictz-*.AppImage && ./dictz-*.AppImage` |
+| **Linux (tarball)** | `dictz-linux-x86_64.tar.gz` | Extract, run `dictz/dictz` |
+| **macOS Intel** | `dictz-macos-x86_64.zip` | Unzip, right-click **Open** the `.app` once to bypass Gatekeeper. |
+| **macOS Apple Silicon** | `dictz-macos-arm64.zip` | Same as Intel. |
+
+Or install from PyPI: `pip install dictz` (or `pipx install dictz` on PEP-668 distros).
 
 ## Highlights
 
@@ -18,42 +33,27 @@ Cross-platform, multi-format, offline dictionary application — a modern Golden
 - **Fast** — SQLite FTS5 index with Unicode + diacritic-insensitive search
 - **Offline** — no network calls, no telemetry
 - **Modern UI** — tabbed definitions, dockable sidebar (dictionaries / favorites / history), back/forward navigation, light + dark themes, configurable zoom and fonts
-- **Cross-platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), macOS
+- **Portable** — every release ships standalone binaries for Windows, Linux (plus AppImage), and macOS (Intel + Apple Silicon)
 
-## Screens & features at a glance
+## Features at a glance
 
 - **Tabbed definition view** — open each lookup in its own tab (Ctrl+T / Ctrl+W / Ctrl+Tab)
 - **Live suggestions** — debounced as-you-type, powered by FTS5 prefix matching
 - **Back / Forward** — browser-style history navigation (Alt+Left / Alt+Right)
 - **Favorites** — star words with Ctrl+D, review them in the sidebar
 - **History** — every lookup logged, re-openable with one click, clearable with one button
-- **Dictionary manager** — add / remove / reorder / enable / disable from a dialog or the sidebar
+- **Dictionary manager** — add / remove / reorder / enable / disable
 - **Zoom** — Ctrl+= / Ctrl+- / Ctrl+0
-- **Themes** — Light, Dark, Auto (follows the OS)
+- **Themes** — Light, Dark, Auto
 - **Rich HTML** — QWebEngineView renders DSL markup with images and formatting
 
-## Install
-
-### From PyPI
-
-```bash
-pip install dictz
-```
-
-### From source
+## Install (from source)
 
 ```bash
 git clone https://github.com/bayramkotan/dictz.git
 cd dictz
 pip install -e .
-```
-
-### Run
-
-```bash
 dictz
-# or equivalently
-python -m dictz
 ```
 
 ## Supported formats
@@ -64,13 +64,13 @@ python -m dictz
 | ABBYY Lingvo DSL | `.dsl` / `.dsl.dz` | [PyGlossary](https://github.com/ilius/pyglossary) |
 | Babylon | `.bgl` | [PyGlossary](https://github.com/ilius/pyglossary) |
 
-More formats (XDXF, Slob, DictD, MDict, …) are on the [TODO](TODO.md).
+More formats (XDXF, Slob, DictD, MDict) are on the [TODO](TODO.md).
 
 ## Where to find dictionaries
 
 - [FreeDict](https://freedict.org/) — StarDict dictionaries, many language pairs
 - [StarDict.org](http://download.huzheng.org/) — large StarDict collection
-- [Lingvo DSL packs](http://lingvo.helpmax.net/) — ABBYY Lingvo community dictionaries
+- [Lingvo DSL packs](http://lingvo.helpmax.net/) — community DSL dictionaries
 
 ## Keyboard shortcuts
 
@@ -90,34 +90,26 @@ More formats (XDXF, Slob, DictD, MDict, …) are on the [TODO](TODO.md).
 | Dictionary manager | Ctrl+M |
 | Copy current word | Ctrl+Shift+C |
 
+## Build portable binaries locally
+
+See [`docs/PACKAGING.md`](docs/PACKAGING.md) for the full details. Quick version:
+
+```bash
+# Linux / macOS
+bash scripts/build.sh
+
+# Windows PowerShell
+scripts\build.ps1
+```
+
+CI builds the same artifacts automatically on every `v*` tag.
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
 pytest -v
 ```
-
-Project layout:
-
-```
-dictz/
-├── dictz/
-│   ├── core/           # query orchestration, parser dispatch
-│   ├── parsers/        # one module per dictionary format
-│   ├── storage/        # SQLite FTS5 indexer, history, settings
-│   ├── services/       # (planned) TTS, OCR, clipboard, Anki
-│   ├── ui/             # PySide6 widgets — tabs, sidebar, themes
-│   └── app.py          # entry point
-├── tests/
-├── docs/
-├── CHANGELOG.md
-├── TODO.md
-└── pyproject.toml
-```
-
-## Contributing
-
-Issues and pull requests are welcome at [github.com/bayramkotan/dictz](https://github.com/bayramkotan/dictz). See [TODO.md](TODO.md) for ideas.
 
 ## License
 
@@ -131,45 +123,26 @@ Licensed under the [GNU General Public License v3.0 or later](LICENSE).
 
 ## Türkçe
 
-dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir sözlük uygulamasıdır. GoldenDict tarzı modern bir masaüstü aracıdır ve Python + Qt ile geliştirilmektedir.
+dictz, çoklu format destekli, çevrimdışı çalışan, çapraz platform bir sözlük uygulamasıdır. GoldenDict tarzı modern bir masaüstü aracıdır.
+
+### İndir
+
+Her sürüm için portable paketler [GitHub Releases](https://github.com/bayramkotan/dictz/releases/latest) sayfasında:
+
+- **Windows 10/11** — `dictz-windows-x86_64.zip` → aç, `dictz.exe`'yi çalıştır
+- **Linux** — `dictz-linux-x86_64.AppImage` → `chmod +x` ve çalıştır
+- **macOS** — Intel için `dictz-macos-x86_64.zip`, Apple Silicon için `dictz-macos-arm64.zip`
+
+Veya PyPI: `pip install dictz` (veya `pipx install dictz`).
 
 ### Öne çıkanlar
 
-- **Çoklu format** — StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`)
-- **Çoklu sözlük** — istediğin kadar sözlük yükle; tek bir arama hepsinde çalışır
-- **Hızlı** — SQLite FTS5 indeksi + Unicode + diakritik duyarsız arama
-- **Çevrimdışı** — hiçbir ağ çağrısı yok, telemetri yok
-- **Modern arayüz** — sekmeli tanım görüntüleyici, yan panel (sözlükler/favoriler/geçmiş), ileri/geri gezinme, açık + koyu tema, yakınlaştırma, özelleştirilebilir yazı tipi
-- **Çapraz platform** — Windows 11, Linux (CachyOS/Arch/Debian/Ubuntu/Fedora), macOS
-
-### Kurulum
-
-```bash
-pip install dictz
-```
-
-### Çalıştırma
-
-```bash
-dictz
-```
-
-### Klavye kısayolları
-
-| Eylem | Kısayol |
-|-------|---------|
-| Arama kutusuna odaklan | Ctrl+F |
-| Mevcut sekmede aç | Enter |
-| Yeni sekmede aç | Ctrl+Enter |
-| Yeni sekme / Sekmeyi kapat | Ctrl+T / Ctrl+W |
-| Önceki / sonraki sekme | Ctrl+Tab / Ctrl+Shift+Tab |
-| Geri / İleri | Alt+← / Alt+→ |
-| Favori aç/kapat | Ctrl+D |
-| Yan paneli aç/kapat | Ctrl+B |
-| Büyüt / küçült / sıfırla | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Tercihler | Ctrl+, |
-| Sözlük ekle | Ctrl+O |
-| Sözlük yöneticisi | Ctrl+M |
+- **Çoklu format** — StarDict, DSL, Babylon
+- **Çoklu sözlük** — tek arama hepsinde çalışır
+- **Hızlı** — SQLite FTS5 + diakritik duyarsız
+- **Çevrimdışı** — ağ yok, telemetri yok
+- **Modern arayüz** — sekmeler, dock, favoriler, geçmiş, koyu/açık tema
+- **Portable** — Windows/Linux/macOS için tek dosya binaryler her sürümde
 
 ### Lisans
 

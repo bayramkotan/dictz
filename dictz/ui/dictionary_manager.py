@@ -1,20 +1,12 @@
-"""Dictionary manager dialog — add / remove / reorder / enable / disable."""
+"""Dictionary manager dialog."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QFileDialog,
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout, QLabel,
+    QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget,
 )
 
 from ..core.query_manager import QueryManager
@@ -22,8 +14,6 @@ from .icons import icon
 
 
 class DictionaryManagerDialog(QDialog):
-    """List every loaded dictionary with buttons to add/remove/reorder."""
-
     dictionaries_changed = Signal()
 
     def __init__(self, query_manager: QueryManager, parent: QWidget | None = None):
@@ -31,16 +21,12 @@ class DictionaryManagerDialog(QDialog):
         self.setWindowTitle("Sözlük yöneticisi")
         self.resize(640, 440)
         self.query_manager = query_manager
-
         layout = QVBoxLayout(self)
-
         layout.addWidget(QLabel("Yüklü sözlükler (etkinleştirmek için kutuyu işaretleyin):"))
-
         self.list = QListWidget()
         self.list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.list.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.list, 1)
-
         row = QHBoxLayout()
         self.add_btn = QPushButton(icon("open"), "Ekle…")
         self.remove_btn = QPushButton(icon("remove"), "Kaldır")
@@ -56,12 +42,10 @@ class DictionaryManagerDialog(QDialog):
         row.addWidget(self.up_btn)
         row.addWidget(self.down_btn)
         layout.addLayout(row)
-
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.accept)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
-
         self._refresh()
 
     def _refresh(self) -> None:
@@ -73,11 +57,7 @@ class DictionaryManagerDialog(QDialog):
             it = QListWidgetItem(text)
             it.setData(Qt.ItemDataRole.UserRole, name)
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            it.setCheckState(
-                Qt.CheckState.Checked
-                if self.query_manager.is_enabled(name)
-                else Qt.CheckState.Unchecked
-            )
+            it.setCheckState(Qt.CheckState.Checked if self.query_manager.is_enabled(name) else Qt.CheckState.Unchecked)
             self.list.addItem(it)
         self.list.blockSignals(False)
 
@@ -86,16 +66,10 @@ class DictionaryManagerDialog(QDialog):
         return it.data(Qt.ItemDataRole.UserRole) if it else None
 
     def _add(self) -> None:
-        file_filter = (
-            "Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
-            "StarDict (*.ifo);;"
-            "DSL / Lingvo (*.dsl *.dsl.dz);;"
-            "Babylon (*.bgl);;"
-            "Tüm dosyalar (*)"
-        )
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Sözlük dosyası seçin", "", file_filter
-        )
+        file_filter = ("Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
+                       "StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dsl.dz);;"
+                       "Babylon (*.bgl);;Tüm dosyalar (*)")
+        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", file_filter)
         if not paths:
             return
         for p in paths:
@@ -103,9 +77,7 @@ class DictionaryManagerDialog(QDialog):
                 self.query_manager.add_dictionary(Path(p))
             except Exception as e:
                 from PySide6.QtWidgets import QMessageBox
-                QMessageBox.critical(
-                    self, "Yüklenemedi", f"<b>{p}</b><br><br>{type(e).__name__}: {e}"
-                )
+                QMessageBox.critical(self, "Yüklenemedi", f"<b>{p}</b><br><br>{type(e).__name__}: {e}")
         self._refresh()
         self.dictionaries_changed.emit()
 
@@ -127,7 +99,6 @@ class DictionaryManagerDialog(QDialog):
         it = self.list.takeItem(row)
         self.list.insertItem(new_row, it)
         self.list.setCurrentItem(it)
-        # Persist new ordering
         if self.query_manager.index_store is not None:
             for i in range(self.list.count()):
                 nm = self.list.item(i).data(Qt.ItemDataRole.UserRole)

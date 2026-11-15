@@ -1,11 +1,10 @@
-"""Icon helper — uses Qt standard icons so we don't need a bundled icon set."""
+"""Icon helper — uses Qt standard icons."""
 from __future__ import annotations
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 
-# Map action name -> QStyle.StandardPixmap identifier.
 _ICON_MAP = {
     "open": QStyle.StandardPixmap.SP_DialogOpenButton,
     "save": QStyle.StandardPixmap.SP_DialogSaveButton,
@@ -32,7 +31,6 @@ _ICON_MAP = {
 
 
 def icon(name: str) -> QIcon:
-    """Return a QIcon for a dictz-local action name, falling back to an empty icon."""
     app = QApplication.instance()
     if app is None:
         return QIcon()

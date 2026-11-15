@@ -1,9 +1,4 @@
-"""Persistent history and favorites, stored in SQLite.
-
-History records every word the user looked up, newest first. Favorites are
-starred words the user wants to keep around. Both live in the same database
-as the headword index so one file holds everything.
-"""
+"""Persistent history and favorites, stored in SQLite."""
 from __future__ import annotations
 
 import sqlite3
@@ -14,8 +9,6 @@ from typing import Iterator
 
 
 class HistoryStore:
-    """SQLite-backed history + favorites."""
-
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS history (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +18,6 @@ class HistoryStore:
     );
     CREATE INDEX IF NOT EXISTS idx_history_word ON history(word);
     CREATE INDEX IF NOT EXISTS idx_history_time ON history(looked_up DESC);
-
     CREATE TABLE IF NOT EXISTS favorites (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         word        TEXT NOT NULL UNIQUE,
@@ -68,10 +60,7 @@ class HistoryStore:
         finally:
             cur.close()
 
-    # ------------------------------------------------------------- history
-
     def record(self, word: str, dictionary: str = "") -> None:
-        """Push a lookup onto the history stack."""
         if not word:
             return
         with self._cursor() as cur:
@@ -81,15 +70,9 @@ class HistoryStore:
             )
 
     def recent(self, limit: int = 100) -> list[str]:
-        """Return the most recent distinct words, newest first."""
         with self._cursor() as cur:
             cur.execute(
-                """
-                SELECT word FROM history
-                GROUP BY word
-                ORDER BY MAX(looked_up) DESC
-                LIMIT ?
-                """,
+                "SELECT word FROM history GROUP BY word ORDER BY MAX(looked_up) DESC LIMIT ?",
                 (limit,),
             )
             return [row["word"] for row in cur.fetchall()]
@@ -97,8 +80,6 @@ class HistoryStore:
     def clear_history(self) -> None:
         with self._cursor() as cur:
             cur.execute("DELETE FROM history")
-
-    # ------------------------------------------------------------ favorites
 
     def add_favorite(self, word: str, note: str = "") -> None:
         if not word:
@@ -114,7 +95,6 @@ class HistoryStore:
             cur.execute("DELETE FROM favorites WHERE word = ?", (word,))
 
     def toggle_favorite(self, word: str) -> bool:
-        """Toggle favorite status. Returns True if now favorited."""
         if self.is_favorite(word):
             self.remove_favorite(word)
             return False
@@ -127,12 +107,8 @@ class HistoryStore:
             return cur.fetchone() is not None
 
     def favorites(self, limit: int = 500) -> list[str]:
-        """Return favorites, newest first."""
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT word FROM favorites ORDER BY added_at DESC LIMIT ?",
-                (limit,),
-            )
+            cur.execute("SELECT word FROM favorites ORDER BY added_at DESC LIMIT ?", (limit,))
             return [row["word"] for row in cur.fetchall()]
 
     def set_note(self, word: str, note: str) -> None:

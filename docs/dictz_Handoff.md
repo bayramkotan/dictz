@@ -2,11 +2,12 @@
 
 **Repo:** https://github.com/bayramkotan/dictz.git
 **PyPI:** https://pypi.org/project/dictz/
+**Releases:** https://github.com/bayramkotan/dictz/releases
 **Project path (Windows):** `C:\Github\dictz\`
-**Project path (Pardus):** `/home/bayram/Desktop/Github/dictz/`
+**Project path (CachyOS):** `/home/bayram/Github/dictz/`
 **License:** GPL-3.0+
-**Language:** Python 3.10+
-**GUI:** PySide6
+**Language:** Python 3.10+ (CI tests 3.10/3.11/3.12)
+**GUI:** PySide6 (+ QtWebEngine when available)
 
 > **Not:** İsim şimdilik `dictz`. İlerleyen aşamalarda değişebilir; o gün gelirse paket/repo/handoff adlarını topluca güncelleriz.
 
@@ -14,85 +15,83 @@
 
 ## Current version
 
-**v0.0.3** — Functional UI overhaul (tabs, sidebar, favorites, history, themes, QWebEngine)
-**Next suggested version:** v0.0.4 — portable paketleme (AppImage, Windows portable zip, macOS .app)
+**v0.0.4** — Cross-platform portable builds (AppImage, Windows portable zip, macOS .app) + GitHub Actions release pipeline
+**Next suggested version:** v0.0.5 — fuzzy arama (RapidFuzz) + DSL'deki ses/resim
 
 ---
 
-## Dil/Platform Kararı (2026-11-12)
+## Bu Oturumda Yapılanlar (v0.0.4)
 
-Python + PySide6 ile **v1.0'a kadar devam**. Rust port'u v1.0 sonrası ayrı bir proje olarak (`dictz-rs`) ele alınacak.
+Portable paketleme ve yayın otomasyonu. Bayram Windows + Pardus + macOS için tek dosya binary'ler istedi; artık her `v*` tag push'unda GitHub Actions 4 platform için build yapıyor ve Release'e ekliyor.
 
----
+### Eklenenler
 
-## Bu Oturumda Yapılanlar (v0.0.3)
+- `packaging/pyinstaller/dictz.spec` — tek PyInstaller spec. PyGlossary plugin'lerinin tamamını `collect_submodules("pyglossary.plugins")` ile dahil ediyor; QtWebEngine + Network + PrintSupport'u hidden_imports'a ekliyor; QtQuick/QtCharts/QtMultimedia gibi kullanmadıklarımızı excludes ile çıkarıyor (bundle ~80 MB küçülüyor). macOS'ta `BUNDLE` ile Info.plist düzgün bir `.app` üretiyor.
+- `packaging/appimage/build_appimage.sh` — PyInstaller `--onedir` çıktısını AppImage'a sarıyor. `linuxdeploy` yoksa indiriyor; `.desktop` ve ikon (python ile generated placeholder PNG) oluşturup `linuxdeploy --output appimage` ile tek dosya üretiyor.
+- `scripts/build.sh` ve `scripts/build.ps1` — yerel one-command build. Linux'ta tarball + opsiyonel AppImage, macOS'ta .app zip, Windows'ta onedir zip üretir. CI ile aynı çıktıyı verir.
+- `.github/workflows/release.yml` — tag matrix build (ubuntu-22.04, windows-latest, macos-13, macos-14). Her runner'da pip install → pyinstaller → platform-specific paketleme → artifact upload. `release` job artifact'ları topluyor, `softprops/action-gh-release@v2` ile GitHub Release oluşturuyor, auto-generated notes ekliyor.
+- `.github/workflows/test.yml` — her push/PR'da Linux/macOS/Windows × Python 3.10/3.11/3.12 matrix (9 kombinasyon) testleri çalıştırıyor.
+- `docs/PACKAGING.md` — build akışı, artifact tablosu, bilinen sınırlamalar (SmartScreen, Gatekeeper, glibc floor), gelecekteki iyileştirme adımları.
+- `tests/test_packaging.py` — spec + script + workflow dosyalarının varlığını ve doğru entry point'leri işaret ettiğini doğrulayan 6 test.
+- `.gitignore` — AppImage cache ekleri (`build/appimage-tools/`, `*.AppImage`).
 
-İşlevsel UI overhaul. v0.0.2'nin minimal UI'ı tamamen değişti; GoldenDict tarzı modern bir masaüstü aracı iskeleti kuruldu.
+### Değişenler
 
-### Yeni modüller
-
-- `dictz/ui/themes.py` — elle ayarlanmış açık ve koyu QSS temaları + tanım paneli CSS'i. `auto` seçeneği sistem paletini okuyup karar veriyor.
-- `dictz/ui/icons.py` — Qt standart ikonlarına isimli erişim (bundled icon set yok, her platformda çalışıyor).
-- `dictz/ui/definition_view.py` — Tek bir tanım görüntüleyici. **QWebEngineView** varsa onu kullanıyor (zengin HTML, resim, CSS); yoksa QTextBrowser'a düşüyor.
-- `dictz/ui/definition_tabs.py` — Sekmeli container, drag-to-reorder, close button, Ctrl+T / Ctrl+W.
-- `dictz/ui/sidebar.py` — Sol tarafta QDockWidget. Üç sekme: Sözlükler (checkbox ile aktif/pasif), Favoriler, Geçmiş.
-- `dictz/ui/dictionary_manager.py` — Sözlük ekle/kaldır/sırala/aktifleştir için ayrı dialog (Ctrl+M).
-- `dictz/ui/preferences_dialog.py` — Tema, yazı tipi, yazı boyutu, debounce ayarı (Ctrl+,).
-- `dictz/ui/main_window.py` — Tamamen yeniden yazıldı. Araç çubuğu + arama kutusu + öneriler + sekmeler + dock + status bar. Back/Forward navigasyon stack'i.
-- `dictz/storage/history.py` — `HistoryStore`: SQLite'ta favoriler + geçmiş + not. `dictz_history.db` dosyası `dictz_index.db` ile aynı klasörde.
-- `dictz/storage/settings.py` — `Preferences` dataclass'ı QSettings üzerinde typed arayüz; pencere geometrisi, dock durumu, zoom, son arama saklanıyor.
-
-### Değişen modüller
-
-- `dictz/storage/indexer.py` — `sort_order` sütunu eklendi; mevcut veritabanları `ALTER TABLE` ile upgrade ediliyor; `list_dictionaries` sıralı dönüyor; `set_sort_order` eklendi.
-- `dictz/core/query_manager.py` — `enabled_names` seti takip ediliyor; `search()` ve `suggest()` sadece aktif sözlüklere gidiyor; `set_enabled()` + `is_enabled()`.
-- `dictz/app.py` — HistoryStore açıyor, Preferences yüklüyor, hepsini MainWindow'a geçiriyor.
-- `pyproject.toml` — `PySide6-Addons` eklendi (QtWebEngine için).
-
-### Klavye kısayolları
-
-| Eylem | Kısayol |
-|-------|---------|
-| Arama kutusuna odaklan | Ctrl+F |
-| Mevcut sekmede aç | Enter |
-| Yeni sekmede aç | Ctrl+Enter |
-| Yeni sekme / Sekmeyi kapat | Ctrl+T / Ctrl+W |
-| Önceki / sonraki sekme | Ctrl+Tab / Ctrl+Shift+Tab |
-| Geri / İleri | Alt+← / Alt+→ |
-| Favori aç/kapat | Ctrl+D |
-| Yan paneli aç/kapat | Ctrl+B |
-| Büyüt / küçült / sıfırla | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Tercihler | Ctrl+, |
-| Sözlük ekle | Ctrl+O |
-| Sözlük yöneticisi | Ctrl+M |
-| Kelimeyi kopyala | Ctrl+Shift+C |
+- `pyproject.toml` — `Releases` URL eklendi; version 0.0.4.
+- `README.md` — en başa "Download" bölümü eklendi (her platform için artifact tablosu), Releases badge'i eklendi.
+- About-box version string'leri 0.0.4.
 
 ### Doğrulama
 
-24/24 test geçti (8 stardict + 3 indexer + sort_order + 3 dsl + 6 parser_registry + 5 history).
-Headless MainWindow construction testi başarılı: `QT_QPA_PLATFORM=offscreen` + `QTWEBENGINE_DISABLE_SANDBOX=1` ile pencere açılıyor, sidebar görünüyor, favoriler güncelliyor.
+24/24 test + 6 yeni packaging testi = **30/30**. Tüm Python dosyaları syntax-temiz.
 
 ### Tasarım kararları
 
-- **QWebEngineView + fallback**: Zengin HTML için QWebEngineView tercih edildi ama bazı PySide6 kurulumlarında (slim PyInstaller build'leri, bazı Linux repoları) yok. `HAS_WEBENGINE` bayrağıyla QTextBrowser'a otomatik düşüyoruz. Kullanıcı farkı görmez — sadece DSL'deki resimler/complex CSS kaybolur.
-- **QSS elle ayarlı**: qt-material gibi üçüncü-parti tema paketi yok. Light ve Dark QSS doğrudan `themes.py` içinde. Bakım basit, bağımlılık yok, her platformda tutarlı.
-- **Dock widget**: Kullanıcı sidebar'ı sağa taşıyabiliyor, floating yapabiliyor, kapatıp açabiliyor. QMainWindow'un hazır davranışı — kod yok.
-- **QSettings ile ayarlar**: Windows'ta registry, macOS'ta plist, Linux'ta INI — her platformda doğru yer. Preferences dataclass hem typed erişim hem default değer sağlıyor.
-- **Favoriler + geçmiş ayrı DB**: `dictz_history.db` indeks DB'sinden ayrı. İndeks her sözlük ekleme/çıkarmada yeniden yazılabilir, geçmiş ve favoriler kayıp olmaz.
-- **Navigation stack**: `_nav_history` + `_nav_cursor`. Yeni bir kelime açınca forward history silinir (browser mantığı). `_applying_nav` bayrağı back/forward sırasında stack'e tekrar push edilmesini engelliyor.
+- **PyInstaller `--onedir`**: Daha hızlı başlangıç, daha az antivirus false positive, daha az bellek. Tradeoff: tek dosya değil, klasör. Kullanıcı tarafında zip/tar/AppImage sarmalı ile tek dosya gibi görünüyor.
+- **AppImage yerine Flatpak değil**: AppImage her Linux dağıtımında çalışır, kurulum gerektirmez. Flatpak sandbox avantajı olsa da kurulum + runtime yükü var.
+- **macOS imzalanmamış**: Apple Developer Program $99/yıl, Bayram için henüz mantıklı değil. Kullanıcı ilk açışta right-click → Open.
+- **Windows imzalanmamış**: Code signing certificate maliyetli. SmartScreen uyarısı alacak; "More info → Run anyway" ile geçilir. v0.1.0 roadmap'inde sertifika var.
+- **Matrix build runners**: ubuntu-22.04 (glibc 2.35 floor, AppImage uyumu), windows-latest (2022), macos-13 (Intel), macos-14 (ARM64). macOS universal binary yerine iki ayrı build — binary ~50 MB daha küçük.
+- **Tag format**: `v*` tetikliyor, prerelease işareti `alpha/beta/rc` içeren tag'lerde otomatik veriliyor.
+
+### Build boyutları (CI'de gözlemlenecek)
+
+- Linux tarball: ~90 MB sıkıştırılmış, ~250 MB açık
+- Linux AppImage: ~95 MB tek dosya
+- Windows zip: ~85 MB sıkıştırılmış, ~230 MB açık
+- macOS zip (per arch): ~95 MB sıkıştırılmış, ~260 MB açık
+
+(Qt + QtWebEngine + Chromium çoğunluğu alıyor. QtWebEngine olmadan ~120 MB'a kadar iniyordu — opsiyonel build v0.1.0 roadmap'te.)
 
 ---
 
-## Bilinen Sınırlamalar / TODO (özet)
+## Önceki Oturumlarda Yapılanlar
+
+### v0.0.3 — Functional UI overhaul (2026-11-13)
+
+Modern GoldenDict-tarzı UI: sekmeler, dockable sidebar (Sözlükler/Favoriler/Geçmiş), back/forward navigation, koyu/açık tema, kalıcı favoriler + geçmiş, zoom, QWebEngineView renderer, klavye kısayolları, dictionary manager dialog. 11 UI modülü yeniden yazıldı. 24/24 test.
+
+### v0.0.2 — DSL + Babylon (2026-11-13)
+
+PyGlossary ile DSL (.dsl / .dsl.dz) ve Babylon (.bgl) parser'ları eklendi. `PyGlossaryDictionary` generic base — gelecek formatlar 3-4 satırla eklenebilir.
+
+### v0.0.1 — Bootstrap (2026-11-12)
+
+4 katmanlı mimari (UI/core/parsers/storage), native StarDict parser, SQLite FTS5 index, basic 3-pane UI.
+
+---
+
+## Bilinen Sınırlamalar / TODO
 
 Tam liste: [`TODO.md`](../TODO.md).
 
 Yakın sırada:
-- v0.0.4: AppImage + Windows portable zip + macOS .app
 - v0.0.5: Fuzzy arama (RapidFuzz), DSL'deki ses/resim
 - v0.0.6: TTS, pano izleme, global hotkey
 - v0.0.7: Anki + ekran OCR
 - v0.0.8: XDXF, Slob, DictD parser'ları
+- v0.0.9: Dictionary groups, full-text search, Hunspell morfoloji
+- v0.1.0: Panel'li preferences, shortcut editor, Windows code signing, macOS notarization
 
 ---
 
@@ -103,33 +102,41 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-Beklenen: 24 test geçer.
+Beklenen: 30 test geçer.
 
 ---
 
-## Çalıştırma
+## Release Çıkarma
+
+Portable binary release'leri otomatik:
 
 ```bash
-pip install -e .
-dictz
-# veya:
-python -m dictz
+git tag v0.0.4
+git push origin v0.0.4
 ```
 
-**Python 3.14 uyarısı:** PySide6 Python 3.14'te henüz tam destekli değil. Bayram'ın Windows'unda 3.14 kurulu ama PyPI'ye paketleme çalıştı (paket Python 3.10–3.12 hedefliyor). Uygulamayı çalıştırmak için Python 3.10–3.12 ile bir venv önerilir.
+GitHub Actions ~10 dakika içinde 5 artifact (Linux tarball + AppImage, Windows zip, macOS Intel zip, macOS ARM zip) üretip Release'e ekler.
 
-Test sözlüğü: **FreeDict** (https://freedict.org/) küçük StarDict dosyaları sağlar.
+PyPI release:
+
+```bash
+python -m build
+twine upload dist/*
+```
 
 ---
 
 ## Git Notes
 
 - Commit mesajları **İngilizce**
-- v0.0.3 commit başlığı: `v0.0.3: functional UI overhaul (tabs, sidebar, themes, favorites, history)`
-- Tag: `v0.0.3`
+- v0.0.4 commit başlığı: `v0.0.4: portable packaging (AppImage, Windows portable, macOS .app) + CI release pipeline`
+- Tag: `v0.0.4`
 
-## Deployment Notes
+---
 
-- **PyPI**: `python -m build && twine upload dist/*` (otomasyonsuz; API token ile)
-- **GitHub**: push + tag yeter; GitHub Releases henüz manuel
-- **crates.io**: dictz Python; crates.io Rust registry. v1.0 sonrası `dictz-rs` için.
+## Deployment Durumu
+
+- **GitHub repo**: https://github.com/bayramkotan/dictz (v0.0.3'te)
+- **PyPI**: https://pypi.org/project/dictz/0.0.3/ (v0.0.3 canlı)
+- **GitHub Releases**: v0.0.4 push edilince otomatik üretilecek
+- **crates.io**: dictz Python; v1.0 sonrası `dictz-rs` için
