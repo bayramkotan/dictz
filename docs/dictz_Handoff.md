@@ -2,141 +2,124 @@
 
 **Repo:** https://github.com/bayramkotan/dictz.git
 **PyPI:** https://pypi.org/project/dictz/
+**crates.io:** https://crates.io/crates/dictz
 **Releases:** https://github.com/bayramkotan/dictz/releases
 **Project path (Windows):** `C:\Github\dictz\`
 **Project path (CachyOS):** `/home/bayram/Github/dictz/`
 **License:** GPL-3.0+
-**Language:** Python 3.10+ (CI tests 3.10/3.11/3.12)
-**GUI:** PySide6 (+ QtWebEngine when available)
-
-> **Not:** İsim şimdilik `dictz`. İlerleyen aşamalarda değişebilir; o gün gelirse paket/repo/handoff adlarını topluca güncelleriz.
+**Language:** Python 3.10+ (CI tests 3.10–3.13) · Rust 1.75+ (dictz-rs crate)
+**GUI:** PySide6 (+ QtWebEngine)
 
 ---
 
 ## Current version
 
-**v0.0.4** — Cross-platform portable builds (AppImage, Windows portable zip, macOS .app) + GitHub Actions release pipeline
-**Next suggested version:** v0.0.5 — fuzzy arama (RapidFuzz) + DSL'deki ses/resim
+**v0.0.5** — Unified release pipeline (PyPI + GitHub Releases + crates.io) + Rust crate scaffold
+**Next suggested version:** v0.0.6 — fuzzy arama (RapidFuzz) + DSL'deki ses/resim
 
 ---
 
-## Bu Oturumda Yapılanlar (v0.0.4)
+## Bu Oturumda Yapılanlar (v0.0.5)
 
-Portable paketleme ve yayın otomasyonu. Bayram Windows + Pardus + macOS için tek dosya binary'ler istedi; artık her `v*` tag push'unda GitHub Actions 4 platform için build yapıyor ve Release'e ekliyor.
+Tag push'u her yere dağıtır. Daha önce `git push origin v0.0.X` sadece GitHub Releases'e artifact atıyordu; PyPI yüklemesi manuel idi, crates.io ise hiç yoktu. Şimdi `v*` tag push'u → PyPI + GitHub Releases + crates.io hepsi paralel + otomatik.
 
-### Eklenenler
+### Yeni
 
-- `packaging/pyinstaller/dictz.spec` — tek PyInstaller spec. PyGlossary plugin'lerinin tamamını `collect_submodules("pyglossary.plugins")` ile dahil ediyor; QtWebEngine + Network + PrintSupport'u hidden_imports'a ekliyor; QtQuick/QtCharts/QtMultimedia gibi kullanmadıklarımızı excludes ile çıkarıyor (bundle ~80 MB küçülüyor). macOS'ta `BUNDLE` ile Info.plist düzgün bir `.app` üretiyor.
-- `packaging/appimage/build_appimage.sh` — PyInstaller `--onedir` çıktısını AppImage'a sarıyor. `linuxdeploy` yoksa indiriyor; `.desktop` ve ikon (python ile generated placeholder PNG) oluşturup `linuxdeploy --output appimage` ile tek dosya üretiyor.
-- `scripts/build.sh` ve `scripts/build.ps1` — yerel one-command build. Linux'ta tarball + opsiyonel AppImage, macOS'ta .app zip, Windows'ta onedir zip üretir. CI ile aynı çıktıyı verir.
-- `.github/workflows/release.yml` — tag matrix build (ubuntu-22.04, windows-latest, macos-13, macos-14). Her runner'da pip install → pyinstaller → platform-specific paketleme → artifact upload. `release` job artifact'ları topluyor, `softprops/action-gh-release@v2` ile GitHub Release oluşturuyor, auto-generated notes ekliyor.
-- `.github/workflows/test.yml` — her push/PR'da Linux/macOS/Windows × Python 3.10/3.11/3.12 matrix (9 kombinasyon) testleri çalıştırıyor.
-- `docs/PACKAGING.md` — build akışı, artifact tablosu, bilinen sınırlamalar (SmartScreen, Gatekeeper, glibc floor), gelecekteki iyileştirme adımları.
-- `tests/test_packaging.py` — spec + script + workflow dosyalarının varlığını ve doğru entry point'leri işaret ettiğini doğrulayan 6 test.
-- `.gitignore` — AppImage cache ekleri (`build/appimage-tools/`, `*.AppImage`).
+- **`dictz-rs/`** Rust crate iskeleti:
+  - `Cargo.toml` — `name = "dictz"`, version Python ile aynı, GPL-3.0-or-later, keywords, docs.rs
+  - `src/lib.rs` — `Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError` (`std::error::Error` impl), `VERSION` const. `#![forbid(unsafe_code)]`, dependency-free, 4 unit test
+  - `README.md` — rozetler, status table, install snippet
+- **`.github/workflows/release.yml`** 5 job'lı pipeline:
+  1. `build-python-binaries` — PyInstaller × 4 OS (Linux + Windows + macOS Intel + macOS ARM64)
+  2. `build-python-dist` — `python -m build` → wheel + sdist
+  3. `publish-pypi` — `pypa/gh-action-pypi-publish@release/v1` (OIDC, secret yok). Tag-gated.
+  4. `build-rust` — `cargo check` + `cargo test` + `cargo build --release` × 3 OS, Cargo cache
+  5. `publish-crates` — `cargo publish --dry-run` sonra `cargo publish` (CARGO_REGISTRY_TOKEN varsa). Tag-gated.
+  6. `github-release` — tüm artifact'ları (tarball, zip, AppImage, wheel, sdist) toplayıp Release'e ekliyor, body'de her registry için install snippet
+- `tests/test_packaging.py` — 7 yeni assertion: PyPI publish, crates.io publish, Rust build, Cargo.toml varlığı, Python↔Rust version lockstep, lisans tutarlılığı
 
-### Değişenler
+### Versiyon bump
 
-- `pyproject.toml` — `Releases` URL eklendi; version 0.0.4.
-- `README.md` — en başa "Download" bölümü eklendi (her platform için artifact tablosu), Releases badge'i eklendi.
-- About-box version string'leri 0.0.4.
-
-### Doğrulama
-
-24/24 test + 6 yeni packaging testi = **30/30**. Tüm Python dosyaları syntax-temiz.
+- `pyproject.toml` 0.0.4 → 0.0.5
+- `dictz/__init__.py` __version__ → 0.0.5
+- `dictz/app.py` __version__ → 0.0.5 (about-box)
+- `dictz-rs/Cargo.toml` version → 0.0.5
 
 ### Tasarım kararları
 
-- **PyInstaller `--onedir`**: Daha hızlı başlangıç, daha az antivirus false positive, daha az bellek. Tradeoff: tek dosya değil, klasör. Kullanıcı tarafında zip/tar/AppImage sarmalı ile tek dosya gibi görünüyor.
-- **AppImage yerine Flatpak değil**: AppImage her Linux dağıtımında çalışır, kurulum gerektirmez. Flatpak sandbox avantajı olsa da kurulum + runtime yükü var.
-- **macOS imzalanmamış**: Apple Developer Program $99/yıl, Bayram için henüz mantıklı değil. Kullanıcı ilk açışta right-click → Open.
-- **Windows imzalanmamış**: Code signing certificate maliyetli. SmartScreen uyarısı alacak; "More info → Run anyway" ile geçilir. v0.1.0 roadmap'inde sertifika var.
-- **Matrix build runners**: ubuntu-22.04 (glibc 2.35 floor, AppImage uyumu), windows-latest (2022), macos-13 (Intel), macos-14 (ARM64). macOS universal binary yerine iki ayrı build — binary ~50 MB daha küçük.
-- **Tag format**: `v*` tetikliyor, prerelease işareti `alpha/beta/rc` içeren tag'lerde otomatik veriliyor.
+- **PyPI Trusted Publishing**: API token yerine OIDC. Tek seferlik ayarlama: pypi.org/manage/account/publishing/ → Add publisher → GitHub repo bayramkotan/dictz, workflow release.yml, environment: pypi. Secret yönetimi yok, token sızıntı riski yok.
+- **crates.io**: `CARGO_REGISTRY_TOKEN` GitHub repo Settings → Secrets → Actions'ta ayarlanmalı. Secret eksikse publish-crates job'ı warning ile skip eder (fail etmez).
+- **Rust crate mono-repo**: Ayrı repo yerine aynı repoda `dictz-rs/` olarak tutuldu. Python ve Rust birlikte evrimleşiyor, version numarası lockstep (test ile enforced).
+- **Dependency-free Rust scaffold**: v0.0.5'te thiserror vs. yok; manuel `fmt::Display` + `std::error::Error` impl. İlk parser (StarDict) geldiğinde flate2 + memchr eklenecek.
+- **Rust CI'da test sadece unit testler**: integration + benchmark v0.1.x'te.
 
-### Build boyutları (CI'de gözlemlenecek)
+### Doğrulama
 
-- Linux tarball: ~90 MB sıkıştırılmış, ~250 MB açık
-- Linux AppImage: ~95 MB tek dosya
-- Windows zip: ~85 MB sıkıştırılmış, ~230 MB açık
-- macOS zip (per arch): ~95 MB sıkıştırılmış, ~260 MB açık
-
-(Qt + QtWebEngine + Chromium çoğunluğu alıyor. QtWebEngine olmadan ~120 MB'a kadar iniyordu — opsiyonel build v0.1.0 roadmap'te.)
+54/54 test geçti, ruff clean, iki YAML workflow geçerli.
 
 ---
 
-## Önceki Oturumlarda Yapılanlar
+## Tag push ile ne olur
 
-### v0.0.3 — Functional UI overhaul (2026-11-13)
+```bash
+git tag v0.0.5 && git push origin v0.0.5
+```
 
-Modern GoldenDict-tarzı UI: sekmeler, dockable sidebar (Sözlükler/Favoriler/Geçmiş), back/forward navigation, koyu/açık tema, kalıcı favoriler + geçmiş, zoom, QWebEngineView renderer, klavye kısayolları, dictionary manager dialog. 11 UI modülü yeniden yazıldı. 24/24 test.
-
-### v0.0.2 — DSL + Babylon (2026-11-13)
-
-PyGlossary ile DSL (.dsl / .dsl.dz) ve Babylon (.bgl) parser'ları eklendi. `PyGlossaryDictionary` generic base — gelecek formatlar 3-4 satırla eklenebilir.
-
-### v0.0.1 — Bootstrap (2026-11-12)
-
-4 katmanlı mimari (UI/core/parsers/storage), native StarDict parser, SQLite FTS5 index, basic 3-pane UI.
+**~10 dakika içinde:**
+- https://pypi.org/project/dictz/0.0.5/ canlı
+- https://crates.io/crates/dictz canlı (CARGO_REGISTRY_TOKEN set ise)
+- https://github.com/bayramkotan/dictz/releases/tag/v0.0.5 → 5 artifact
+- **Her dağıtım kanalı tek tag'den besleniyor, hepsi senkron**
 
 ---
 
-## Bilinen Sınırlamalar / TODO
+## Ön koşul ayarları (tek seferlik)
+
+### PyPI Trusted Publishing
+
+1. https://pypi.org/manage/project/dictz/settings/publishing/ aç
+2. "Add a new publisher" → GitHub Actions → owner `bayramkotan`, repo `dictz`, workflow `release.yml`, environment `pypi`
+3. Save. API token'a gerek yok.
+
+### crates.io token
+
+1. https://crates.io/me (GitHub ile giriş)
+2. Account Settings → API Tokens → New Token → scope "publish-update"
+3. GitHub repo → Settings → Secrets and variables → Actions → New repository secret → `CARGO_REGISTRY_TOKEN` = token
+
+Her ikisi set edilince `git push origin v0.0.5` üç yere birden yayın yapar.
+
+---
+
+## Önceki Oturumlar (özet)
+
+- **v0.0.4** — Portable paketler (AppImage, Windows portable, macOS .app) + PyInstaller spec + matrix release pipeline
+- **v0.0.3** — Modern UI overhaul (sekmeler, sidebar, temalar, favoriler, geçmiş, QWebEngine)
+- **v0.0.2** — DSL + Babylon format desteği (PyGlossary)
+- **v0.0.1** — StarDict native parser, SQLite FTS5 index, basic UI
+
+---
+
+## TODO (özet)
 
 Tam liste: [`TODO.md`](../TODO.md).
 
-Yakın sırada:
-- v0.0.5: Fuzzy arama (RapidFuzz), DSL'deki ses/resim
-- v0.0.6: TTS, pano izleme, global hotkey
-- v0.0.7: Anki + ekran OCR
-- v0.0.8: XDXF, Slob, DictD parser'ları
-- v0.0.9: Dictionary groups, full-text search, Hunspell morfoloji
-- v0.1.0: Panel'li preferences, shortcut editor, Windows code signing, macOS notarization
+- v0.0.6: Fuzzy arama (RapidFuzz), DSL ses/resim
+- v0.0.7: TTS, pano izleme, global hotkey
+- v0.0.8: Anki + OCR
+- v0.0.9: XDXF, Slob, DictD parser'ları
+- v0.1.0: UI polish (panel'li tercihler, shortcut editor), Windows code signing, macOS notarization
 
----
-
-## Test Çalıştırma
-
-```bash
-pip install -e ".[dev]"
-pytest -v
-```
-
-Beklenen: 30 test geçer.
-
----
-
-## Release Çıkarma
-
-Portable binary release'leri otomatik:
-
-```bash
-git tag v0.0.4
-git push origin v0.0.4
-```
-
-GitHub Actions ~10 dakika içinde 5 artifact (Linux tarball + AppImage, Windows zip, macOS Intel zip, macOS ARM zip) üretip Release'e ekler.
-
-PyPI release:
-
-```bash
-python -m build
-twine upload dist/*
-```
+Rust tarafı:
+- v0.1.x (dictz-rs): StarDict parser
+- v0.2.x: DSL + Babylon
+- v0.3.x: SQLite FTS5 + fuzzy
+- v1.0 (dictz-rs): Python edition ile feature parity
 
 ---
 
 ## Git Notes
 
 - Commit mesajları **İngilizce**
-- v0.0.4 commit başlığı: `v0.0.4: portable packaging (AppImage, Windows portable, macOS .app) + CI release pipeline`
-- Tag: `v0.0.4`
-
----
-
-## Deployment Durumu
-
-- **GitHub repo**: https://github.com/bayramkotan/dictz (v0.0.3'te)
-- **PyPI**: https://pypi.org/project/dictz/0.0.3/ (v0.0.3 canlı)
-- **GitHub Releases**: v0.0.4 push edilince otomatik üretilecek
-- **crates.io**: dictz Python; v1.0 sonrası `dictz-rs` için
+- v0.0.5 commit başlığı: `v0.0.5: unified release pipeline (PyPI + GitHub Releases + crates.io) + Rust crate scaffold`
+- Tag: `v0.0.5`

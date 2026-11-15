@@ -6,13 +6,13 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ## Near-term (v0.0.x)
 
-### v0.0.5 — fuzzy + rich media
+### v0.0.6 — fuzzy + rich media
 - 📋 Fuzzy / approximate matching with RapidFuzz on no-exact-hit
 - 📋 Highlighted suggestion ranking (closest first)
 - 📋 Inline pronunciation audio playback from DSL `[s]sound.wav[/s]`
 - 📋 Embedded images from DSL `[s]picture.jpg[/s]`
 
-### v0.0.6 — services
+### v0.0.7 — services
 - 📋 TTS with edge-tts (40+ languages, neural voices)
 - 📋 Per-dictionary / per-language voice mapping
 - 📋 Clipboard monitor (Ctrl-C triggers lookup) with opt-in toggle
@@ -72,6 +72,7 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ## Recently done
 
+- ✅ **v0.0.5** — unified release pipeline (one tag → PyPI + GitHub Releases + crates.io); PyPI Trusted Publishing; `dictz-rs/` Rust crate scaffold; Python↔Rust version lockstep
 - ✅ **v0.0.4** — cross-platform portable builds (Linux tarball + AppImage, Windows portable zip, macOS .app); PyInstaller spec; GitHub Actions matrix release pipeline
 - ✅ **v0.0.3** — tabbed UI, sidebar, themes, zoom, window state, QWebEngine renderer, keyboard shortcuts, dictionary manager dialog
 - ✅ **v0.0.2** — DSL + Babylon parsers via PyGlossary

@@ -5,6 +5,21 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] — 2026-11-15
+
+### Added
+- **Unified release pipeline** — one `v*` tag push now triggers PyPI, GitHub Releases **and** crates.io in parallel
+- **PyPI auto-publish** via Trusted Publishing (OIDC, no API token in secrets) — `pypa/gh-action-pypi-publish@release/v1`
+- **`dictz-rs/` Rust crate scaffold** — `Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError`, `VERSION`, 4 unit tests, dependency-free (`#![forbid(unsafe_code)]`), GPL-3.0-or-later, version pinned to the Python package's version
+- **crates.io auto-publish** — dry-run + `cargo publish` gated on `CARGO_REGISTRY_TOKEN` secret
+- **Rust CI** — `cargo check` + `cargo test` + `cargo build --release` on Ubuntu / Windows / macOS matrix, with Cargo cache
+- `dictz-rs/README.md` — crate-level docs with badges, status table, install snippet
+- GitHub Release body auto-generated with per-registry install instructions
+- `tests/test_packaging.py` — 7 new assertions covering PyPI publish, crates.io publish, Rust build, Cargo.toml existence, Python↔Rust version sync, and shared license
+
+### Changed
+- `release.yml` restructured into 5 jobs: `build-python-binaries` (4 OS PyInstaller), `build-python-dist` (wheel + sdist), `publish-pypi` (tag-gated, OIDC), `build-rust` (3 OS Rust matrix), `publish-crates` (tag-gated), `github-release` (collects everything)
+
 ## [0.0.4] — 2026-11-15
 
 ### Added

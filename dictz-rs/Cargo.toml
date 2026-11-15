@@ -1,0 +1,36 @@
+[package]
+name = "dictz"
+version = "0.0.5"
+edition = "2021"
+rust-version = "1.75"
+authors = ["Bayram Kotan <bayramkotan@gmail.com>"]
+description = "dictz — a cross-platform multi-format offline dictionary (Rust port of github.com/bayramkotan/dictz)"
+documentation = "https://docs.rs/dictz"
+repository = "https://github.com/bayramkotan/dictz"
+homepage = "https://github.com/bayramkotan/dictz"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["dictionary", "stardict", "offline", "lexicography", "translation"]
+categories = ["text-processing", "command-line-utilities"]
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+    "README.md",
+    "../LICENSE",
+]
+
+[lib]
+name = "dictz"
+path = "src/lib.rs"
+
+[dependencies]
+# Keep minimal for the initial release — only std-library needed for the current skeleton.
+# Real StarDict/DSL/Babylon parsers will add flate2, memchr, byteorder as they land.
+
+[dev-dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
