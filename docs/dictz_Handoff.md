@@ -7,8 +7,36 @@
 **Project path (Windows):** `C:\Github\dictz\`
 **Project path (CachyOS):** `/home/bayram/Github/dictz/`
 **License:** GPL-3.0+
-**Language:** Python 3.10+ (CI: 3.10–3.13) · Rust (dictz-rs crate)
-**GUI:** PySide6 (+ QtWebEngine)
+**Language:** dictz is built **twice**, once in **Python** and once in **Rust** (details below)
+**GUI (Python):** PySide6 (+ QtWebEngine) · **GUI (Rust):** toolkit to be decided in v0.1.0
+
+---
+
+## ⚠️ Two editions: Python + Rust
+
+This application is developed in **both Python and Rust**. Rust is not a side library or a "maybe later" idea. It becomes the same full application.
+
+| | Python edition | Rust edition |
+|---|---|---|
+| Folder | `dictz/` | `dictz-rs/` |
+| Package | PyPI `dictz` | crates.io `dictz` |
+| Goal | full app (GUI) | full app (CLI + GUI), same features |
+| Version | `dictz/__init__.py` | `dictz-rs/Cargo.toml`, **always the same number** |
+| CI | `ci.yml` | `ci.yml` (same file, same tag) |
+
+Rules:
+- Every version moves the Rust track forward too. Python must not race ahead while Rust stays an empty scaffold.
+- When a feature is built in Python, its Rust counterpart is planned in the same version or the next one (`TODO.md` → "Rust edition" section).
+- Both editions are verified with the same selftest checks (StarDict, DSL, Babylon, FTS5).
+- Status: Python has the full GUI + 3 formats (StarDict, DSL, Babylon). Rust is only a scaffold (`Dictionary` trait, types, error type, 4 tests). The gap will be closed step by step.
+
+Rust roadmap:
+- v0.0.6: StarDict parser + CLI (`lookup`, `--version`, `--selftest`)
+- v0.0.7: FTS5 index + fuzzy
+- v0.0.8: DSL
+- v0.0.9: Babylon
+- v0.1.0: GUI MVP + portable Rust binaries
+- v1.0: full parity
 
 ---
 
@@ -195,12 +223,14 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 Full list: [`TODO.md`](../TODO.md).
 
-- v0.0.6: **first, the A2 fix (tags-only trigger)**, then fuzzy search and DSL audio/images
-- v0.0.7: TTS, clipboard watching, global hotkey
-- v0.0.8: Anki + OCR
-- v0.0.9: XDXF, Slob, DictD
-- v0.1.0: preference panels, shortcut editor, Windows signing, macOS notarization, Intel macOS binary (universal2)
-- Rust: v0.1.x StarDict → v0.2.x DSL+Babylon → v0.3.x FTS5+fuzzy → v1.0 parity
+| Version | Python | Rust |
+|---|---|---|
+| v0.0.6 | **first, the A2 fix (tags-only trigger)**, fuzzy search, DSL audio/images | StarDict parser + CLI |
+| v0.0.7 | TTS, clipboard watching, global hotkey | FTS5 index + fuzzy |
+| v0.0.8 | Anki + OCR | DSL parser |
+| v0.0.9 | XDXF, Slob, DictD | Babylon parser |
+| v0.1.0 | preference panels, shortcut editor, signing, notarization, Intel macOS (universal2) | GUI MVP + portable Rust binaries |
+| v1.0 | — | full parity with Python |
 
 ---
 

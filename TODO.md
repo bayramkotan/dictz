@@ -38,6 +38,21 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ---
 
+## Rust edition (`dictz-rs/`), built alongside the Python edition
+
+dictz is built **twice**, in Python (`dictz`, PyPI) and in Rust (`dictz-rs/`, crates.io). The Rust side is not a library-only side project: it becomes the same full application (CLI + GUI), with the same features, version numbers and release. Every version moves the Rust track forward too.
+
+- ✅ v0.0.5: crate scaffold (`Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError`), version kept in lockstep with Python, published to crates.io from CI
+- 📋 v0.0.6: native StarDict parser (`.ifo` / `.idx` / `.dict` / `.dict.dz`) + `dictz-rs` CLI binary (`lookup`, `--version`, `--selftest`)
+- 📋 v0.0.7: SQLite FTS5 index (rusqlite, bundled) + fuzzy matching, the same schema as Python
+- 📋 v0.0.8: native DSL parser (`.dsl` / `.dsl.dz`, DSL markup → HTML)
+- 📋 v0.0.9: native Babylon `.bgl` parser
+- 📋 v0.1.0: decide the GUI toolkit and ship a GUI MVP (search box, results, definition view, dictionary manager); portable Rust binaries for Linux / Windows / macOS in the same GitHub Release
+- 📋 v1.0: Rust edition has full feature parity with the Python edition (tabs, favorites, history, themes, TTS, clipboard, Anki, OCR)
+- Rule: the same CI file (`ci.yml`), the same tag, the same selftest checks for both editions
+
+---
+
 ## v0.1.0 — first polished release
 - 📋 Preferences dialog gets panels (General / Search / Appearance / Shortcuts / Advanced)
 - 📋 Shortcut editor
@@ -51,7 +66,6 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 ---
 
 ## Post-v1.0 ideas
-- 💡 `dictz-rs` reaches feature parity with the Python edition
 - 💡 Mobile companion (Android via Chaquopy / Kivy; iOS)
 - 💡 Browser extension (select → send to dictz)
 - 💡 WebView-based "card mode" (Anki-style flashcard review in the app)
