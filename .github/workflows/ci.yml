@@ -1,5 +1,15 @@
 name: CI
 
+# One workflow for everything.
+#   push to main / PR  -> lint + test + rust + install-smoke
+#   push a v* tag      -> all of the above, then publish to PyPI, crates.io
+#                         and GitHub Releases (portable binaries attached)
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   PYPI_API_TOKEN        PyPI API token (pypi-...)
+#   CARGO_REGISTRY_TOKEN  crates.io API token
+# A tag release fails within seconds with a clear message if either is missing.
+
 on:
   push:
     branches: [main]
@@ -8,23 +18,61 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A newer push to the same branch/tag cancels the older run, so a re-pushed
+# tag never queues behind a stale run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  cancel-in-progress: true
 
 permissions:
-  contents: write     # GitHub Releases
-  id-token: write     # PyPI Trusted Publishing (OIDC)
+  contents: write
 
 env:
   FORCE_COLOR: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
-  # =====================================================================
-  # 1) Lint — fast feedback, blocks everything else
-  # =====================================================================
+  # ===================================================================
+  # 0) Release preflight — tag only. Fails fast if secrets are missing
+  #    or the tag does not match the version in the source files.
+  # ===================================================================
+  preflight:
+    name: Release preflight
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          missing=0
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "::error::PYPI_API_TOKEN secret is not set. Create a token at https://pypi.org/manage/account/token/ and add it under Settings -> Secrets and variables -> Actions."
+            missing=1
+          fi
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not set. Create a token at https://crates.io/settings/tokens and add it under Settings -> Secrets and variables -> Actions."
+            missing=1
+          fi
+          exit $missing
+      - name: Check tag matches source versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          py=$(sed -nE 's/^version = "([^"]+)"/\1/p' pyproject.toml | head -n1)
+          init=$(sed -nE 's/^__version__ = "([^"]+)"/\1/p' dictz/__init__.py)
+          rs=$(sed -nE 's/^version = "([^"]+)"/\1/p' dictz-rs/Cargo.toml | head -n1)
+          echo "tag=$tag pyproject=$py __init__=$init Cargo=$rs"
+          if [ "$tag" != "$py" ] || [ "$tag" != "$init" ] || [ "$tag" != "$rs" ]; then
+            echo "::error::Tag v$tag does not match pyproject ($py), dictz/__init__.py ($init) and dictz-rs/Cargo.toml ($rs)."
+            exit 1
+          fi
+
+  # ===================================================================
+  # 1) Lint
+  # ===================================================================
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -37,12 +85,10 @@ jobs:
           cache: pip
       - run: pip install "ruff>=0.3.0"
       - run: ruff check .
-      - run: ruff format --check . || echo "::warning::code is not ruff-formatted (non-blocking)"
-        continue-on-error: true
 
-  # =====================================================================
-  # 2) Python test matrix — every push + PR
-  # =====================================================================
+  # ===================================================================
+  # 2) Python test matrix
+  # ===================================================================
   test:
     name: Test · ${{ matrix.os }} · py${{ matrix.python-version }}
     needs: lint
@@ -76,7 +122,7 @@ jobs:
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
             libxcb-cursor0 libdbus-1-3 libgl1 libfontconfig1
-      - name: Install project + dev deps + PyYAML + coverage
+      - name: Install project + dev deps
         shell: bash
         run: |
           python -m pip install --upgrade pip
@@ -88,11 +134,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           QTWEBENGINE_DISABLE_SANDBOX: "1"
           QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu"
-        run: pytest -v --cov=dictz --cov-report=term --cov-report=xml
+        run: pytest -v --cov=dictz --cov-report=term
 
-  # =====================================================================
-  # 3) Rust check + test — every push + PR
-  # =====================================================================
+  # ===================================================================
+  # 3) Rust check + test
+  # ===================================================================
   rust:
     name: Rust · ${{ matrix.os }}
     needs: lint
@@ -117,13 +163,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('dictz-rs/Cargo.toml') }}
       - run: cargo check --all-targets
       - run: cargo test --all-targets
-      - name: Release build (tag only)
-        if: env.IS_TAG == 'true'
-        run: cargo build --release
 
-  # =====================================================================
-  # 4) Install smoke — wheel build + import test
-  # =====================================================================
+  # ===================================================================
+  # 4) Install smoke — wheel build + import
+  # ===================================================================
   install-smoke:
     name: Install smoke · py${{ matrix.python-version }}
     needs: test
@@ -149,29 +192,88 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build --wheel
           pip install dist/*.whl
-      - name: Smoke-import
-        env:
-          QT_QPA_PLATFORM: offscreen
+      - name: Console script + selftest (as a pip user would run it)
         run: |
-          python -c "import dictz; print('dictz version:', dictz.__version__)"
-          python -c "from dictz.core.query_manager import supported_extensions; print(supported_extensions())"
+          command -v dictz
+          dictz --version
+          dictz --selftest
 
-  # =====================================================================
-  # 5) Build Python portable binaries — tag only
-  # =====================================================================
-  build-python-binaries:
-    name: Py binary · ${{ matrix.artifact }}
+  # ===================================================================
+  # 5) Publish to PyPI — tag only, API token
+  # ===================================================================
+  publish-pypi:
+    name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, rust]
+    needs: [preflight, test, install-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          twine check dist/*
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+          print-hash: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+          retention-days: 7
+
+  # ===================================================================
+  # 6) Publish to crates.io — tag only, API token
+  # ===================================================================
+  publish-crates:
+    name: Publish to crates.io
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [preflight, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: dictz-rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish (skip if this version is already on crates.io)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          version=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n1)
+          status=$(curl -s -o /dev/null -w "%{http_code}" -A "dictz-ci" \
+            "https://crates.io/api/v1/crates/dictz/$version")
+          if [ "$status" = "200" ]; then
+            echo "dictz $version already on crates.io — nothing to do."
+            exit 0
+          fi
+          cargo publish
+
+  # ===================================================================
+  # 7) Portable binaries — tag only
+  #    No Intel macOS runner: GitHub's Intel macOS pool starves public
+  #    repos (jobs never start) and would block the whole release.
+  # ===================================================================
+  build-binaries:
+    name: Binary · ${{ matrix.artifact }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [preflight, test]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04,  artifact: dictz-linux-x86_64 }
+          - { os: ubuntu-22.04,   artifact: dictz-linux-x86_64 }
           - { os: windows-latest, artifact: dictz-windows-x86_64 }
-          - { os: macos-13,       artifact: dictz-macos-x86_64 }
           - { os: macos-latest,   artifact: dictz-macos-arm64 }
     steps:
       - uses: actions/checkout@v4
@@ -179,12 +281,6 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install project + PyInstaller
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m pip install pyinstaller
       - name: Linux Qt deps
         if: runner.os == 'Linux'
         run: |
@@ -194,142 +290,92 @@ jobs:
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
             libxcb-cursor0 libdbus-1-3 libnss3 libxcomposite1 libxdamage1 \
-            libxrandr2 libxtst6 libgl1 libfontconfig1
+            libxrandr2 libxtst6 libgl1 libfontconfig1 libfuse2
+      - name: Install project + PyInstaller
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pyinstaller
       - name: PyInstaller
         shell: bash
         run: pyinstaller packaging/pyinstaller/dictz.spec --noconfirm --clean
-      - name: Package Linux tarball + AppImage
+
+      # --- Prove the frozen binary actually works before shipping it ------
+      - name: Selftest frozen binary (Linux)
+        if: runner.os == 'Linux'
+        run: ./dist/dictz/dictz --selftest
+      - name: Selftest frozen binary (macOS)
+        if: runner.os == 'macOS'
+        run: ./dist/dictz.app/Contents/MacOS/dictz --selftest
+      - name: Selftest frozen binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # dictz.exe is a GUI-subsystem binary: no console, so wait for it
+          # explicitly and read the report it writes to a file.
+          $env:DICTZ_SELFTEST_REPORT = "$PWD\selftest.txt"
+          $p = Start-Process -FilePath "dist\dictz\dictz.exe" -ArgumentList "--selftest" -Wait -PassThru -NoNewWindow
+          if (Test-Path selftest.txt) { Get-Content selftest.txt }
+          if ($p.ExitCode -ne 0) { throw "selftest failed with exit code $($p.ExitCode)" }
+
+      - name: Package Linux (tar.gz + AppImage)
         if: runner.os == 'Linux'
         run: |
-          cd dist && tar czf ../${{ matrix.artifact }}.tar.gz dictz/ && cd ..
-          bash packaging/appimage/build_appimage.sh || true
-          mv dist/dictz-*.AppImage dictz-linux-x86_64.AppImage 2>/dev/null || true
-      - name: Package Windows zip
+          tar -C dist -czf ${{ matrix.artifact }}.tar.gz dictz
+          bash packaging/appimage/build_appimage.sh "${GITHUB_REF_NAME#v}"
+          cp dist/*.AppImage ${{ matrix.artifact }}.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./${{ matrix.artifact }}.AppImage --selftest
+      - name: Package Windows (zip)
         if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path dist/dictz -DestinationPath ${{ matrix.artifact }}.zip -Force
-      - name: Package macOS zip
+      - name: Package macOS (zip)
         if: runner.os == 'macOS'
-        run: cd dist && zip -qr ../${{ matrix.artifact }}.zip dictz.app/
+        run: cd dist && zip -qry ../${{ matrix.artifact }}.zip dictz.app
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             ${{ matrix.artifact }}.tar.gz
             ${{ matrix.artifact }}.zip
-            *.AppImage
-          if-no-files-found: ignore
+            ${{ matrix.artifact }}.AppImage
+          if-no-files-found: error
           retention-days: 7
 
-  # =====================================================================
-  # 6) Build Python wheel + sdist — tag only
-  # =====================================================================
-  build-python-dist:
-    name: Build sdist + wheel
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-      - run: pip install --upgrade build
-      - run: python -m build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: python-dist
-          path: dist/*
-          retention-days: 7
-
-  # =====================================================================
-  # 7) Publish to PyPI via Trusted Publishing — tag only
-  # =====================================================================
-  publish-pypi:
-    name: Publish to PyPI
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-python-dist
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: pypi
-      url: https://pypi.org/project/dictz/
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-dist
-          path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          skip-existing: true
-          print-hash: true
-
-  # =====================================================================
-  # 8) Publish to crates.io — tag only, token-gated
-  # =====================================================================
-  publish-crates:
-    name: Publish to crates.io
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: rust
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: crates-io
-      url: https://crates.io/crates/dictz
-    defaults:
-      run:
-        working-directory: dictz-rs
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish --dry-run --allow-dirty
-      - name: Publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "::warning::CARGO_REGISTRY_TOKEN secret not set — skipping crates.io publish. See docs/PACKAGING.md."
-            exit 0
-          fi
-          cargo publish --allow-dirty
-
-  # =====================================================================
-  # 9) GitHub Release — tag only, after everything
-  # =====================================================================
+  # ===================================================================
+  # 8) GitHub Release — tag only. Publishes whatever was built, even if
+  #    one platform's binary failed, so a single broken runner never
+  #    blocks the release.
+  # ===================================================================
   github-release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-python-binaries, build-python-dist, rust]
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.publish-pypi.result == 'success' }}
+    needs: [publish-pypi, publish-crates, build-binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Flatten
+      - name: Collect files
         run: |
           mkdir -p release
-          find artifacts -type f \
-            \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.AppImage" \
-               -o -name "*.whl" \) \
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.whl" \) \
             -exec cp -v {} release/ \;
           ls -lh release/
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*
           generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          fail_on_unmatched_files: false
           body: |
             ## Install
-            - **PyPI**: `pip install dictz==${{ github.ref_name }}` (strip the `v`)
-            - **crates.io** (Rust): `cargo add dictz@${{ github.ref_name }}` (strip the `v`)
-            - **Portable binaries**: pick the matching archive below
+            - **PyPI:** `pip install dictz` (or `pipx install dictz`)
+            - **crates.io:** `cargo add dictz`
+            - **Portable:** download the archive for your platform below
+              - Linux: `dictz-linux-x86_64.AppImage` (`chmod +x` then run) or `.tar.gz`
+              - Windows: `dictz-windows-x86_64.zip` → run `dictz.exe`
+              - macOS (Apple Silicon): `dictz-macos-arm64.zip` → right-click `dictz.app` → Open
 
-            See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md).

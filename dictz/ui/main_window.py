@@ -469,13 +469,12 @@ class MainWindow(QMainWindow):
         self._apply_prefs_to_ui()
 
     def _about(self) -> None:
+        from .. import __version__
+
         QMessageBox.about(self, "dictz hakkında",
-            """
-            <h3>dictz 0.0.4</h3>
+            f"""
+            <h3>dictz {__version__}</h3>
             <p>Çok formatlı çevrimdışı sözlük uygulaması.</p>
-            <p style="color: #888; font-size: 12px;">
-                v0.0.4 — portable paketler (AppImage, Windows portable zip, macOS .app)
-            </p>
             <p>© 2026 Bayram Kotan · GPL-3.0+</p>
             <p><a href="https://github.com/bayramkotan/dictz">github.com/bayramkotan/dictz</a></p>
             """)

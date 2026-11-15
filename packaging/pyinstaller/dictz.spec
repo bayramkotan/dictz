@@ -16,6 +16,14 @@ from pathlib import Path
 SPEC_DIR = Path(os.path.abspath(SPECPATH))
 PROJECT_ROOT = SPEC_DIR.parent.parent
 
+# Single source of truth for the version: dictz/__init__.py
+import re as _re
+VERSION = _re.search(
+    r'^__version__ = "([^"]+)"',
+    (PROJECT_ROOT / "dictz" / "__init__.py").read_text(encoding="utf-8"),
+    _re.MULTILINE,
+).group(1)
+
 block_cipher = None
 
 # Everything PyGlossary / Qt / SQLite needs that PyInstaller might miss
@@ -38,11 +46,11 @@ hidden_imports = [
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 hidden_imports += collect_submodules("pyglossary.plugins")
 
-datas = []
-try:
-    datas += collect_data_files("pyglossary")
-except Exception:
-    pass
+# PyGlossary discovers its format plugins by scanning the plugins directory on
+# disk (pkgutil.iter_modules), so the plugin .py sources must exist as real
+# files in the bundle — not only inside the PYZ archive. include_py_files=True
+# ships them; dictz.parsers.pyglossary_base points PyGlossary at that folder.
+datas = collect_data_files("pyglossary", include_py_files=True)
 
 # Strip imports we never use (kept small, don't trim essentials)
 excludes = [
@@ -74,7 +82,9 @@ excludes = [
 ]
 
 a = Analysis(
-    [str(PROJECT_ROOT / "dictz" / "__main__.py")],
+    # Absolute-import launcher; dictz/__main__.py uses a relative import that
+    # fails when PyInstaller runs it as a top-level script.
+    [str(SPEC_DIR / "launch_dictz.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
     datas=datas,
@@ -129,8 +139,8 @@ if sys.platform == "darwin":
             "CFBundleName": "dictz",
             "CFBundleDisplayName": "dictz",
             "CFBundleIdentifier": "com.bayramkotan.dictz",
-            "CFBundleVersion": "0.0.4",
-            "CFBundleShortVersionString": "0.0.4",
+            "CFBundleVersion": VERSION,
+            "CFBundleShortVersionString": VERSION,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
         },

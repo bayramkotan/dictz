@@ -1,19 +1,17 @@
-"""dictz application entry point."""
+"""dictz application entry point.
+
+    dictz              launch the GUI
+    dictz --version    print the version and exit
+    dictz --selftest   headless check that dictionaries can be read; exit 0/1
+"""
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from . import __version__  # single source of truth: dictz/__init__.py
 
-from .core.query_manager import QueryManager
-from .storage.history import HistoryStore
-from .storage.indexer import IndexStore
-from .storage.settings import Preferences
-from .ui.main_window import MainWindow
-
-__version__ = "0.0.5"
 APP_NAME = "dictz"
 
 
@@ -29,7 +27,26 @@ def user_data_dir() -> Path:
         return base / APP_NAME.lower()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+
+    # Non-GUI commands are handled before Qt is imported.
+    if "--version" in args or "-V" in args:
+        print(f"dictz {__version__}")
+        return 0
+    if "--selftest" in args:
+        from .selftest import run
+
+        return run()
+
+    from PySide6.QtWidgets import QApplication
+
+    from .core.query_manager import QueryManager
+    from .storage.history import HistoryStore
+    from .storage.indexer import IndexStore
+    from .storage.settings import Preferences
+    from .ui.main_window import MainWindow
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
@@ -38,13 +55,11 @@ def main() -> int:
 
     data_dir = user_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    index_path = data_dir / "dictz_index.db"
-    history_path = data_dir / "dictz_history.db"
 
-    index_store = IndexStore(index_path)
+    index_store = IndexStore(data_dir / "dictz_index.db")
     index_store.open()
 
-    history_store = HistoryStore(history_path)
+    history_store = HistoryStore(data_dir / "dictz_history.db")
     history_store.open()
 
     prefs = Preferences.load()
