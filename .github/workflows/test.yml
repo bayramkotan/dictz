@@ -59,21 +59,20 @@ jobs:
           - ubuntu-24.04
           - windows-2022
           - windows-latest
-          - macos-13       # Intel x86_64
           - macos-latest   # ARM64 (Apple Silicon)
         python-version: ['3.10', '3.11', '3.12', '3.13']
         exclude:
           # Trim the matrix. Ubuntu 22.04 + windows-2022 carry the full matrix
           # across Python versions; the newer OS images sample one Python only.
-          # macos-13 Intel runners are the most contended pool on GitHub-hosted —
-          # keep it to a single Python version to reduce queue time.
+          # macos-13 Intel was removed from the test matrix because GitHub's
+          # Intel macOS hosted-runner pool is heavily contended for public repos
+          # (jobs sat Queued for 15+ minutes). Intel macOS is still built in
+          # release.yml, and the pure-Python code we test is architecture-neutral
+          # (ARM64 pass ⇒ Intel pass).
           - { os: ubuntu-24.04, python-version: '3.10' }
           - { os: ubuntu-24.04, python-version: '3.11' }
           - { os: windows-latest, python-version: '3.10' }
           - { os: windows-latest, python-version: '3.11' }
-          - { os: macos-13, python-version: '3.10' }
-          - { os: macos-13, python-version: '3.11' }
-          - { os: macos-13, python-version: '3.13' }
           - { os: macos-latest, python-version: '3.10' }
           - { os: macos-latest, python-version: '3.11' }
 
