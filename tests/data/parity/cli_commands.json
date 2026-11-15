@@ -1,0 +1,106 @@
+[
+ [
+  "gui",
+  "open the window (default)"
+ ],
+ [
+  "lookup",
+  "look a word up and print the articles"
+ ],
+ [
+  "suggest",
+  "headwords starting with a prefix (+ fuzzy fill)"
+ ],
+ [
+  "fuzzy",
+  "\"did you mean\" candidates for a word"
+ ],
+ [
+  "random",
+  "a random article"
+ ],
+ [
+  "dicts",
+  "list dictionaries"
+ ],
+ [
+  "add",
+  "add dictionary files or folders"
+ ],
+ [
+  "remove",
+  "remove dictionaries from dictz (files are kept)"
+ ],
+ [
+  "enable",
+  "enable dictionaries"
+ ],
+ [
+  "disable",
+  "disable dictionaries"
+ ],
+ [
+  "move",
+  "change a dictionary's position"
+ ],
+ [
+  "info",
+  "details of a dictionary (name or file)"
+ ],
+ [
+  "reindex",
+  "rebuild the search index"
+ ],
+ [
+  "scan",
+  "find dictionary files in folders"
+ ],
+ [
+  "dump",
+  "export a dictionary as tsv / json / txt"
+ ],
+ [
+  "history",
+  "lookup history"
+ ],
+ [
+  "favorites",
+  "favorite words"
+ ],
+ [
+  "config",
+  "show and change settings"
+ ],
+ [
+  "paths",
+  "where dictz keeps its files"
+ ],
+ [
+  "doctor",
+  "check the installation"
+ ],
+ [
+  "selftest",
+  "headless self-test (exit 0 = OK)"
+ ],
+ [
+  "update",
+  "update this copy of dictz"
+ ],
+ [
+  "version",
+  "print the version"
+ ],
+ [
+  "completion",
+  "shell completion script"
+ ],
+ [
+  "shell",
+  "interactive lookup prompt"
+ ],
+ [
+  "help",
+  "show help"
+ ]
+]

@@ -13,7 +13,7 @@ from dictz.app import main  # noqa: E402
 
 def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == f"dictz {__version__}"
+    assert capsys.readouterr().out.strip() == f"dictz {__version__} (Python edition)"
 
 
 def test_selftest_passes(capsys: pytest.CaptureFixture[str]) -> None:

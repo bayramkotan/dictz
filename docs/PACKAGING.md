@@ -4,7 +4,7 @@ Everything is driven by one workflow, `.github/workflows/ci.yml`.
 
 | Event | What runs |
 |---|---|
-| pull request, or Actions → CI → **Run workflow** | lint · Python tests (Linux/Windows/macOS × 3.10–3.13) · Rust check + test (incl. parity tests) + library-only build + `--selftest` · wheel install smoke + `dictz --selftest` |
+| pull request, or Actions → CI → **Run workflow** | lint · Python tests (Linux/Windows/macOS × 3.10–3.14) · Rust check + test (incl. parity tests) + library-only build + `--selftest` · wheel install smoke + `dictz --selftest` |
 | push to `main` (no tag) | nothing — so a release (main + tag push) shows up as exactly **one** run |
 | push a `v*` tag | all of the above, then **preflight** → publish to **PyPI** (Python edition) + **crates.io** (Rust edition) → build portable binaries of both editions (each runs `--selftest`) → **GitHub Release** |
 
@@ -53,15 +53,32 @@ No Intel macOS binary: GitHub's Intel macOS runners do not start reliably for pu
 ## Self-test
 
 ```bash
-dictz --selftest      # exit 0 = OK
+dictz --selftest      # exit 0 = OK (same as `dictz selftest`)
 dictz --version
+dictz doctor          # install kind, paths, index, history + selftest
 ```
 
-`--selftest` loads a generated StarDict and DSL dictionary, checks the DSL and Babylon plugins, and creates an SQLite FTS5 index — without opening a window. CI runs it against every frozen binary, the AppImage, and the pip-installed console script. On Windows (`dictz.exe` has no console) set `DICTZ_SELFTEST_REPORT=path\to\report.txt` to get the report in a file.
+`--selftest` loads a generated StarDict and DSL dictionary, checks the DSL and Babylon plugins, and creates an SQLite FTS5 index — without opening a window. CI runs it against every frozen binary, the AppImage, and the pip-installed console script. On Windows both `dictz.exe` builds are windowed programs; for CLI commands they attach to the console they were started from (Python: `AttachConsole` + `CONOUT$`, Rust: `windows-sys`), so `dictz lookup …` prints in cmd / PowerShell. For CI, `DICTZ_SELFTEST_REPORT=path\to\report.txt` still writes the selftest report to a file.
+
+## Updating an installed copy
+
+`dictz update` (both editions) detects how it was installed and updates it in place — nothing is moved:
+
+| Edition | Installed with | `dictz update` runs |
+|---|---|---|
+| Python | pip in a venv / `--user` / system | `python -m pip install -U dictz` (system: with `sudo`, plus `--break-system-packages` on PEP 668 distros) |
+| Python | pipx | `pipx upgrade dictz` |
+| Python | editable checkout | nothing; tells you to `git pull` |
+| Python | AppImage | downloads the new AppImage and replaces the running file |
+| Python | portable zip / tar.gz | downloads the new archive to your Downloads folder and says where to extract it |
+| Rust | `cargo install` | `cargo install dictz --locked --force` |
+| Rust | portable binary | downloads the release archive and swaps the executable (Windows keeps `dictz.old` until the next start) |
+
+`dictz update --check` only compares versions (PyPI or crates.io); `--yes` skips the question.
 
 ## Parity between the editions
 
-`tests/data/parity/` holds `sample.dsl` (+ `sample.dsl.files.zip`), `sample.bgl` and the golden files the Python edition produces from them (`*_golden.json`). `dictz-rs/tests/parity.rs` requires the Rust parsers to produce exactly the same headwords, definitions and metadata, and the same fuzzy scores; `tests/test_parity.py` checks the Python side still matches. After an intentional change, regenerate with `python tests/data/parity/make_samples.py`.
+`tests/data/parity/` holds `sample.dsl` (+ `sample.dsl.files.zip`), `sample.bgl` and the golden files the Python edition produces from them (`*_golden.json`). `dictz-rs/tests/parity.rs` requires the Rust parsers to produce exactly the same headwords, definitions and metadata, and the same fuzzy scores; `tests/test_parity.py` checks the Python side still matches. Since v0.0.7 the same folder also pins the article-text conversion (`text_golden.json`), the settings schema (`settings_schema.json`), the CLI command list (`cli_commands.json`), the shell completion scripts (`completion_*.txt`, also copied to `dictz-rs/src/completion/`) and the shortcuts (`shortcuts.json`). After an intentional change, regenerate with `python tests/data/parity/make_samples.py`.
 
 ## Local builds
 

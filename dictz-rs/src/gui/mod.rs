@@ -3,32 +3,46 @@
 //! Same layout and features as the Python edition's Qt window: menu bar,
 //! toolbar with back/forward, live search with suggestions, tabbed articles,
 //! a sidebar with dictionaries / favorites / history, dictionary manager,
-//! preferences, light/dark themes, zoom and keyboard shortcuts.
+//! dictionary bar, “found in” panel, find in page, detailed preferences,
+//! background loading, light/dark themes, zoom and keyboard shortcuts.
 
 mod app;
 mod audio;
 mod fonts;
+mod prefs_window;
 mod render;
 pub mod system;
 
 use std::path::PathBuf;
 
-/// Start the GUI. Blocks until the window is closed.
-pub fn run(data_dir: PathBuf) -> Result<(), String> {
+use crate::paths::PREFS_FILE;
+use crate::settings::{Preferences, SETTINGS_FILE};
+
+/// Start the GUI, adding `files` (dictionaries) first. Blocks until the
+/// window is closed.
+pub fn run(data_dir: PathBuf, files: Vec<PathBuf>) -> Result<(), String> {
+    let _ = std::fs::create_dir_all(&data_dir);
+    let mut prefs = Preferences::load(&data_dir.join(SETTINGS_FILE));
+    prefs.migrate_from_ini(&data_dir.join(PREFS_FILE));
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("dictz")
+        .with_app_id("dictz")
+        .with_inner_size([1280.0, 820.0])
+        .with_min_inner_size([640.0, 420.0])
+        .with_drag_and_drop(true)
+        .with_icon(app_icon());
+    if prefs.bool("general.always_on_top") {
+        viewport = viewport.with_always_on_top();
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("dictz")
-            .with_app_id("dictz")
-            .with_inner_size([1100.0, 720.0])
-            .with_min_inner_size([640.0, 420.0])
-            .with_icon(app_icon()),
-        persist_window: true,
+        viewport,
+        persist_window: prefs.bool("general.remember_window"),
         ..Default::default()
     };
     eframe::run_native(
         "dictz",
         options,
-        Box::new(move |cc| Ok(Box::new(app::DictzApp::new(cc, data_dir)))),
+        Box::new(move |cc| Ok(Box::new(app::DictzApp::new(cc, data_dir, prefs, files)))),
     )
     .map_err(|e| e.to_string())
 }

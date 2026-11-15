@@ -1,4 +1,5 @@
-"""Dictionary manager dialog."""
+"""Dictionary manager: table of dictionaries with order, enable, add files /
+folders, remove, move, reindex and details."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,108 +10,192 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
+    QMessageBox,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from ..core.query_manager import QueryManager
+from ..core.query_manager import QueryManager, scan_folder
 from .icons import icon
+
+FILE_FILTER = ("Tüm sözlükler (*.ifo *.dsl *.dz *.bgl);;StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dz);;"
+               "Babylon (*.bgl);;Tüm dosyalar (*)")
+
+
+def info_html(qm: QueryManager, name: str) -> str:
+    import html
+    import time
+
+    d = qm.dictionaries[name]
+    m = d.metadata
+    p = Path(m.file_path)
+    size = p.stat().st_size if p.exists() else 0
+    mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)) if p.exists() else "—"
+    media = qm.media(name)
+    rows = [
+        ("Ad", m.name), ("Biçim", m.format), ("Kelime", f"{m.word_count:,}"),
+        ("Kaynak dil", m.source_language or "—"), ("Hedef dil", m.target_language or "—"),
+        ("Yazar", m.author or "—"), ("Dosya", str(p)), ("Boyut", f"{size / 1024:,.0f} KB"),
+        ("Değiştirilme", mtime), ("Etkin", "evet" if qm.is_enabled(name) else "hayır"),
+        ("Medya klasörleri", "<br>".join(html.escape(str(x)) for x in (media.search_locations() if media else []))),
+    ]
+    body = "".join(f"<tr><td><b>{k}</b></td><td>{v if k == 'Medya klasörleri' else html.escape(v)}</td></tr>"
+                   for k, v in rows)
+    desc = f"<p>{html.escape(m.description)}</p>" if m.description else ""
+    return f"<table cellpadding=4>{body}</table>{desc}"
 
 
 class DictionaryManagerDialog(QDialog):
     dictionaries_changed = Signal()
+    add_paths_requested = Signal(list)
+
+    COLS = ["", "Ad", "Biçim", "Kelime", "Diller", "Dosya"]
 
     def __init__(self, query_manager: QueryManager, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Sözlük yöneticisi")
-        self.resize(640, 440)
         self.query_manager = query_manager
+        self.setWindowTitle("Sözlük yöneticisi")
+        self.resize(940, 520)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Yüklü sözlükler (etkinleştirmek için kutuyu işaretleyin):"))
-        self.list = QListWidget()
-        self.list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.list.itemChanged.connect(self._on_item_changed)
-        layout.addWidget(self.list, 1)
-        row = QHBoxLayout()
-        self.add_btn = QPushButton(icon("open"), "Ekle…")
-        self.remove_btn = QPushButton(icon("remove"), "Kaldır")
-        self.up_btn = QPushButton(icon("up"), "Yukarı")
-        self.down_btn = QPushButton(icon("down"), "Aşağı")
-        self.add_btn.clicked.connect(self._add)
-        self.remove_btn.clicked.connect(self._remove)
-        self.up_btn.clicked.connect(lambda: self._move(-1))
-        self.down_btn.clicked.connect(lambda: self._move(1))
-        row.addWidget(self.add_btn)
-        row.addWidget(self.remove_btn)
-        row.addStretch(1)
-        row.addWidget(self.up_btn)
-        row.addWidget(self.down_btn)
-        layout.addLayout(row)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.accept)
-        buttons.accepted.connect(self.accept)
-        layout.addWidget(buttons)
-        self._refresh()
+        layout.addWidget(QLabel("Sözlükler arama sırasına göre listelenir. Kutu = etkin. "
+                                "Çift tık: ayrıntılar."))
+        self.table = QTableWidget(0, len(self.COLS))
+        self.table.setHorizontalHeaderLabels(self.COLS)
+        self.table.verticalHeader().setVisible(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        hh = self.table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        self.table.itemChanged.connect(self._on_item_changed)
+        self.table.cellDoubleClicked.connect(lambda r, c: self._info())
+        layout.addWidget(self.table, 1)
 
-    def _refresh(self) -> None:
-        self.list.blockSignals(True)
-        self.list.clear()
-        for name in self.query_manager.loaded_names():
-            d = self.query_manager.dictionaries[name]
-            text = f"{name}  —  {d.metadata.format}  ·  {d.metadata.word_count:,} kelime"
-            it = QListWidgetItem(text)
-            it.setData(Qt.ItemDataRole.UserRole, name)
-            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            it.setCheckState(Qt.CheckState.Checked if self.query_manager.is_enabled(name) else Qt.CheckState.Unchecked)
-            self.list.addItem(it)
-        self.list.blockSignals(False)
+        row = QHBoxLayout()
+        buttons = [
+            ("Dosya ekle…", "open", self._add_files), ("Klasör ekle…", "folder", self._add_folder),
+            ("Kaldır", "remove", self._remove), ("En üste", "up", lambda: self._move("top")),
+            ("Yukarı", "up", lambda: self._move(-1)), ("Aşağı", "down", lambda: self._move(1)),
+            ("En alta", "down", lambda: self._move("bottom")), ("Yeniden indeksle", "refresh", self._reindex),
+            ("Bilgi", "help", self._info),
+        ]
+        for label, ic, fn in buttons:
+            b = QPushButton(icon(ic), label)
+            b.clicked.connect(fn)
+            row.addWidget(b)
+        row.addStretch(1)
+        layout.addLayout(row)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        bb.rejected.connect(self.reject)
+        bb.accepted.connect(self.accept)
+        bb.button(QDialogButtonBox.StandardButton.Close).setText("Kapat")
+        layout.addWidget(bb)
+        self.summary = QLabel("")
+        self.summary.setObjectName("hint")
+        layout.addWidget(self.summary)
+        self.refresh()
+
+    def refresh(self) -> None:
+        qm = self.query_manager
+        self.table.blockSignals(True)
+        names = qm.loaded_names()
+        self.table.setRowCount(len(names))
+        for r, name in enumerate(names):
+            m = qm.dictionaries[name].metadata
+            chk = QTableWidgetItem()
+            chk.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            chk.setCheckState(Qt.CheckState.Checked if qm.is_enabled(name) else Qt.CheckState.Unchecked)
+            chk.setData(Qt.ItemDataRole.UserRole, name)
+            self.table.setItem(r, 0, chk)
+            langs = f"{m.source_language} → {m.target_language}" if m.source_language else ""
+            for c, text in enumerate([name, m.format, f"{m.word_count:,}", langs, str(m.file_path)], start=1):
+                it = QTableWidgetItem(text)
+                it.setData(Qt.ItemDataRole.UserRole, name)
+                if c == 3:
+                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(r, c, it)
+        self.table.blockSignals(False)
+        enabled = [n for n in names if qm.is_enabled(n)]
+        words = sum(qm.dictionaries[n].metadata.word_count for n in enabled)
+        self.summary.setText(f"{len(enabled)} / {len(names)} sözlük etkin · {words:,} kelime")
 
     def _selected_name(self) -> str | None:
-        it = self.list.currentItem()
+        r = self.table.currentRow()
+        it = self.table.item(r, 0) if r >= 0 else None
         return it.data(Qt.ItemDataRole.UserRole) if it else None
 
-    def _add(self) -> None:
-        file_filter = ("Tüm sözlükler (*.ifo *.dsl *.dsl.dz *.bgl);;"
-                       "StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dsl.dz);;"
-                       "Babylon (*.bgl);;Tüm dosyalar (*)")
-        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", file_filter)
-        if not paths:
+    def _select(self, name: str) -> None:
+        for r in range(self.table.rowCount()):
+            if self.table.item(r, 0).data(Qt.ItemDataRole.UserRole) == name:
+                self.table.selectRow(r)
+                return
+
+    def _add_files(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", FILE_FILTER)
+        if paths:
+            self.add_paths_requested.emit([Path(p) for p in paths])
+
+    def _add_folder(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "Sözlük klasörü seçin")
+        if not d:
             return
-        for p in paths:
-            try:
-                self.query_manager.add_dictionary(Path(p))
-            except Exception as e:
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.critical(self, "Yüklenemedi", f"<b>{p}</b><br><br>{type(e).__name__}: {e}")
-        self._refresh()
-        self.dictionaries_changed.emit()
+        files = scan_folder(d, recursive=True)
+        if not files:
+            QMessageBox.information(self, "Klasör ekle", "Bu klasörde sözlük dosyası bulunamadı.")
+            return
+        self.add_paths_requested.emit(files)
 
     def _remove(self) -> None:
         name = self._selected_name()
         if not name:
             return
+        if QMessageBox.question(self, "Sözlüğü kaldır",
+                                f"“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)") \
+                != QMessageBox.StandardButton.Yes:
+            return
         self.query_manager.remove_dictionary(name)
-        self._refresh()
+        self.refresh()
         self.dictionaries_changed.emit()
 
-    def _move(self, delta: int) -> None:
+    def _move(self, delta) -> None:
         name = self._selected_name()
         if not name:
             return
+        names = self.query_manager.loaded_names()
+        i = names.index(name)
+        if delta == "top":
+            delta = -i
+        elif delta == "bottom":
+            delta = len(names) - 1 - i
         self.query_manager.move_dictionary(name, delta)
-        self._refresh()
-        for i in range(self.list.count()):
-            if self.list.item(i).data(Qt.ItemDataRole.UserRole) == name:
-                self.list.setCurrentRow(i)
-                break
+        self.refresh()
+        self._select(name)
         self.dictionaries_changed.emit()
 
-    def _on_item_changed(self, item: QListWidgetItem) -> None:
-        name = item.data(Qt.ItemDataRole.UserRole)
-        enabled = item.checkState() == Qt.CheckState.Checked
-        self.query_manager.set_enabled(name, enabled)
+    def _reindex(self) -> None:
+        name = self._selected_name()
+        qm = self.query_manager
+        if not name or qm.index_store is None:
+            return
+        n = qm.index_store.index_dictionary(qm.dictionaries[name])
+        QMessageBox.information(self, "Yeniden indeksle", f"{name}: {n:,} kelime indekslendi.")
+
+    def _info(self) -> None:
+        name = self._selected_name()
+        if name:
+            QMessageBox.information(self, name, info_html(self.query_manager, name))
+
+    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+        if item.column() != 0:
+            return
+        self.query_manager.set_enabled(item.data(Qt.ItemDataRole.UserRole),
+                                       item.checkState() == Qt.CheckState.Checked)
+        self.refresh()
         self.dictionaries_changed.emit()

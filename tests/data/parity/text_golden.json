@@ -1,0 +1,86 @@
+[
+ [
+  "plain text\nsecond line\n\n  indented",
+  "plain text\nsecond line\n\n  indented"
+ ],
+ [
+  "<b>apple</b> <i>n.</i><br/>elma<p style=\"padding-left:2em;margin:0\">meyve</p>",
+  "apple n.\nelma\n    meyve"
+ ],
+ [
+  "<ul><li>one</li><li>two <a href=\"bword://x\">x</a></li></ul><hr/>end",
+  "   • one\n   • two x\n────────\nend"
+ ],
+ [
+  "a &amp; b &lt;c&gt; &#65;&#x42; &nbsp;x &foo; &#xZZ; &#; & z",
+  "a &amp; b &lt;c&gt; &#65;&#x42; &nbsp;x &foo; &#xZZ; &#; & z"
+ ],
+ [
+  "<div style=\"margin-left: 24px\">px indent</div><blockquote>quoted</blockquote>",
+  "   px indent\n    quoted"
+ ],
+ [
+  "<pre>keep   spaces\n  and lines</pre>after",
+  "keep   spaces\n  and lines\nafter"
+ ],
+ [
+  "<p>open<p>second <u>under</u> <a href=\"sound://s.wav\">play</a></p>",
+  "open\nsecond under [♪ s.wav]play"
+ ],
+ [
+  "<style>b{}</style><script>x</script><!-- c --><img src=\"p.png\"/> text <object data=\"a.mp3\"><param/></object>",
+  "[p.png] text [♪ a.mp3]"
+ ],
+ [
+  "<font color=red>c</font>   many    spaces\t\ttabs",
+  "c many spaces tabs"
+ ],
+ [
+  "x < y and y > z",
+  "x z"
+ ],
+ [
+  "<p style=\"padding-left:1em;margin:0\"><b>elma</b> <i class=\"p\"><font color=\"green\">i.</font></i> </p><p style=\"padding-left:2em;margin:0\">meyve, <i>kırmızı</i> <font color=\"green\">yeşil</font> <font color=\"red\">kırmızı</font></p><p style=\"padding-left:3em;margin:0\"><span class=\"ex\"><font color=\"steelblue\">An apple a day.</font></span></p><p style=\"padding-left:2em;margin:0\">see <a href=\"bword://pear\">pear</a> and <a href=\"bword://orange juice\">orange juice</a></p><br/><img align=\"top\" src=\"apple.png\" alt=\"apple.png\" /> <object type=\"audio/x-wav\" data=\"apple.wav\" width=\"40\" height=\"40\"><param name=\"autoplay\" value=\"false\" /></object>",
+  "  elma i.\n    meyve, kırmızı yeşil kırmızı\n      An apple a day.\n    see pear and orange juice\n\n[apple.png] [♪ apple.wav]"
+ ],
+ [
+  "<b>go to <u class=\"accent\">x</u></b><br/><p style=\"padding-left:1em;margin:0\">gitmek</p><p style=\"padding-left:1em;margin:0\">informal <span class=\"sec\">extra</span></p>",
+  "go to x\n  gitmek\n  informal extra"
+ ],
+ [
+  "su, x<sup>2</sup> <font face=\"Helvetica\" class=\"dsl_t\">wɔːtə</font>",
+  "su, x2 wɔːtə"
+ ],
+ [
+  "armut",
+  "armut"
+ ],
+ [
+  "<p style=\"padding-left:0.3em;margin:0\">müzik türü [not a tag] a&nbsp;b</p><br/><a href=\"http://example.org\">example.org</a> <a href=\"https://dictz.example/\">site</a>",
+  " müzik türü [not a tag] a b\n\nexample.org site"
+ ],
+ [
+  "café AB &lt;tag&gt; ğı &csdot;\nline2",
+  "café AB &lt;tag&gt; ğı &csdot;\nline2"
+ ],
+ [
+  "<font color=\"#007000\">noun</font><br>\n<b>elma</b>, meyve",
+  "noun\nelma, meyve"
+ ],
+ [
+  "<b>Book</b><br>\n[buk]<br>\nkitap; defter",
+  "Book\n[buk]\nkitap; defter"
+ ],
+ [
+  "kiraz çilek ü",
+  "kiraz çilek ü"
+ ],
+ [
+  "kapı",
+  "kapı"
+ ],
+ [
+  "incir",
+  "incir"
+ ]
+]

@@ -1,0 +1,16 @@
+#compdef dictz
+# dictz zsh completion — add to ~/.zshrc:  eval "$(dictz completion zsh)"
+_dictz() {
+    if (( CURRENT == 2 )); then
+        compadd -- add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths random reindex remove rm s scan selftest shell suggest update upgrade version
+        return
+    fi
+    case "${words[2]}" in
+        enable|disable|remove|rm|move|info|reindex|dump) compadd -- ${(f)"$(dictz dicts --names 2>/dev/null)"} ;;
+        config) compadd -- list get set reset path export import ;;
+        favorites|fav) compadd -- list add remove clear ;;
+        completion) compadd -- bash zsh fish powershell ;;
+        *) _files ;;
+    esac
+}
+compdef _dictz dictz

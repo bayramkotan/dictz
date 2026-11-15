@@ -77,6 +77,29 @@ class HistoryStore:
             )
             return [row["word"] for row in cur.fetchall()]
 
+    def remove_history(self, word: str) -> None:
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM history WHERE word = ?", (word,))
+
+    def count(self) -> int:
+        with self._cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM history")
+            return cur.fetchone()[0]
+
+    def purge(self, max_entries: int) -> int:
+        """Keep only the newest ``max_entries`` lookups. Returns rows deleted."""
+        with self._cursor() as cur:
+            cur.execute(
+                "DELETE FROM history WHERE id NOT IN "
+                "(SELECT id FROM history ORDER BY looked_up DESC, id DESC LIMIT ?)",
+                (max_entries,),
+            )
+            return cur.rowcount
+
+    def clear_favorites(self) -> None:
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM favorites")
+
     def clear_history(self) -> None:
         with self._cursor() as cur:
             cur.execute("DELETE FROM history")

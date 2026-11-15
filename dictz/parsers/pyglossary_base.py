@@ -14,6 +14,25 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def _python314_compat() -> None:
+    """Python 3.14 moved the private ``_compression`` module to
+    ``compression._common._streams``. PyGlossary 4.x's Babylon reader still
+    imports ``_compression`` and is silently skipped without it ("Module
+    '_compression' not found ... skipping plugin 'babylon_bgl'"), so .bgl
+    files could not be opened. Register the new module under the old name.
+    """
+    if "_compression" in sys.modules:
+        return
+    try:
+        import _compression  # noqa: F401
+    except ImportError:
+        try:
+            from compression._common import _streams
+        except ImportError:
+            return
+        sys.modules["_compression"] = _streams
+
+
 def _import_glossary_class():
     """Import pyglossary's Glossary class, bundle-aware.
 
@@ -28,6 +47,7 @@ def _import_glossary_class():
     under ``sys._MEIPASS``. Every other PyGlossary module reads paths from
     pyglossary.core, so this one correction covers all of them.
     """
+    _python314_compat()
     if _is_frozen() and "pyglossary.core" not in sys.modules:
         frozen_flag = sys.frozen  # type: ignore[attr-defined]
         try:
@@ -41,6 +61,22 @@ def _import_glossary_class():
     return Glossary
 
 
+def _quiet_pyglossary() -> None:
+    """PyGlossary logs every optional plugin it skips (lxml missing, unknown
+    charset …) to the console. Those are not dictz errors; keep them out of the
+    terminal unless DICTZ_DEBUG is set."""
+    import os
+
+    if os.environ.get("DICTZ_DEBUG"):
+        return
+    try:
+        from pyglossary.core import log
+
+        log.setVerbosity(1)  # errors only
+    except Exception:  # noqa: BLE001 — cosmetic only
+        pass
+
+
 def _ensure_init() -> None:
     global _pyglossary_initialized
     if _pyglossary_initialized:
@@ -52,6 +88,7 @@ def _ensure_init() -> None:
             "pyglossary is required for DSL/Babylon support. "
             "Install with: pip install pyglossary"
         ) from exc
+    _quiet_pyglossary()
     if _is_frozen():
         # plugins-meta/index.json is not shipped in the bundle; PyGlossary
         # opens it without an existence check, so skip it and let the

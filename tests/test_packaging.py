@@ -224,13 +224,15 @@ def test_rust_crate_is_a_full_application() -> None:
     """crates.io ships the Rust edition app (binary `dictz`), not a stub."""
     cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
     assert '[[bin]]\nname = "dictz"' in cargo
-    assert 'default = ["gui", "audio"]' in cargo
+    assert 'default = ["cli", "gui", "audio", "update"]' in cargo
+    assert '"src/completion/*.txt"' in cargo, "completion scripts are include_str!-ed"
     assert '"Cargo.lock"' in cargo, "Cargo.lock must be published (binary crate)"
     assert (ROOT / "dictz-rs" / "Cargo.lock").is_file()
     src = ROOT / "dictz-rs" / "src"
     for module in ("stardict.rs", "dsl.rs", "babylon.rs", "index.rs", "history.rs",
                    "fuzzy.rs", "media.rs", "query.rs", "selftest.rs", "main.rs",
-                   "gui/app.rs"):
+                   "cli.rs", "updater.rs", "settings.rs", "shortcuts.rs", "html.rs",
+                   "gui/app.rs", "gui/prefs_window.rs", "gui/render.rs"):
         assert (src / module).is_file(), f"dictz-rs/src/{module} missing"
 
 
@@ -272,6 +274,19 @@ def test_ci_workflow_covers_multiple_python_versions() -> None:
     text = CI_YML.read_text(encoding="utf-8")
     present = sum(1 for v in ("3.10", "3.11", "3.12", "3.13") if f"'{v}'" in text)
     assert present >= 3, f"ci.yml should exercise 3+ Python versions, found {present}"
+
+
+def test_ci_workflow_tests_python_314() -> None:
+    """3.14 moved `_compression` (PyGlossary's Babylon plugin) — keep it tested."""
+    assert "'3.14'" in CI_YML.read_text(encoding="utf-8")
+    assert "Python :: 3.14" in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_both_editions_have_the_same_cli_modules() -> None:
+    assert (ROOT / "dictz" / "cli.py").is_file()
+    assert (ROOT / "dictz" / "core" / "updater.py").is_file()
+    assert (ROOT / "dictz-rs" / "src" / "cli.rs").is_file()
+    assert (ROOT / "dictz-rs" / "src" / "updater.rs").is_file()
 
 
 def test_ci_workflow_covers_all_three_oses() -> None:

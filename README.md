@@ -40,7 +40,7 @@ Binaries are unsigned: accept the SmartScreen / Gatekeeper prompt on first launc
 - PyPI: `pip install dictz` (or `pipx install dictz` on PEP-668 distros)
 - crates.io: `cargo install dictz` (app) · `cargo add dictz` (library). On Linux, building needs the ALSA headers (`libasound2-dev` on Debian/Ubuntu).
 
-Check any install with `dictz --selftest` (exit code 0 = dictionaries can be read).
+Check any install with `dictz doctor` or `dictz selftest` (exit code 0 = dictionaries can be read). Update any install with `dictz update`.
 
 ## Highlights
 
@@ -50,7 +50,9 @@ Check any install with `dictz --selftest` (exit code 0 = dictionaries can be rea
 - **Fuzzy search** — "did you mean" suggestions when nothing matches; suggestions ranked closest-first
 - **Pictures and sounds** — DSL `[s]` media from `*.dsl.files/` or `*.dsl.files.zip`: pictures inline, sounds with one click
 - **Offline** — no network calls, no telemetry
-- **Modern UI** — tabbed definitions, dockable sidebar (dictionaries / favorites / history), back/forward navigation, light + dark themes, configurable zoom and fonts
+- **Modern UI** — tabbed definitions, dictionary bar, "found in" panel, collapsible articles, find in page, sidebar (dictionaries / favorites / history), back/forward, light + dark themes, accent color, fonts, zoom
+- **Detailed settings** — 54 settings in 7 pages with search and per-setting reset, shared by both editions in one `settings.json`
+- **Full command line** — `dictz lookup`, `dicts`, `add`, `config`, `doctor`, **`dictz update`**, shell completion… the same in both editions
 - **Two editions** — Python and Rust, same features, same release, shared data
 - **Portable** — every release ships standalone binaries of both editions for Windows, Linux and macOS (Apple Silicon), each self-tested in CI before publishing
 
@@ -64,7 +66,61 @@ Check any install with `dictz --selftest` (exit code 0 = dictionaries can be rea
 - **Dictionary manager** — add / remove / reorder / enable / disable; dictionaries are reopened on the next start
 - **Zoom** — Ctrl+= / Ctrl+- / Ctrl+0
 - **Themes** — Light, Dark, Auto
-- **Rich HTML** — QWebEngineView renders DSL markup with images and formatting
+- **Rich HTML** — DSL markup with colors, pictures and sounds (QtWebEngine in Python, a native renderer in Rust)
+- **Dictionary bar** — one click turns a dictionary on/off, right-click keeps only that one
+- **Find in page** — Ctrl+Shift+F, F3 / Shift+F3, highlighted matches with a counter
+- **Background loading** — the window opens at once; dictionary folders are scanned on start
+
+## Command line
+
+Both editions have the same commands, options and output. Without a command the window opens; `dictz FILE…` opens it with those dictionaries.
+
+```bash
+dictz lookup apple            # articles as text (-d DICT, -p prefix, -f fuzzy, -n N, --json, --html)
+dictz suggest app             # headwords starting with "app" (+ ≈ fuzzy fill)
+dictz fuzzy aple              # "did you mean" candidates with scores
+dictz random                  # a random article
+dictz shell                   # interactive prompt (:fuzzy, :suggest, :dicts, :random, :q)
+
+dictz add ~/sozlukler -r      # add files or whole folders (--disabled, --reindex)
+dictz dicts                   # position, on/off, name, format, words, path (--json, --names)
+dictz enable / disable / remove NAME   # names may be partial
+dictz move NAME top           # up / down / top / bottom / position
+dictz info NAME|FILE          # metadata
+dictz reindex [NAME…]         # rebuild the search index
+dictz scan FOLDER --add       # find dictionary files, add the new ones
+dictz dump NAME -F txt -o out.txt      # tsv / json / txt
+
+dictz history [--clear | --remove WORD]
+dictz favorites [list | add | remove | clear] [WORD…]
+dictz config list             # every setting with value, range and description
+dictz config set search.fuzzy_cutoff 70
+dictz config get | reset | path | export FILE | import FILE
+dictz paths                   # data folder, settings, databases
+dictz doctor                  # install kind, paths, index, history, selftest
+dictz update [--check] [--yes]           # updates this copy where it is installed
+eval "$(dictz completion bash)"          # also zsh, fish, powershell
+```
+
+Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COLOR`), `-v` / `--version`. Aliases: `l`, `s`, `f`, `ls`, `rm`, `fav`, `upgrade`.
+
+`dictz update` knows how it was installed: pip / pipx / venv / `--user` / system / editable / AppImage / portable (Python), `cargo install` / portable binary (Rust).
+
+## Settings
+
+**Düzen → Tercihler** (Ctrl+,) or `dictz config`. 54 settings, stored in `settings.json` in the data folder and shared by both editions:
+
+| Page | Examples |
+|---|---|
+| Genel | restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background |
+| Görünüm | theme, accent color, UI font and size, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
+| Makale | font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, picture height, find highlight color |
+| Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
+| Sözlükler | dictionary folders scanned on start, recursive, reindex changed files |
+| Ses | auto-play, volume, system player |
+| Geçmiş ve Favoriler | history on/off, sidebar counts, database limit, clear on exit |
+
+The window has a search box over all settings, ↺ reset per setting, page reset and reset all, a Shortcuts page and an Advanced page (data folder, rebuild indexes, check updates, clear history / favorites, export / import).
 
 ## Install (from source)
 
@@ -96,21 +152,32 @@ More formats (XDXF, Slob, DictD, MDict) are on the [TODO](TODO.md).
 
 ## Keyboard shortcuts
 
-| Action | Shortcut |
-|--------|----------|
-| Focus search box | Ctrl+F |
-| Open in current tab | Enter |
-| Open in new tab | Ctrl+Enter |
-| New tab / Close tab | Ctrl+T / Ctrl+W |
-| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |
-| Back / Forward | Alt+← / Alt+→ |
-| Toggle favorite | Ctrl+D |
-| Toggle sidebar | Ctrl+B |
-| Zoom in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Preferences | Ctrl+, |
-| Add dictionary | Ctrl+O |
-| Dictionary manager | Ctrl+M |
-| Copy current word | Ctrl+Shift+C |
+The same in both editions (Yardım → Kısayollar, F1):
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+F | Arama kutusuna odaklan |
+| Enter | Ara (sonuç yoksa “Bunu mu demek istediniz?”) |
+| Ctrl+Enter | Yeni sekmede ara |
+| Ctrl+T | Yeni sekme |
+| Ctrl+W | Sekmeyi kapat |
+| Ctrl+Tab / Ctrl+Shift+Tab | Sonraki / önceki sekme |
+| Alt+← / Alt+→ | Geri / ileri |
+| Ctrl+R | Rastgele kelime |
+| Ctrl+D | Favorilere ekle / çıkar |
+| Ctrl+Shift+C | Kelimeyi kopyala |
+| Ctrl+Shift+A | Makaleyi metin olarak kopyala |
+| Ctrl+S | Makaleyi HTML olarak kaydet |
+| Ctrl+Shift+F | Sayfada bul |
+| F3 / Shift+F3 | Sonraki / önceki eşleşme |
+| Ctrl+= / Ctrl+- / Ctrl+0 | Büyüt / küçült / sıfırla |
+| Ctrl+B | Yan paneli göster/gizle |
+| F11 | Tam ekran |
+| Ctrl+O | Sözlük ekle |
+| Ctrl+Shift+O | Klasör ekle |
+| Ctrl+M | Sözlük yöneticisi |
+| Ctrl+, | Tercihler |
+| Ctrl+Q | Çıkış |
 
 ## Build portable binaries locally
 
@@ -170,7 +237,9 @@ Veya PyPI: `pip install dictz` (veya `pipx install dictz`).
 - **Bulanık arama** — sonuç yoksa "Bunu mu demek istediniz?" önerileri
 - **Resim ve ses** — DSL `[s]` dosyaları (`*.dsl.files/` veya `*.dsl.files.zip`)
 - **Çevrimdışı** — ağ yok, telemetri yok
-- **Modern arayüz** — sekmeler, dock, favoriler, geçmiş, koyu/açık tema
+- **Modern arayüz** — sekmeler, sözlük çubuğu, "bulunduğu sözlükler" paneli, katlanır makaleler, sayfada bul, favoriler, geçmiş, koyu/açık tema, vurgu rengi
+- **Ayrıntılı ayarlar** — 7 sayfada 54 ayar; arama kutusu, ayar başına sıfırlama; iki sürüm aynı `settings.json` dosyasını kullanır
+- **Tam komut satırı** — `dictz lookup`, `dicts`, `add`, `config`, `doctor`, **`dictz update`**, kabuk tamamlama… iki sürümde aynı (`dictz help`)
 - **İki sürüm** — Python ve Rust, aynı özellikler, aynı sürüm numarası
 - **Portable** — Windows/Linux/macOS için iki sürümün de binary'leri her release'te
 

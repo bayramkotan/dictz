@@ -43,6 +43,29 @@ pub struct DictionaryRow {
     pub enabled: bool,
     /// Position in the dictionary list.
     pub sort_order: i64,
+    /// File modification time when indexed (0 = unknown).
+    pub mtime: f64,
+    /// Source language.
+    pub source_language: String,
+    /// Target language.
+    pub target_language: String,
+}
+
+impl DictionaryRow {
+    /// `true` when the file changed since it was indexed.
+    pub fn changed(&self) -> bool {
+        self.mtime > 0.0 && (file_mtime(&self.path) - self.mtime).abs() > 1e-6
+    }
+}
+
+/// Modification time of a file in seconds (0 when missing).
+pub fn file_mtime(path: &Path) -> f64 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// The index database.
@@ -70,16 +93,25 @@ impl IndexStore {
             "ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE dictionaries ADD COLUMN mtime REAL DEFAULT 0",
+            [],
+        );
         Ok(Self { conn })
     }
 
-    /// Insert or replace the row of `dict` (enabled, sort order reset to 0).
+    /// Insert or update the row of `dict`. An existing row keeps its
+    /// `enabled` flag and `sort_order`.
     pub fn register_dictionary(&self, dict: &dyn Dictionary) -> Result<(), DictzError> {
         let m = dict.metadata();
         self.conn.execute(
-            "INSERT OR REPLACE INTO dictionaries
-                (name, path, format, word_count, source_lang, target_lang, description, enabled)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)",
+            "INSERT INTO dictionaries
+                (name, path, format, word_count, source_lang, target_lang, description, enabled, mtime)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)
+             ON CONFLICT(name) DO UPDATE SET
+                path = excluded.path, format = excluded.format, word_count = excluded.word_count,
+                source_lang = excluded.source_lang, target_lang = excluded.target_lang,
+                description = excluded.description, mtime = excluded.mtime",
             params![
                 m.name,
                 m.file_path.to_string_lossy(),
@@ -87,18 +119,58 @@ impl IndexStore {
                 m.word_count as i64,
                 m.source_language,
                 m.target_language,
-                m.description
+                m.description,
+                file_mtime(&m.file_path)
             ],
         )?;
         Ok(())
     }
 
+    /// One row by name.
+    pub fn get_dictionary(&self, name: &str) -> Result<Option<DictionaryRow>, DictzError> {
+        Ok(self
+            .list_dictionaries(false)?
+            .into_iter()
+            .find(|r| r.name == name))
+    }
+
+    /// Headwords of `dictionaries` in that order (each in index order),
+    /// duplicates removed — the fuzzy candidate list without loading files.
+    pub fn headwords(&self, dictionaries: &[String]) -> Result<Vec<String>, DictzError> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        let mut st = self
+            .conn
+            .prepare("SELECT headword FROM entries WHERE dictionary = ?1 ORDER BY rowid")?;
+        for name in dictionaries {
+            let rows = st.query_map(params![name], |r| r.get::<_, String>(0))?;
+            for w in rows {
+                let w = w?;
+                if seen.insert(w.clone()) {
+                    out.push(w);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// (dictionaries, indexed headwords).
+    pub fn stats(&self) -> Result<(i64, i64), DictzError> {
+        let d: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM dictionaries", [], |r| r.get(0))?;
+        let e: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
+        Ok((d, e))
+    }
+
     /// Rows ordered by `sort_order, name`.
     pub fn list_dictionaries(&self, enabled_only: bool) -> Result<Vec<DictionaryRow>, DictzError> {
         let sql = if enabled_only {
-            "SELECT name, path, format, word_count, enabled, sort_order FROM dictionaries WHERE enabled = 1 ORDER BY sort_order, name"
+            "SELECT name, path, format, word_count, enabled, sort_order, mtime, source_lang, target_lang FROM dictionaries WHERE enabled = 1 ORDER BY sort_order, name"
         } else {
-            "SELECT name, path, format, word_count, enabled, sort_order FROM dictionaries ORDER BY sort_order, name"
+            "SELECT name, path, format, word_count, enabled, sort_order, mtime, source_lang, target_lang FROM dictionaries ORDER BY sort_order, name"
         };
         let mut st = self.conn.prepare(sql)?;
         let rows = st.query_map([], |r| {
@@ -109,6 +181,9 @@ impl IndexStore {
                 word_count: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
                 enabled: r.get::<_, Option<i64>>(4)?.unwrap_or(1) != 0,
                 sort_order: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                mtime: r.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+                source_language: r.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                target_language: r.get::<_, Option<String>>(8)?.unwrap_or_default(),
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)

@@ -12,7 +12,7 @@ from ..parsers.base import Dictionary, DictionaryEntry
 from ..parsers.dsl import DSLDictionary
 from ..parsers.stardict import StarDictDictionary
 from ..storage.indexer import IndexStore
-from . import fuzzy
+from . import fuzzy as _fuzzy
 from .media import MediaResolver
 
 _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
@@ -39,6 +39,48 @@ def parser_for(path: Path | str) -> type[Dictionary]:
 
 def supported_extensions() -> list[str]:
     return sorted(_PARSER_REGISTRY.keys())
+
+
+def is_dictionary_file(path: Path | str) -> bool:
+    name = Path(path).name.lower()
+    return name.endswith((".ifo", ".dsl", ".dsl.dz", ".bgl"))
+
+
+def scan_folder(folder: Path | str, recursive: bool = True) -> list[Path]:
+    """Dictionary files (.ifo, .dsl, .dsl.dz, .bgl) under ``folder``, sorted.
+
+    Same rules as the Rust edition's ``query::scan_folder``.
+    """
+    root = Path(folder).expanduser()
+    if root.is_file():
+        return [root] if is_dictionary_file(root) else []
+    if not root.is_dir():
+        return []
+    out: list[Path] = []
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            entries = sorted(d.iterdir(), key=lambda p: p.name)
+        except OSError:
+            continue
+        for e in entries:
+            if e.is_dir():
+                if recursive and not e.name.startswith(".") and not e.name.lower().endswith(".files"):
+                    stack.append(e)
+            elif is_dictionary_file(e):
+                out.append(e)
+    return sorted(out, key=lambda p: str(p).lower())
+
+
+def _changed(row, path: Path) -> bool:
+    from ..storage.indexer import file_mtime
+
+    try:
+        stored = float(row["mtime"] or 0)
+    except (IndexError, KeyError, TypeError, ValueError):
+        stored = 0.0
+    return stored > 0 and abs(file_mtime(path) - stored) > 1e-6
 
 
 @dataclass(frozen=True)
@@ -79,35 +121,57 @@ class QueryManager:
         self._headword_cache = None
         return dictionary
 
-    def restore_from_index(self) -> tuple[list[str], list[str]]:
-        """Reload every dictionary recorded in the index (start-up).
+    def restore_from_index(self, names: list[str] | None = None, enabled_only: bool = False,
+                           reindex_changed: bool = False, progress=None) -> tuple[list[str], list[str]]:
+        """Reload dictionaries recorded in the index (start-up, CLI).
 
+        ``names`` limits which ones, ``enabled_only`` skips disabled ones,
+        ``reindex_changed`` rebuilds the index of files modified since they
+        were indexed. ``progress(i, total, name)`` is called before each.
         Returns (loaded names, error messages).
         """
         if self.index_store is None:
             return [], []
+        rows = [r for r in self.index_store.list_dictionaries(enabled_only=False)
+                if (names is None or r["name"] in names) and (not enabled_only or r["enabled"])
+                and r["name"] not in self.dictionaries]
         loaded: list[str] = []
         errors: list[str] = []
-        for row in self.index_store.list_dictionaries(enabled_only=False):
-            name = row["name"]
-            if name in self.dictionaries:
-                continue
+        for i, row in enumerate(rows):
+            if progress is not None:
+                progress(i, len(rows), row["name"])
             path = Path(row["path"])
             try:
-                dictionary = parser_for(path)(path)
-                dictionary.load()
+                dictionary = self.open_file(path)
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 errors.append(f"{path}: {exc}")
                 continue
-            real = dictionary.metadata.name
-            self.dictionaries[real] = dictionary
-            self._order.append(real)
-            self._media[real] = MediaResolver(path)
-            if row["enabled"]:
-                self.enabled_names.add(real)
-            loaded.append(real)
-        self._headword_cache = None
+            self.attach(dictionary, path, bool(row["enabled"]))
+            if reindex_changed and _changed(row, path):
+                self.index_store.index_dictionary(dictionary)
+            loaded.append(dictionary.metadata.name)
         return loaded, errors
+
+    @staticmethod
+    def open_file(path: Path | str) -> Dictionary:
+        """Parse a dictionary file (safe to call from a worker thread)."""
+        dictionary = parser_for(path)(path)
+        dictionary.load()
+        return dictionary
+
+    def attach(self, dictionary: Dictionary, path: Path | str, enabled: bool = True) -> None:
+        """Add an already-loaded dictionary at the end of the list (no indexing)."""
+        name = dictionary.metadata.name
+        if name in self.dictionaries:
+            self._order.remove(name)
+        self.dictionaries[name] = dictionary
+        self._order.append(name)
+        self._media[name] = MediaResolver(path)
+        if enabled:
+            self.enabled_names.add(name)
+        else:
+            self.enabled_names.discard(name)
+        self._headword_cache = None
 
     def remove_dictionary(self, name: str) -> None:
         if name in self.dictionaries:
@@ -161,20 +225,46 @@ class QueryManager:
 
     # ------------------------------------------------------------ lookups
 
-    def search(self, word: str, exact: bool = True) -> list[DictionaryEntry]:
+    def search(self, word: str, exact: bool = True, dictionaries: list[str] | None = None,
+               max_articles: int | None = None) -> list[DictionaryEntry]:
         if not word.strip():
             return []
         results: list[DictionaryEntry] = []
         for name in self._order:
             if name not in self.enabled_names:
                 continue
+            if dictionaries is not None and name not in dictionaries:
+                continue
+            if max_articles is not None and len(results) >= max_articles:
+                break
             try:
                 entries = self.dictionaries[name].lookup(word, exact=exact)
             except Exception as e:  # noqa: BLE001
                 print(f"[dictz] lookup failed in {name}: {e}")
                 continue
             results.extend(entries)
+        if max_articles is not None:
+            results = results[:max_articles]
         return results
+
+    def found_in(self, word: str) -> list[str]:
+        """Enabled dictionaries that have ``word`` (exact or case-insensitive)."""
+        return [name for name in self._order
+                if name in self.enabled_names and self.dictionaries[name].lookup(word, exact=True)]
+
+    def random_entry(self, dictionary: str | None = None, rng=None) -> DictionaryEntry | None:
+        """A random article from one (or any enabled) dictionary."""
+        import random
+
+        rng = rng or random
+        names = [dictionary] if dictionary else [n for n in self._order if n in self.enabled_names]
+        names = [n for n in names if n in self.dictionaries and self.dictionaries[n].headwords()]
+        if not names:
+            return None
+        d = self.dictionaries[rng.choice(names)]
+        word = rng.choice(d.headwords())
+        hits = d.lookup(word, exact=True)
+        return hits[0] if hits else None
 
     def all_headwords(self) -> list[str]:
         """Headwords of all enabled dictionaries (list order, each dictionary
@@ -192,17 +282,19 @@ class QueryManager:
             self._headword_cache = out
         return self._headword_cache
 
-    def fuzzy(self, word: str, limit: int = fuzzy.DEFAULT_LIMIT,
-              cutoff: float = fuzzy.DEFAULT_CUTOFF) -> list[tuple[str, float]]:
+    def fuzzy(self, word: str, limit: int = _fuzzy.DEFAULT_LIMIT,
+              cutoff: float = _fuzzy.DEFAULT_CUTOFF) -> list[tuple[str, float]]:
         """"Did you mean" candidates for ``word``, best first."""
         word = word.strip()
         if not word:
             return []
-        return fuzzy.extract(word, self.all_headwords(), limit=limit, cutoff=cutoff)
+        return _fuzzy.extract(word, self.all_headwords(), limit=limit, cutoff=cutoff)
 
-    def suggest(self, prefix: str, limit: int = 30) -> list[Suggestion]:
+    def suggest(self, prefix: str, limit: int = 30, fuzzy_fill_below: int = FUZZY_FILL_BELOW,
+                fuzzy_limit: int = _fuzzy.DEFAULT_LIMIT,
+                fuzzy_cutoff: float = _fuzzy.DEFAULT_CUTOFF) -> list[Suggestion]:
         """Prefix hits ranked closest-first, filled up with fuzzy matches when
-        there are fewer than ``FUZZY_FILL_BELOW``."""
+        there are fewer than ``fuzzy_fill_below``."""
         prefix = prefix.strip()
         if not prefix:
             return []
@@ -223,9 +315,9 @@ class QueryManager:
                 if len(words) >= limit:
                     words = words[:limit]
                     break
-        out = [Suggestion(w) for w in fuzzy.rank(prefix, words)]
-        if len(out) < FUZZY_FILL_BELOW:
-            for w, _score in self.fuzzy(prefix):
+        out = [Suggestion(w) for w in _fuzzy.rank(prefix, words)]
+        if len(out) < fuzzy_fill_below:
+            for w, _score in self.fuzzy(prefix, fuzzy_limit, fuzzy_cutoff):
                 if len(out) >= limit:
                     break
                 if w not in seen:

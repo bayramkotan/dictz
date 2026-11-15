@@ -1,0 +1,20 @@
+# dictz bash completion — add to ~/.bashrc:  eval "$(dictz completion bash)"
+_dictz() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[1]}"
+    if [ "$COMP_CWORD" -eq 1 ]; then
+        COMPREPLY=( $(compgen -W "add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths random reindex remove rm s scan selftest shell suggest update upgrade version --version --help" -- "$cur") )
+        return
+    fi
+    case "$prev" in
+        enable|disable|remove|rm|move|info|reindex|dump)
+            local IFS=$'\n'
+            COMPREPLY=( $(compgen -W "$(dictz dicts --names 2>/dev/null)" -- "$cur") ) ;;
+        config) COMPREPLY=( $(compgen -W "list get set reset path export import" -- "$cur") ) ;;
+        favorites|fav) COMPREPLY=( $(compgen -W "list add remove clear" -- "$cur") ) ;;
+        completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
+        add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
+    esac
+}
+complete -o default -F _dictz dictz

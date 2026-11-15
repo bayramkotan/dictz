@@ -60,3 +60,43 @@ def test_rust_parity_test_exists() -> None:
     rs = (PARITY.parent.parent.parent / "dictz-rs" / "tests" / "parity.rs").read_text(encoding="utf-8")
     for name in ("dsl_golden.json", "bgl_golden.json", "fuzzy_golden.json"):
         assert name in rs
+
+
+def _golden(name: str):
+    return json.loads((PARITY / name).read_text(encoding="utf-8"))
+
+
+def test_article_text_golden() -> None:
+    """HTML → text (CLI output, copy article) — the Rust edition checks the same file."""
+    from dictz.core.htmltext import to_text
+
+    for html, want in _golden("text_golden.json"):
+        assert to_text(html) == want, html
+
+
+def test_settings_schema_golden() -> None:
+    from dictz.storage.settings import schema_as_json
+
+    assert json.loads(json.dumps(schema_as_json(), ensure_ascii=False)) == _golden("settings_schema.json")
+
+
+def test_cli_commands_golden() -> None:
+    from dictz.cli import COMMANDS
+
+    assert [list(c) for c in COMMANDS] == _golden("cli_commands.json")
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish", "powershell"])
+def test_completion_golden(shell: str) -> None:
+    from dictz.cli import completion_script
+
+    want = (PARITY / f"completion_{shell}.txt").read_text(encoding="utf-8")
+    assert completion_script(shell) == want
+    rs = Path(__file__).resolve().parent.parent / "dictz-rs" / "src" / "completion" / f"{shell}.txt"
+    assert rs.read_text(encoding="utf-8") == want, "run tests/data/parity/make_samples.py"
+
+
+def test_shortcuts_golden() -> None:
+    from dictz.core.shortcuts import SHORTCUTS
+
+    assert [list(s) for s in SHORTCUTS] == _golden("shortcuts.json")
