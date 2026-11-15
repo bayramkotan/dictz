@@ -111,6 +111,51 @@ def test_release_workflow_tag_triggered() -> None:
     assert "tags: ['v*']" in text or 'tags: ["v*"]' in text or "tags:\n      - 'v*'" in text
 
 
+def test_release_workflow_publishes_to_pypi() -> None:
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "pypa/gh-action-pypi-publish" in text, "release.yml must publish to PyPI"
+    assert "python -m build" in text, "release.yml must build wheel + sdist"
+
+
+def test_release_workflow_publishes_to_crates_io() -> None:
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "crates.io" in text.lower(), "release.yml must publish to crates.io"
+    assert "cargo publish" in text, "release.yml must run cargo publish"
+
+
+def test_release_workflow_builds_rust() -> None:
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "cargo test" in text
+    assert "cargo build --release" in text
+
+
+# ------------------------------------------------------- Rust crate
+
+def test_rust_cargo_toml_exists() -> None:
+    assert (ROOT / "dictz-rs" / "Cargo.toml").is_file()
+
+
+def test_rust_src_lib_exists() -> None:
+    assert (ROOT / "dictz-rs" / "src" / "lib.rs").is_file()
+
+
+def test_rust_version_matches_python() -> None:
+    """Python __version__ and Cargo.toml version must stay in sync."""
+    from dictz import __version__
+    cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
+    import re
+    m = re.search(r'^version\s*=\s*"([^"]+)"', cargo, flags=re.MULTILINE)
+    assert m, "Cargo.toml has no version line"
+    assert m.group(1) == __version__, (
+        f"Cargo.toml version {m.group(1)} != Python {__version__}"
+    )
+
+
+def test_rust_license_matches_python() -> None:
+    cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
+    assert 'license = "GPL-3.0-or-later"' in cargo
+
+
 def test_test_workflow_exists() -> None:
     assert (ROOT / ".github" / "workflows" / "test.yml").is_file()
 

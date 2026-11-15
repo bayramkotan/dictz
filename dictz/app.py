@@ -13,7 +13,7 @@ from .storage.indexer import IndexStore
 from .storage.settings import Preferences
 from .ui.main_window import MainWindow
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 APP_NAME = "dictz"
 
 
