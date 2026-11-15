@@ -1,84 +1,76 @@
-# Packaging dictz
+# Packaging and releasing dictz
 
-dictz ships three portable artifacts per release:
+Everything is driven by one workflow, `.github/workflows/ci.yml`.
 
-| Platform | Artifact | How it's built |
-|----------|----------|----------------|
-| **Linux** | `dictz-linux-x86_64.tar.gz` (PyInstaller --onedir tarball) | `pyinstaller packaging/pyinstaller/dictz.spec` + `tar czf` |
-| **Linux** | `dictz-linux-x86_64.AppImage` (single-file executable) | Above + `packaging/appimage/build_appimage.sh` |
-| **Windows** | `dictz-windows-x86_64.zip` (PyInstaller --onedir zip) | `pyinstaller packaging/pyinstaller/dictz.spec` + `Compress-Archive` |
-| **macOS** | `dictz-macos-x86_64.zip` + `dictz-macos-arm64.zip` (.app bundles) | `pyinstaller packaging/pyinstaller/dictz.spec` + `zip -qr` |
+| Event | What runs |
+|---|---|
+| push to `main`, pull request | lint · Python tests (Linux/Windows/macOS × 3.10–3.13) · Rust check + test · wheel install smoke + `dictz --selftest` |
+| push a `v*` tag | all of the above, then **preflight** → publish to **PyPI** + **crates.io** → build portable binaries (each runs `--selftest`) → **GitHub Release** |
 
-All three come out of the same PyInstaller spec; the only platform-specific
-piece is the final archive format and (on Linux) the AppImage wrapper.
+## One-time setup
 
-## Automatic CI builds (recommended)
+Add two repository secrets at **Settings → Secrets and variables → Actions → New repository secret**:
 
-Every tag that matches `v*` triggers `.github/workflows/release.yml`, which:
+| Secret | Where to get it |
+|---|---|
+| `PYPI_API_TOKEN` | https://pypi.org/manage/account/token/ → Add API token → scope: project `dictz` |
+| `CARGO_REGISTRY_TOKEN` | https://crates.io/settings/tokens → New Token → scopes `publish-new`, `publish-update` (the crates.io account needs a verified e-mail) |
 
-1. Builds on `ubuntu-22.04`, `windows-latest`, `macos-13`, `macos-14` in parallel
-2. Runs PyInstaller + the AppImage script on Linux
-3. Uploads artifacts
-4. Creates a GitHub Release with the artifacts attached and auto-generated
-   release notes from commits since the previous tag
+If either secret is missing, the `preflight` job fails within seconds with a message naming it — nothing is half-published.
 
-To cut a release:
+## Cutting a release
+
+1. Bump the version in **three** places (preflight refuses a tag that does not match):
+   - `pyproject.toml` → `version`
+   - `dictz/__init__.py` → `__version__`
+   - `dictz-rs/Cargo.toml` → `version`
+2. Commit, then:
+   ```bash
+   git tag vX.Y.Z
+   git push origin main
+   git push origin vX.Y.Z
+   ```
+
+Re-pushing the same tag cancels the previous run. PyPI and crates.io uploads are skipped if that version already exists, so re-running a release is safe.
+
+## Artifacts
+
+| Platform | File |
+|---|---|
+| Linux (any distro, glibc ≥ 2.35) | `dictz-linux-x86_64.AppImage` — `chmod +x`, run |
+| Linux | `dictz-linux-x86_64.tar.gz` — extract, run `dictz/dictz` |
+| Windows 10/11 | `dictz-windows-x86_64.zip` — extract, run `dictz\dictz.exe` |
+| macOS Apple Silicon | `dictz-macos-arm64.zip` — extract, right-click `dictz.app` → Open |
+| any (Python) | `pip install dictz` / `pipx install dictz` |
+| Rust | `cargo add dictz` |
+
+No Intel macOS binary: GitHub's Intel macOS runners do not start reliably for public repositories. Intel Mac users install with `pip`/`pipx`.
+
+## Self-test
 
 ```bash
-git tag v0.0.4
-git push origin v0.0.4
+dictz --selftest      # exit 0 = OK
+dictz --version
 ```
 
-That's it — ~10 minutes later the four archives + one AppImage are on
-<https://github.com/bayramkotan/dictz/releases>.
+`--selftest` loads a generated StarDict and DSL dictionary, checks the DSL and Babylon plugins, and creates an SQLite FTS5 index — without opening a window. CI runs it against every frozen binary, the AppImage, and the pip-installed console script. On Windows (`dictz.exe` has no console) set `DICTZ_SELFTEST_REPORT=path\to\report.txt` to get the report in a file.
 
 ## Local builds
 
-### Linux / macOS
-
 ```bash
-bash scripts/build.sh
-# outputs under dist/
-# BUILD_APPIMAGE=0 bash scripts/build.sh    # skip AppImage
+# Linux / macOS
+pyinstaller packaging/pyinstaller/dictz.spec --noconfirm --clean
+./dist/dictz/dictz --selftest                      # Linux
+./dist/dictz.app/Contents/MacOS/dictz --selftest   # macOS
+bash packaging/appimage/build_appimage.sh           # Linux AppImage → dist/
+
+# Windows (PowerShell)
+pyinstaller packaging\pyinstaller\dictz.spec --noconfirm --clean
 ```
 
-### Windows
+## PyInstaller notes
 
-```powershell
-scripts\build.ps1
-# outputs under dist/
-```
-
-## About the spec file
-
-`packaging/pyinstaller/dictz.spec` is the one source of truth. It:
-
-- Uses `--onedir` (not `--onefile`): faster startup, fewer antivirus false
-  positives, easier to diff
-- Pulls in every PyGlossary plugin via `collect_submodules("pyglossary.plugins")`
-- Explicitly lists Qt WebEngine / Network / PrintSupport because PyInstaller's
-  PySide6 hook doesn't always catch them
-- Excludes unused Qt modules (Quick, QML, Charts, Multimedia, …) to shave
-  ~80 MB off the final size
-- Produces a `.app` bundle with proper `Info.plist` on macOS, including the
-  bundle identifier and dark-mode flag
-
-## Known build caveats
-
-- **Linux distros older than Ubuntu 22.04** may lack new enough GLIBC/GCC
-  runtime libs. The AppImage is built on 22.04 and targets glibc 2.35+.
-- **Windows SmartScreen / antivirus**: because the artifact is not signed,
-  Windows may warn the first time. Users can click "More info → Run anyway"
-  or add an exception.
-- **macOS code signing / notarization** is NOT done. Running the app for
-  the first time will show the Gatekeeper warning; users control-click →
-  Open to bypass once.
-- **Size**: PyInstaller + PySide6 + QtWebEngine ≈ 220–280 MB uncompressed,
-  80–120 MB compressed per platform. Most of it is Qt and Chromium.
-
-## Future work
-
-- Code signing on Windows (Authenticode) when a cert is available
-- macOS notarization (requires Apple Developer account)
-- Smaller build without QtWebEngine as an option (falls back to QTextBrowser)
-- arm64 Linux builds (Raspberry Pi)
+- Entry point is `packaging/pyinstaller/launch_dictz.py` (absolute import). `dictz/__main__.py` uses a relative import and cannot be a PyInstaller entry script.
+- PyGlossary discovers plugins by scanning `.py` files on disk, so the spec ships PyGlossary's sources as data (`collect_data_files("pyglossary", include_py_files=True)`), and `dictz.parsers.pyglossary_base` makes PyGlossary resolve its paths from the bundle.
+- The macOS bundle version comes from `dictz/__init__.py`.
+- Binaries are unsigned: Windows SmartScreen and macOS Gatekeeper warn on first launch.

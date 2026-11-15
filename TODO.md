@@ -46,11 +46,12 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 - 📋 First-run tour
 - 📋 Code signing on Windows (Authenticode)
 - 📋 macOS notarization
+- 📋 Intel macOS binary (universal2 build on Apple Silicon runner)
 
 ---
 
 ## Post-v1.0 ideas
-- 💡 `dictz-rs` — Rust port for benchmarking / learning (separate repo)
+- 💡 `dictz-rs` reaches feature parity with the Python edition
 - 💡 Mobile companion (Android via Chaquopy / Kivy; iOS)
 - 💡 Browser extension (select → send to dictz)
 - 💡 WebView-based "card mode" (Anki-style flashcard review in the app)
@@ -72,7 +73,7 @@ Status legend: ⏳ in flight · 📋 planned · 💡 idea · ✅ done
 
 ## Recently done
 
-- ✅ **v0.0.5** — unified release pipeline (one tag → PyPI + GitHub Releases + crates.io); PyPI Trusted Publishing; `dictz-rs/` Rust crate scaffold; Python↔Rust version lockstep
+- ✅ **v0.0.5** — portable binaries actually start and read DSL/Babylon (PyInstaller entry point + PyGlossary bundle paths fixed); `dictz --selftest` run on every binary in CI; one tag → PyPI + crates.io + GitHub Releases via API-token secrets; `dictz-rs/` Rust crate scaffold
 - ✅ **v0.0.4** — cross-platform portable builds (Linux tarball + AppImage, Windows portable zip, macOS .app); PyInstaller spec; GitHub Actions matrix release pipeline
 - ✅ **v0.0.3** — tabbed UI, sidebar, themes, zoom, window state, QWebEngine renderer, keyboard shortcuts, dictionary manager dialog
 - ✅ **v0.0.2** — DSL + Babylon parsers via PyGlossary

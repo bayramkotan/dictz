@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Build dictz.AppImage from a PyInstaller --onedir build.
+# Build dist/dictz-<version>-<arch>.AppImage from the PyInstaller --onedir build.
 #
-# Prerequisites:
-#   - PyInstaller build already run (dist/dictz/ exists)
-#   - linuxdeploy + linuxdeploy-plugin-appimage in PATH (downloaded below if missing)
+# Uses appimagetool, which only packs the AppDir — PyInstaller has already
+# bundled every library, so no dependency deployment is needed.
 #
 # Usage:  bash packaging/appimage/build_appimage.sh [VERSION]
-#         VERSION defaults to the one in dictz/__init__.py
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -16,32 +14,37 @@ ARCH="${ARCH:-$(uname -m)}"
 APPDIR="build/dictz.AppDir"
 OUT="dist/dictz-${VERSION}-${ARCH}.AppImage"
 TOOLS="build/appimage-tools"
+APPIMAGETOOL="$TOOLS/appimagetool"
 
-mkdir -p "$TOOLS"
+# appimagetool is itself an AppImage; extract-and-run avoids needing FUSE
+export APPIMAGE_EXTRACT_AND_RUN=1
 
-# Download linuxdeploy if missing
-if [ ! -x "$TOOLS/linuxdeploy" ]; then
-    echo "==> Downloading linuxdeploy..."
-    curl -fsSL -o "$TOOLS/linuxdeploy" \
-        "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${ARCH}.AppImage"
-    chmod +x "$TOOLS/linuxdeploy"
-fi
-
-# Ensure the PyInstaller build exists
-if [ ! -d "dist/dictz" ]; then
-    echo "==> Running PyInstaller build first..."
+if [ ! -d dist/dictz ]; then
+    echo "==> dist/dictz missing — running PyInstaller first"
     pyinstaller packaging/pyinstaller/dictz.spec --noconfirm --clean
 fi
 
-# Lay out an AppDir pointing at the PyInstaller bundle
+mkdir -p "$TOOLS"
+if [ ! -x "$APPIMAGETOOL" ]; then
+    echo "==> Downloading appimagetool"
+    curl -fsSL -o "$APPIMAGETOOL" \
+        "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+    chmod +x "$APPIMAGETOOL"
+fi
+
+echo "==> Laying out $APPDIR"
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$APPDIR/usr/bin"
+cp -a dist/dictz/. "$APPDIR/usr/bin/"
 
-# Copy the entire --onedir tree under usr/bin
-cp -R dist/dictz/. "$APPDIR/usr/bin/"
+cat > "$APPDIR/AppRun" <<'EOF'
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/dictz" "$@"
+EOF
+chmod +x "$APPDIR/AppRun"
 
-# A minimal .desktop
-cat > "$APPDIR/usr/share/applications/dictz.desktop" <<EOF
+cat > "$APPDIR/dictz.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=dictz
@@ -51,51 +54,27 @@ Exec=dictz
 Icon=dictz
 Categories=Office;Dictionary;Education;
 Terminal=false
-StartupNotify=true
-Keywords=dictionary;stardict;dsl;babylon;translation;
+X-AppImage-Version=${VERSION}
 EOF
 
-# A placeholder icon — a solid-color PNG so linuxdeploy accepts us
-python3 - <<'PY'
-import struct, zlib, os
+# 256x256 solid-blue placeholder icon (no binary assets in the repo yet)
+python3 - "$APPDIR/dictz.png" <<'PY'
+import struct, sys, zlib
 w = h = 256
-blue = bytes((59, 130, 246))  # #3B82F6
-scanlines = b""
-for _ in range(h):
-    scanlines += b"\x00" + (blue * w)
+row = b"\x00" + bytes((59, 130, 246)) * w
 def chunk(tag, data):
     return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-sig = b"\x89PNG\r\n\x1a\n"
-ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
-idat = zlib.compress(scanlines, 9)
-png = sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
-path = "build/dictz.AppDir/usr/share/icons/hicolor/256x256/apps/dictz.png"
-os.makedirs(os.path.dirname(path), exist_ok=True)
-open(path, "wb").write(png)
+png = (b"\x89PNG\r\n\x1a\n"
+       + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+       + chunk(b"IDAT", zlib.compress(row * h, 9))
+       + chunk(b"IEND", b""))
+open(sys.argv[1], "wb").write(png)
 PY
+cp "$APPDIR/dictz.png" "$APPDIR/.DirIcon"
 
-export OUTPUT="$OUT"
-export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"
-
-# linuxdeploy likes the output file named after the app
 mkdir -p dist
-"$TOOLS/linuxdeploy" \
-    --appdir "$APPDIR" \
-    --desktop-file "$APPDIR/usr/share/applications/dictz.desktop" \
-    --icon-file "$APPDIR/usr/share/icons/hicolor/256x256/apps/dictz.png" \
-    --output appimage \
-    --custom-apprun <(cat <<'APPRUN_EOF'
-#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/dictz" "$@"
-APPRUN_EOF
-)
-
-# linuxdeploy writes dictz-<version>-<arch>.AppImage into cwd; relocate
-GENERATED=$(ls -1t *.AppImage | head -n 1 || true)
-if [ -n "${GENERATED:-}" ] && [ -f "$GENERATED" ]; then
-    mv -f "$GENERATED" "$OUT"
-fi
+echo "==> Packing $OUT"
+ARCH="$ARCH" "$APPIMAGETOOL" --no-appstream "$APPDIR" "$OUT"
 
 echo "==> Built $OUT"
 ls -lh "$OUT"

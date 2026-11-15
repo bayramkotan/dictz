@@ -21,10 +21,13 @@ Portable builds for every release live on the [GitHub Releases page](https://git
 | **Windows 10/11** | `dictz-windows-x86_64.zip` | Unzip anywhere, run `dictz.exe`. Unsigned — accept the SmartScreen prompt. |
 | **Linux (any)** | `dictz-linux-x86_64.AppImage` | `chmod +x dictz-*.AppImage && ./dictz-*.AppImage` |
 | **Linux (tarball)** | `dictz-linux-x86_64.tar.gz` | Extract, run `dictz/dictz` |
-| **macOS Intel** | `dictz-macos-x86_64.zip` | Unzip, right-click **Open** the `.app` once to bypass Gatekeeper. |
-| **macOS Apple Silicon** | `dictz-macos-arm64.zip` | Same as Intel. |
+| **macOS Apple Silicon** | `dictz-macos-arm64.zip` | Unzip, right-click **Open** the `.app` once to bypass Gatekeeper. |
+| **macOS Intel** | — | `pip install dictz` / `pipx install dictz` |
 
 Or install from PyPI: `pip install dictz` (or `pipx install dictz` on PEP-668 distros).
+Rust crate: `cargo add dictz` ([crates.io](https://crates.io/crates/dictz)).
+
+Check any install with `dictz --selftest` (exit code 0 = dictionaries can be read).
 
 ## Highlights
 
@@ -33,7 +36,7 @@ Or install from PyPI: `pip install dictz` (or `pipx install dictz` on PEP-668 di
 - **Fast** — SQLite FTS5 index with Unicode + diacritic-insensitive search
 - **Offline** — no network calls, no telemetry
 - **Modern UI** — tabbed definitions, dockable sidebar (dictionaries / favorites / history), back/forward navigation, light + dark themes, configurable zoom and fonts
-- **Portable** — every release ships standalone binaries for Windows, Linux (plus AppImage), and macOS (Intel + Apple Silicon)
+- **Portable** — every release ships standalone binaries for Windows, Linux (AppImage + tar.gz) and macOS (Apple Silicon), each self-tested in CI before publishing
 
 ## Features at a glance
 
@@ -131,7 +134,7 @@ Her sürüm için portable paketler [GitHub Releases](https://github.com/bayramk
 
 - **Windows 10/11** — `dictz-windows-x86_64.zip` → aç, `dictz.exe`'yi çalıştır
 - **Linux** — `dictz-linux-x86_64.AppImage` → `chmod +x` ve çalıştır
-- **macOS** — Intel için `dictz-macos-x86_64.zip`, Apple Silicon için `dictz-macos-arm64.zip`
+- **macOS (Apple Silicon)** — `dictz-macos-arm64.zip`; Intel Mac için `pipx install dictz`
 
 Veya PyPI: `pip install dictz` (veya `pipx install dictz`).
 

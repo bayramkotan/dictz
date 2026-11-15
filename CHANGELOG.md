@@ -7,19 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.5] — 2026-11-15
 
+### Fixed
+- **Portable binaries did not start.** The PyInstaller entry point was `dictz/__main__.py`, whose relative import (`from .app import main`) crashes a frozen executable. New absolute-import launcher `packaging/pyinstaller/launch_dictz.py`.
+- **DSL / Babylon files could not be opened from the portable binaries.** In a frozen build PyGlossary looked for its plugins and data (`plugins/`, `langs/langs.json`, `plugins-meta/index.json`) next to the executable instead of inside the PyInstaller bundle. `dictz.parsers.pyglossary_base` now imports PyGlossary so it resolves its root from the bundle, and the plugin `.py` sources are shipped as data so PyGlossary's directory scan finds them.
+- PyGlossary 4.x vs 5.x keyword (`format` / `formatName`) for `directRead` is detected at runtime; the wrong one was silently ignored and fell back to extension sniffing.
+- macOS bundle version (`CFBundleShortVersionString`) was hard-coded at 0.0.4; it is now read from `dictz/__init__.py`.
+- About box showed a hard-coded 0.0.4; now uses `dictz.__version__`.
+
 ### Added
-- **Single unified workflow** (`.github/workflows/ci.yml`) — replaces separate `test.yml` + `release.yml`. One file, 9 jobs, every event (push / PR / tag) handled through conditional `if:` gates.
-- **PyPI auto-publish** via Trusted Publishing (OIDC, no API token in secrets) — `pypa/gh-action-pypi-publish@release/v1`
-- **crates.io auto-publish** — `cargo publish` dry-run then live, gated on `CARGO_REGISTRY_TOKEN` secret
-- **`dictz-rs/` Rust crate scaffold** — `Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError`, `VERSION`, 4 unit tests, dependency-free (`#![forbid(unsafe_code)]`), GPL-3.0-or-later, version pinned to the Python package's version
-- **Rust CI** — `cargo check` + `cargo test` on every push; `cargo build --release` on tag
-- `dictz-rs/README.md` — crate-level docs with badges, status table, install snippet
-- GitHub Release body auto-generated with per-registry install instructions
-- `tests/test_packaging.py` — new `test_single_workflow_file` + 8 renamed `test_ci_workflow_*` assertions
+- **`dictz --selftest`** — headless check (no window) that loads a StarDict and a DSL dictionary, verifies the DSL + Babylon plugins and the SQLite FTS5 index. Exit code 0/1; report also written to `$DICTZ_SELFTEST_REPORT`.
+- **`dictz --version`**
+- **One release pipeline** in `.github/workflows/ci.yml`: a `v*` tag publishes to **PyPI**, **crates.io** and **GitHub Releases** (Linux AppImage + tar.gz, Windows zip, macOS Apple Silicon zip).
+- Every frozen binary (and the AppImage, and the pip-installed console script) is executed with `--selftest` in CI before anything is published.
+- `preflight` job: on a tag, fails within seconds if `PYPI_API_TOKEN` / `CARGO_REGISTRY_TOKEN` secrets are missing or the tag does not match the version in `pyproject.toml`, `dictz/__init__.py` and `dictz-rs/Cargo.toml`.
+- **`dictz-rs/`** Rust crate (scaffold): `Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError`, `VERSION`; version kept in lockstep with the Python package.
+- `tests/test_selftest.py` and new packaging assertions (61 tests).
 
 ### Changed
-- Workflow jobs: `lint` → `test` + `rust` → `install-smoke` run on every push/PR. `build-python-binaries` + `build-python-dist` + `publish-pypi` + `publish-crates` + `github-release` are **tag-gated** via `if: startsWith(github.ref, 'refs/tags/v')`.
-- `test.yml` and `release.yml` deleted — merged into `ci.yml`
+- Publishing uses **API-token secrets** instead of PyPI Trusted Publishing: no PyPI-side publisher registration and no GitHub environments needed.
+- AppImage is built with `appimagetool` (packs the already-bundled PyInstaller tree) instead of `linuxdeploy`; works on CI without FUSE.
+- Intel macOS binary dropped: GitHub's Intel macOS runners never start on public repositories and blocked the whole release. Intel Mac users: `pip install dictz`.
+- Re-pushing a tag cancels the previous run instead of queueing behind it.
+- `test.yml` + `release.yml` merged into `ci.yml`.
 
 ## [0.0.4] — 2026-11-15
 

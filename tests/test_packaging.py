@@ -32,8 +32,14 @@ def test_pyinstaller_spec_parses_as_python() -> None:
 
 def test_pyinstaller_spec_has_required_pieces() -> None:
     spec = (ROOT / "packaging" / "pyinstaller" / "dictz.spec").read_text(encoding="utf-8")
-    # Entry point
-    assert "__main__.py" in spec, "spec must point at dictz.__main__"
+    # Entry point must be the absolute-import launcher, not dictz/__main__.py
+    # (its relative import crashes a frozen binary on startup).
+    assert 'SPEC_DIR / "launch_dictz.py"' in spec
+    assert (ROOT / "packaging" / "pyinstaller" / "launch_dictz.py").is_file()
+    # PyGlossary scans plugin .py files on disk, so they must be shipped as data
+    assert "include_py_files=True" in spec
+    # macOS bundle version is read from dictz/__init__.py, never hard-coded
+    assert '"CFBundleShortVersionString": VERSION' in spec
     # Qt WebEngine — bundle fails to launch without this hidden import
     assert "QtWebEngineWidgets" in spec
     assert "QtWebEngineCore" in spec
@@ -103,10 +109,43 @@ def test_ci_workflow_is_valid_yaml() -> None:
     _load_yaml(CI_YML)
 
 
-def test_ci_workflow_builds_four_platforms_on_tag() -> None:
+def test_ci_workflow_builds_three_platforms_on_tag() -> None:
     text = CI_YML.read_text(encoding="utf-8")
-    for runner in ("ubuntu-22.04", "windows-latest", "macos-13", "macos-latest"):
+    for runner in ("ubuntu-22.04", "windows-latest", "macos-latest"):
         assert runner in text, f"ci.yml does not include {runner}"
+
+
+def test_ci_workflow_never_uses_starved_intel_mac_runner() -> None:
+    """macos-13 jobs never get a runner on public repos and block the release."""
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "macos-13" not in text
+
+
+def test_ci_workflow_selftests_every_binary() -> None:
+    """Every frozen binary is executed with --selftest before it is shipped."""
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "./dist/dictz/dictz --selftest" in text                       # Linux
+    assert "dist/dictz.app/Contents/MacOS/dictz --selftest" in text      # macOS
+    assert '"dist\\dictz\\dictz.exe" -ArgumentList "--selftest"' in text  # Windows
+    assert ".AppImage --selftest" in text                                # AppImage
+    assert "dictz --selftest" in text                                    # pip install
+
+
+def test_ci_workflow_uses_token_secrets_not_oidc_environments() -> None:
+    """Publishing uses API-token secrets; no GitHub environments / PyPI OIDC
+    publisher setup is required (that setup caused invalid-publisher errors)."""
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "secrets.PYPI_API_TOKEN" in text
+    assert "secrets.CARGO_REGISTRY_TOKEN" in text
+    assert "environment:" not in text
+    assert "id-token: write" not in text
+
+
+def test_ci_workflow_preflight_fails_fast_on_missing_secrets() -> None:
+    data = _load_yaml(CI_YML)
+    assert "preflight" in data["jobs"]
+    assert "preflight" in data["jobs"]["publish-pypi"]["needs"]
+    assert "preflight" in data["jobs"]["publish-crates"]["needs"]
 
 
 def test_ci_workflow_runs_pyinstaller() -> None:
@@ -134,8 +173,8 @@ def test_ci_workflow_publishes_to_crates_io() -> None:
 
 def test_ci_workflow_builds_rust() -> None:
     text = CI_YML.read_text(encoding="utf-8")
+    assert "cargo check" in text
     assert "cargo test" in text
-    assert "cargo build --release" in text
 
 
 def test_ci_workflow_release_jobs_tag_gated() -> None:
