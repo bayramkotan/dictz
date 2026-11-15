@@ -29,14 +29,11 @@ Tag push'u her yere dağıtır. Daha önce `git push origin v0.0.X` sadece GitHu
   - `Cargo.toml` — `name = "dictz"`, version Python ile aynı, GPL-3.0-or-later, keywords, docs.rs
   - `src/lib.rs` — `Dictionary` trait, `DictionaryEntry`, `DictionaryMetadata`, `DictzError` (`std::error::Error` impl), `VERSION` const. `#![forbid(unsafe_code)]`, dependency-free, 4 unit test
   - `README.md` — rozetler, status table, install snippet
-- **`.github/workflows/release.yml`** 5 job'lı pipeline:
-  1. `build-python-binaries` — PyInstaller × 4 OS (Linux + Windows + macOS Intel + macOS ARM64)
-  2. `build-python-dist` — `python -m build` → wheel + sdist
-  3. `publish-pypi` — `pypa/gh-action-pypi-publish@release/v1` (OIDC, secret yok). Tag-gated.
-  4. `build-rust` — `cargo check` + `cargo test` + `cargo build --release` × 3 OS, Cargo cache
-  5. `publish-crates` — `cargo publish --dry-run` sonra `cargo publish` (CARGO_REGISTRY_TOKEN varsa). Tag-gated.
-  6. `github-release` — tüm artifact'ları (tarball, zip, AppImage, wheel, sdist) toplayıp Release'e ekliyor, body'de her registry için install snippet
-- `tests/test_packaging.py` — 7 yeni assertion: PyPI publish, crates.io publish, Rust build, Cargo.toml varlığı, Python↔Rust version lockstep, lisans tutarlılığı
+- **`.github/workflows/ci.yml`** — **tek birleşik workflow**. Eski `test.yml` + `release.yml` silindi. 9 job, event'e göre şartlı çalışır:
+  - Her push / PR'da: `lint` → `test` + `rust` → `install-smoke`
+  - Sadece `v*` tag push'ta (ek olarak): `build-python-binaries`, `build-python-dist`, `publish-pypi`, `publish-crates`, `github-release`
+  - Gate: `if: startsWith(github.ref, 'refs/tags/v')`
+- `tests/test_packaging.py` — `test_single_workflow_file` + 8 renamed `test_ci_workflow_*` assertion'ı; sadece `ci.yml` olduğunu doğruluyor
 
 ### Versiyon bump
 
