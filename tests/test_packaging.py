@@ -87,46 +87,61 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_release_workflow_exists() -> None:
-    assert (ROOT / ".github" / "workflows" / "release.yml").is_file()
+CI_YML = ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def test_release_workflow_is_valid_yaml() -> None:
-    _load_yaml(ROOT / ".github" / "workflows" / "release.yml")
+def test_single_workflow_file() -> None:
+    """Only one workflow file — ci.yml — carries lint/test/build/release."""
+    wf_dir = ROOT / ".github" / "workflows"
+    yml_files = sorted(p.name for p in wf_dir.glob("*.yml"))
+    assert yml_files == ["ci.yml"], (
+        f"expected a single ci.yml workflow, found: {yml_files}"
+    )
 
 
-def test_release_workflow_builds_four_platforms() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+def test_ci_workflow_is_valid_yaml() -> None:
+    _load_yaml(CI_YML)
+
+
+def test_ci_workflow_builds_four_platforms_on_tag() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
     for runner in ("ubuntu-22.04", "windows-latest", "macos-13", "macos-latest"):
-        assert runner in text, f"release.yml does not include {runner}"
+        assert runner in text, f"ci.yml does not include {runner}"
 
 
-def test_release_workflow_runs_pyinstaller() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+def test_ci_workflow_runs_pyinstaller() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
     assert "pyinstaller" in text.lower()
 
 
-def test_release_workflow_tag_triggered() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "tags: ['v*']" in text or 'tags: ["v*"]' in text or "tags:\n      - 'v*'" in text
+def test_ci_workflow_tag_and_push_triggered() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "tags: ['v*']" in text or 'tags: ["v*"]' in text
+    assert "branches: [main]" in text
 
 
-def test_release_workflow_publishes_to_pypi() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "pypa/gh-action-pypi-publish" in text, "release.yml must publish to PyPI"
-    assert "python -m build" in text, "release.yml must build wheel + sdist"
+def test_ci_workflow_publishes_to_pypi() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "pypa/gh-action-pypi-publish" in text
+    assert "python -m build" in text
 
 
-def test_release_workflow_publishes_to_crates_io() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "crates.io" in text.lower(), "release.yml must publish to crates.io"
-    assert "cargo publish" in text, "release.yml must run cargo publish"
+def test_ci_workflow_publishes_to_crates_io() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "crates.io" in text.lower()
+    assert "cargo publish" in text
 
 
-def test_release_workflow_builds_rust() -> None:
-    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+def test_ci_workflow_builds_rust() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
     assert "cargo test" in text
     assert "cargo build --release" in text
+
+
+def test_ci_workflow_release_jobs_tag_gated() -> None:
+    """Build + publish jobs are gated behind the tag ref."""
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "if: startsWith(github.ref, 'refs/tags/v')" in text
 
 
 # ------------------------------------------------------- Rust crate
@@ -156,29 +171,20 @@ def test_rust_license_matches_python() -> None:
     assert 'license = "GPL-3.0-or-later"' in cargo
 
 
-def test_test_workflow_exists() -> None:
-    assert (ROOT / ".github" / "workflows" / "test.yml").is_file()
-
-
-def test_test_workflow_is_valid_yaml() -> None:
-    _load_yaml(ROOT / ".github" / "workflows" / "test.yml")
-
-
-def test_test_workflow_covers_multiple_python_versions() -> None:
-    text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
-    # We ship for 3.10–3.13; the matrix must exercise at least three of them
+def test_ci_workflow_covers_multiple_python_versions() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
     present = sum(1 for v in ("3.10", "3.11", "3.12", "3.13") if f"'{v}'" in text)
-    assert present >= 3, f"test.yml should exercise 3+ Python versions, found {present}"
+    assert present >= 3, f"ci.yml should exercise 3+ Python versions, found {present}"
 
 
-def test_test_workflow_covers_all_three_oses() -> None:
-    text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+def test_ci_workflow_covers_all_three_oses() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
     assert "ubuntu" in text and "windows" in text and "macos" in text
 
 
-def test_test_workflow_sets_offscreen_qt() -> None:
-    """Qt must start headlessly on CI — otherwise pytest-qt / QWidget tests crash."""
-    text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+def test_ci_workflow_sets_offscreen_qt() -> None:
+    """Qt must start headlessly on CI — otherwise QWidget tests crash."""
+    text = CI_YML.read_text(encoding="utf-8")
     assert "QT_QPA_PLATFORM" in text
     assert "offscreen" in text
 
