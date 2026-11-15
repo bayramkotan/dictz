@@ -1,23 +1,63 @@
 //! # dictz
 //!
-//! Rust port of [bayramkotan/dictz](https://github.com/bayramkotan/dictz) — a
-//! cross-platform multi-format offline dictionary.
+//! Rust edition of [bayramkotan/dictz](https://github.com/bayramkotan/dictz):
+//! a cross-platform, multi-format offline dictionary.
 //!
-//! This is the v0.0.5 scaffold: metadata types, a semver-tracked VERSION
-//! constant, and a stable public surface (`Dictionary`, `DictionaryEntry`,
-//! `DictionaryMetadata`) that the native StarDict / DSL / Babylon parsers
-//! will fill in over the next few point releases.
+//! The crate ships both a library and the `dictz` desktop application.
+//! It has the same features as the Python edition (`pip install dictz`) and is
+//! released with the same version number from the same tag.
 //!
-//! The Python edition (`pip install dictz`) is the full, shipping version;
-//! the Rust port exists to benchmark, learn, and eventually deliver a
-//! single-static-binary alternative with the same dictionary-format support.
+//! * Formats: StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`),
+//!   Babylon (`.bgl`) — all parsed natively.
+//! * [`index::IndexStore`]: SQLite FTS5 headword index (same schema and file
+//!   as the Python edition, so both editions share one dictionary list).
+//! * [`history::HistoryStore`]: lookup history and favorites.
+//! * [`fuzzy`]: "did you mean" matching, scores identical to RapidFuzz `fuzz.ratio`.
+//! * [`media::MediaResolver`]: pictures and sounds referenced by DSL / StarDict
+//!   articles (`*.dsl.files/`, `*.dsl.files.zip`, `res/`).
+//!
+//! Library-only use (no GUI dependencies):
+//!
+//! ```toml
+//! dictz = { version = "0.0.6", default-features = false }
+//! ```
+//!
+//! ```no_run
+//! use dictz::query::QueryManager;
+//! let mut qm = QueryManager::new(None);
+//! qm.add_dictionary("en-tr.ifo", false).unwrap();
+//! for e in qm.search("apple", true) {
+//!     println!("{}: {}", e.headword, e.definition);
+//! }
+//! ```
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::fmt;
+use std::path::{Path, PathBuf};
 
-/// Current crate version, mirroring the Python package version.
+pub mod babylon;
+pub mod dsl;
+pub mod fuzzy;
+pub mod history;
+pub mod html;
+pub mod index;
+pub mod media;
+pub mod paths;
+pub mod query;
+pub mod selftest;
+pub mod settings;
+pub mod stardict;
+pub mod text;
+mod wordtable;
+
+#[cfg(feature = "gui")]
+pub mod gui;
+
+pub use wordtable::WordTable;
+
+/// Current crate version — always identical to the Python package version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// A single headword + definition pair returned from a dictionary lookup.
@@ -25,11 +65,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct DictionaryEntry {
     /// The headword being defined (case preserved).
     pub headword: String,
-    /// The definition body. May be plain text or HTML depending on the format.
+    /// The definition body. Plain text or HTML depending on the format.
     pub definition: String,
-    /// Name of the dictionary this entry came from (populated by the manager).
+    /// Name of the dictionary this entry came from.
     pub dictionary_id: String,
-    /// Match score — 1.0 for exact, <1.0 for fuzzy matches.
+    /// Match score — 1.0 for exact matches.
     pub score: f32,
 }
 
@@ -50,7 +90,7 @@ impl DictionaryEntry {
 pub struct DictionaryMetadata {
     /// Human-readable dictionary name.
     pub name: String,
-    /// Source language (free-form; usually an ISO code or an English name).
+    /// Source language (free-form).
     pub source_language: String,
     /// Target language (free-form).
     pub target_language: String,
@@ -60,23 +100,98 @@ pub struct DictionaryMetadata {
     pub author: String,
     /// Headword count.
     pub word_count: usize,
-    /// Format identifier — "stardict", "dsl", "babylon", etc.
+    /// Path of the file that was opened.
+    pub file_path: PathBuf,
+    /// Format identifier — "stardict", "dsl" or "babylon".
     pub format: String,
 }
 
-/// Trait every format parser will implement.
+impl DictionaryMetadata {
+    /// `name (src → dst)` when both languages are known, otherwise `name`.
+    pub fn display_name(&self) -> String {
+        if !self.source_language.is_empty() && !self.target_language.is_empty() {
+            format!(
+                "{} ({} → {})",
+                self.name, self.source_language, self.target_language
+            )
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+/// Trait every format parser implements.
 ///
-/// Mirrors the Python `dictz.parsers.base.Dictionary` ABC so the two
-/// implementations evolve together.
-pub trait Dictionary {
-    /// Load headers + index into memory. Idempotent.
+/// Mirrors the Python `dictz.parsers.base.Dictionary` class, including the
+/// lookup rules: exact match first, then the first case-insensitive match,
+/// then (when `exact == false`) up to 50 case-insensitive prefix matches.
+pub trait Dictionary: Send {
+    /// Read the dictionary into memory. Idempotent.
     fn load(&mut self) -> Result<(), DictzError>;
 
-    /// Look up a headword. Returns an empty vector when nothing matches.
-    fn lookup(&self, word: &str, exact: bool) -> Vec<DictionaryEntry>;
+    /// `true` once [`Dictionary::load`] succeeded.
+    fn is_loaded(&self) -> bool;
 
-    /// Dictionary metadata — safe to call before `load()`.
+    /// Dictionary metadata.
     fn metadata(&self) -> &DictionaryMetadata;
+
+    /// Headword table (insertion order + case-insensitive sorted order).
+    fn words(&self) -> &WordTable;
+
+    /// Definition of an indexed headword.
+    fn definition(&self, headword: &str) -> Option<String>;
+
+    /// Release the in-memory data.
+    fn close(&mut self);
+
+    /// Look up a headword. Returns an empty vector when nothing matches.
+    fn lookup(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {
+        let table = self.words();
+        let mut hits: Vec<String> = Vec::new();
+        if table.contains(word) {
+            hits.push(word.to_string());
+        }
+        if hits.is_empty() {
+            if let Some(w) = table.find_case_insensitive(word) {
+                hits.push(w.to_string());
+            }
+        }
+        if !exact && hits.is_empty() {
+            hits.extend(
+                table
+                    .prefix_case_insensitive(word, 50)
+                    .into_iter()
+                    .map(str::to_string),
+            );
+        }
+        hits.into_iter()
+            .filter_map(|w| {
+                self.definition(&w).map(|d| DictionaryEntry {
+                    headword: w,
+                    definition: d,
+                    dictionary_id: self.metadata().name.clone(),
+                    score: 1.0,
+                })
+            })
+            .collect()
+    }
+
+    /// All entries, headwords in case-insensitive sorted order.
+    fn entries(&self) -> Vec<DictionaryEntry> {
+        let name = self.metadata().name.clone();
+        self.words()
+            .sorted()
+            .iter()
+            .filter_map(|w| {
+                self.definition(w).map(|d| DictionaryEntry {
+                    headword: w.clone(),
+                    definition: d,
+                    dictionary_id: name.clone(),
+                    score: 1.0,
+                })
+            })
+            .collect()
+    }
 }
 
 /// Errors every parser may emit.
@@ -86,6 +201,10 @@ pub enum DictzError {
     NotFound(String),
     /// File exists but is not a valid dictionary of the expected format.
     Malformed(String),
+    /// No parser is registered for the file extension.
+    Unsupported(String),
+    /// SQLite error from the index or history database.
+    Database(String),
     /// Underlying I/O error.
     Io(std::io::Error),
 }
@@ -95,6 +214,8 @@ impl fmt::Display for DictzError {
         match self {
             DictzError::NotFound(path) => write!(f, "dictionary file not found: {}", path),
             DictzError::Malformed(msg) => write!(f, "malformed dictionary: {}", msg),
+            DictzError::Unsupported(path) => write!(f, "no parser registered for file: {}", path),
+            DictzError::Database(msg) => write!(f, "database error: {}", msg),
             DictzError::Io(err) => write!(f, "I/O error: {}", err),
         }
     }
@@ -115,15 +236,46 @@ impl From<std::io::Error> for DictzError {
     }
 }
 
+impl From<rusqlite::Error> for DictzError {
+    fn from(err: rusqlite::Error) -> Self {
+        DictzError::Database(err.to_string())
+    }
+}
+
+/// Read a whole file, transparently gunzipping `.gz` / `.dz` (dictzip) files.
+pub fn read_maybe_gzip(path: &Path) -> Result<Vec<u8>, DictzError> {
+    let raw = std::fs::read(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            DictzError::NotFound(path.display().to_string())
+        } else {
+            DictzError::Io(e)
+        }
+    })?;
+    if raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b {
+        use std::io::Read;
+        let mut out = Vec::new();
+        flate2::read::MultiGzDecoder::new(&raw[..])
+            .read_to_end(&mut out)
+            .map_err(|e| DictzError::Malformed(format!("{}: gzip: {}", path.display(), e)))?;
+        Ok(out)
+    } else {
+        Ok(raw)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn version_is_semver() {
-        assert!(!VERSION.is_empty());
         let parts: Vec<&str> = VERSION.split('.').collect();
-        assert_eq!(parts.len(), 3, "VERSION {} is not major.minor.patch", VERSION);
+        assert_eq!(
+            parts.len(),
+            3,
+            "VERSION {} is not major.minor.patch",
+            VERSION
+        );
         for p in &parts {
             assert!(p.parse::<u32>().is_ok(), "non-numeric component in VERSION");
         }
@@ -139,10 +291,15 @@ mod tests {
     }
 
     #[test]
-    fn dictionary_metadata_defaults() {
-        let m = DictionaryMetadata::default();
-        assert!(m.name.is_empty());
-        assert_eq!(m.word_count, 0);
+    fn metadata_display_name() {
+        let mut m = DictionaryMetadata {
+            name: "X".into(),
+            ..Default::default()
+        };
+        assert_eq!(m.display_name(), "X");
+        m.source_language = "English".into();
+        m.target_language = "Turkish".into();
+        assert_eq!(m.display_name(), "X (English → Turkish)");
     }
 
     #[test]

@@ -56,6 +56,12 @@ class Dictionary(ABC):
     @abstractmethod
     def iter_entries(self) -> Iterator[DictionaryEntry]: ...
 
+    def headwords(self) -> list[str]:
+        """Headwords sorted case-insensitively (fuzzy candidate list)."""
+        if not self._loaded:
+            self.load()
+        return list(getattr(self, "_sorted_words", []))
+
     def close(self) -> None:
         self._loaded = False
 

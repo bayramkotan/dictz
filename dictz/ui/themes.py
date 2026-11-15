@@ -105,6 +105,11 @@ def definition_css(dark: bool) -> str:
         .headword { font-size: 22px; font-weight: 600; color: #dbeafe; margin: 4px 0 8px 0; }
         .definition { padding: 4px 0 8px 12px; border-left: 2px solid #343a45; margin-left: 4px; }
         .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
+        .definition img { max-width: 100%; max-height: 14em; vertical-align: middle; }
+        a.dz-audio { display: inline-block; padding: 1px 8px; margin: 0 2px; border-radius: 10px; background: #262b34; border: 1px solid #3b4250; font-size: 0.85em; }
+        ul.did-you-mean { list-style: none; padding-left: 0; }
+        ul.did-you-mean li { margin: 4px 0; font-size: 1.1em; }
+        .score { opacity: 0.55; font-size: 0.8em; margin-left: 6px; }
         """
     return """
     body { background: #ffffff; color: #1a1d23; font-family: "Segoe UI", "Inter", sans-serif; line-height: 1.65; padding: 24px 32px; margin: 0; }
@@ -114,4 +119,9 @@ def definition_css(dark: bool) -> str:
     .headword { font-size: 22px; font-weight: 600; color: #1e3a8a; margin: 4px 0 8px 0; }
     .definition { padding: 4px 0 8px 12px; border-left: 2px solid #e3e6eb; margin-left: 4px; }
     .definition pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
+    .definition img { max-width: 100%; max-height: 14em; vertical-align: middle; }
+    a.dz-audio { display: inline-block; padding: 1px 8px; margin: 0 2px; border-radius: 10px; background: #eef2f7; border: 1px solid #d5dbe5; font-size: 0.85em; }
+    ul.did-you-mean { list-style: none; padding-left: 0; }
+    ul.did-you-mean li { margin: 4px 0; font-size: 1.1em; }
+    .score { opacity: 0.55; font-size: 0.8em; margin-left: 6px; }
     """

@@ -75,6 +75,11 @@ def _format_kwarg(glos, fmt: str) -> dict[str, str]:
     return {"formatName": fmt} if "formatName" in params else {"format": fmt}
 
 
+def _xml_unescape(text: str) -> str:
+    """Inverse of ``xml.sax.saxutils.escape`` (``&``, ``<``, ``>``)."""
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
 def available_formats() -> list[str]:
     """PyGlossary plugin names that can read files (for diagnostics)."""
     _ensure_init()
@@ -90,6 +95,9 @@ class PyGlossaryError(Exception):
 class PyGlossaryDictionary(Dictionary):
     _format: str = ""
     format_label: str = ""
+    # PyGlossary XML-escapes some formats' headwords ("rock &amp; roll");
+    # those formats set this so the index holds the real text.
+    _unescape_terms: bool = False
 
     def __init__(self, path: Path | str):
         super().__init__(path)
@@ -135,6 +143,8 @@ class PyGlossaryDictionary(Dictionary):
             variants = [w.strip() for w in word.split("|") if w.strip()]
             if not variants:
                 variants = [word]
+            if self._unescape_terms:
+                variants = [_xml_unescape(v) for v in variants]
             for variant in variants:
                 if variant not in self._entries:
                     self._entries[variant] = defi

@@ -46,6 +46,11 @@ def test_pyinstaller_spec_has_required_pieces() -> None:
     # PyGlossary plugin discovery via collect_submodules
     assert "collect_submodules" in spec
     assert "pyglossary.plugins" in spec
+    # DSL sounds play in-app: QtMultimedia must be bundled, not excluded
+    assert '"PySide6.QtMultimedia",' in spec.split("excludes = [")[0]
+    assert '"PySide6.QtMultimedia",' not in spec.split("excludes = [")[1]
+    # fuzzy search
+    assert "rapidfuzz.process" in spec
     # macOS bundle definition
     assert "BUNDLE" in spec
     assert "com.bayramkotan.dictz" in spec
@@ -153,10 +158,20 @@ def test_ci_workflow_runs_pyinstaller() -> None:
     assert "pyinstaller" in text.lower()
 
 
-def test_ci_workflow_tag_and_push_triggered() -> None:
-    text = CI_YML.read_text(encoding="utf-8")
-    assert "tags: ['v*']" in text or 'tags: ["v*"]' in text
-    assert "branches: [main]" in text
+def test_ci_workflow_runs_once_per_release() -> None:
+    """Only tag pushes trigger CI, so a release (main + tag push) is ONE run.
+
+    GitHub emits a separate push event per ref; triggering on branch pushes
+    as well produced two runs for every release.
+    """
+    data = _load_yaml(CI_YML)
+    # PyYAML parses the bare key `on` as boolean True
+    triggers = data.get("on", data.get(True))
+    assert triggers["push"] == {"tags": ["v*"]}, (
+        f"push trigger must be tags-only, got {triggers['push']}"
+    )
+    assert "pull_request" in triggers
+    assert "workflow_dispatch" in triggers
 
 
 def test_ci_workflow_publishes_to_pypi() -> None:
@@ -203,6 +218,49 @@ def test_rust_version_matches_python() -> None:
     assert m.group(1) == __version__, (
         f"Cargo.toml version {m.group(1)} != Python {__version__}"
     )
+
+
+def test_rust_crate_is_a_full_application() -> None:
+    """crates.io ships the Rust edition app (binary `dictz`), not a stub."""
+    cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
+    assert '[[bin]]\nname = "dictz"' in cargo
+    assert 'default = ["gui", "audio"]' in cargo
+    assert '"Cargo.lock"' in cargo, "Cargo.lock must be published (binary crate)"
+    assert (ROOT / "dictz-rs" / "Cargo.lock").is_file()
+    src = ROOT / "dictz-rs" / "src"
+    for module in ("stardict.rs", "dsl.rs", "babylon.rs", "index.rs", "history.rs",
+                   "fuzzy.rs", "media.rs", "query.rs", "selftest.rs", "main.rs",
+                   "gui/app.rs"):
+        assert (src / module).is_file(), f"dictz-rs/src/{module} missing"
+
+
+def test_rust_target_dir_ignored() -> None:
+    assert "dictz-rs/target/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_binary_samples_marked_binary() -> None:
+    attrs = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    for pattern in ("*.dsl binary", "*.bgl binary", "*.zip binary"):
+        assert pattern in attrs
+
+
+def test_ci_builds_and_selftests_rust_binaries() -> None:
+    data = _load_yaml(CI_YML)
+    job = data["jobs"]["build-rust-binaries"]
+    artifacts = {inc["artifact"] for inc in job["strategy"]["matrix"]["include"]}
+    assert artifacts == {"dictz-rs-linux-x86_64", "dictz-rs-windows-x86_64", "dictz-rs-macos-arm64"}
+    text = CI_YML.read_text(encoding="utf-8")
+    assert "./dictz-rs/target/release/dictz --selftest" in text
+    assert '"dictz-rs\\target\\release\\dictz.exe" -ArgumentList "--selftest"' in text
+    assert "build-rust-binaries" in data["jobs"]["github-release"]["needs"]
+
+
+def test_ci_installs_alsa_for_rust() -> None:
+    data = _load_yaml(CI_YML)
+    for job in ("rust", "publish-crates", "build-rust-binaries"):
+        steps = data["jobs"][job]["steps"]
+        assert any("libasound2-dev" in str(st.get("run", "")) for st in steps), job
+    assert "cargo publish --locked" in CI_YML.read_text(encoding="utf-8")
 
 
 def test_rust_license_matches_python() -> None:

@@ -98,19 +98,15 @@ class DictionaryManagerDialog(QDialog):
         self.dictionaries_changed.emit()
 
     def _move(self, delta: int) -> None:
-        row = self.list.currentRow()
-        if row < 0:
+        name = self._selected_name()
+        if not name:
             return
-        new_row = row + delta
-        if not 0 <= new_row < self.list.count():
-            return
-        it = self.list.takeItem(row)
-        self.list.insertItem(new_row, it)
-        self.list.setCurrentItem(it)
-        if self.query_manager.index_store is not None:
-            for i in range(self.list.count()):
-                nm = self.list.item(i).data(Qt.ItemDataRole.UserRole)
-                self.query_manager.index_store.set_sort_order(nm, i)
+        self.query_manager.move_dictionary(name, delta)
+        self._refresh()
+        for i in range(self.list.count()):
+            if self.list.item(i).data(Qt.ItemDataRole.UserRole) == name:
+                self.list.setCurrentRow(i)
+                break
         self.dictionaries_changed.emit()
 
     def _on_item_changed(self, item: QListWidgetItem) -> None:

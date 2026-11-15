@@ -1,0 +1,7 @@
+# Binary dictionary samples must never get line-ending conversion
+*.dsl binary
+*.bgl binary
+*.dz binary
+*.zip binary
+*.png binary
+*.wav binary
