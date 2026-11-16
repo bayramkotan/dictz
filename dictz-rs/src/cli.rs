@@ -48,6 +48,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ),
     ("popup", "look a word up in the running dictz's scan popup"),
     ("watch", "turn clipboard / selection scanning on or off"),
+    (
+        "shortcut",
+        "create desktop and menu shortcuts (--remove deletes them)",
+    ),
     ("help", "show help"),
 ];
 
@@ -65,6 +69,50 @@ pub const ALIASES: &[(&str, &str)] = &[
 const EDITION: &str = "Rust edition";
 
 /// `true` when `args` ask for a CLI command (not just files for the GUI).
+/// Every spelling of "print the version" people type.
+pub const VERSION_FLAGS: &[&str] = &[
+    "-v",
+    "-V",
+    "--version",
+    "--Version",
+    "--VERSION",
+    "-version",
+    "-Version",
+    "-VERSION",
+];
+
+/// `dct --Version` / `dct -version` → `--version` (before clap sees them).
+pub fn normalize_args(args: Vec<String>) -> Vec<String> {
+    args.into_iter()
+        .map(|a| {
+            if VERSION_FLAGS.contains(&a.as_str()) {
+                "--version".to_string()
+            } else {
+                a
+            }
+        })
+        .collect()
+}
+
+/// `dct` when started as dct, else `dictz`.
+pub fn program_name() -> &'static str {
+    let name = std::env::args()
+        .next()
+        .map(|a| {
+            std::path::Path::new(&a)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_lowercase())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    if name == "dct" {
+        "dct"
+    } else {
+        "dictz"
+    }
+}
+
+/// `true` when the arguments ask for the command line rather than the window.
 pub fn is_cli_invocation(args: &[String]) -> bool {
     match args.first() {
         None => false,
@@ -81,10 +129,10 @@ pub fn is_cli_invocation(args: &[String]) -> bool {
     name = "dictz",
     disable_version_flag = true,
     about = "dictz — offline dictionary (StarDict, DSL, Babylon). Without a command the window opens.",
-    after_help = "Same commands in the Python edition (pip install dictz). `dictz <command> --help` for details."
+    after_help = "`dct` is the short name of `dictz`. Same commands in the Python edition (pip install dictz). `dictz <command> --help` for details."
 )]
 struct Cli {
-    /// print the version and exit
+    /// print the version and exit (also -V, --Version, -version)
     #[arg(short = 'v', short_alias = 'V', long = "version")]
     version: bool,
     #[arg(long, hide = true)]
@@ -303,6 +351,18 @@ enum Cmd {
         #[arg(value_enum, default_value = "status")]
         state: WatchState,
     },
+    /// create desktop and menu shortcuts (--remove deletes them)
+    Shortcut {
+        /// delete the shortcuts
+        #[arg(long)]
+        remove: bool,
+        /// only the desktop shortcut
+        #[arg(long)]
+        desktop_only: bool,
+        /// only the menu / Start menu entry
+        #[arg(long)]
+        menu_only: bool,
+    },
 }
 
 #[derive(Args)]
@@ -456,6 +516,35 @@ fn cmd_popup(ctx: &Ctx, word: Vec<String>) -> i32 {
             } else {
                 1
             }
+        }
+    }
+}
+
+fn cmd_shortcut(ctx: &Ctx, remove: bool, desktop: bool, menu: bool) -> i32 {
+    if remove {
+        let paths = crate::desktop::remove_shortcuts(desktop, menu);
+        for p in &paths {
+            println!("removed: {}", p.display());
+        }
+        if paths.is_empty() {
+            println!("No dictz shortcuts found.");
+        }
+        return 0;
+    }
+    match crate::desktop::create_shortcuts(&ctx.data_dir, desktop, menu) {
+        Ok(paths) => {
+            for p in &paths {
+                println!("created: {}", p.display());
+            }
+            if paths.is_empty() {
+                println!("No desktop or menu folder found.");
+                return 1;
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            1
         }
     }
 }
@@ -1624,9 +1713,16 @@ fn cmd_shell(ctx: &mut Ctx, out: &Out) -> i32 {
 
 /// Run the CLI with `args` (without the program name).
 pub fn run(args: Vec<String>) -> Outcome {
-    let mut full = vec!["dictz".to_string()];
-    full.extend(args);
-    let cli = match Cli::try_parse_from(&full) {
+    use clap::{CommandFactory, FromArgMatches};
+    let prog = program_name();
+    let mut full = vec![prog.to_string()];
+    full.extend(normalize_args(args));
+    let parsed = Cli::command()
+        .name(prog)
+        .bin_name(prog)
+        .try_get_matches_from(&full)
+        .and_then(|m| Cli::from_arg_matches(&m));
+    let cli = match parsed {
         Ok(c) => c,
         Err(e) => {
             let code = if e.use_stderr() { 2 } else { 0 };
@@ -1664,6 +1760,11 @@ pub fn run(args: Vec<String>) -> Outcome {
         Some(Cmd::Show) => cmd_show(&ctx),
         Some(Cmd::Popup { word }) => cmd_popup(&ctx, word),
         Some(Cmd::Watch { state }) => cmd_watch(&ctx, state),
+        Some(Cmd::Shortcut {
+            remove,
+            desktop_only,
+            menu_only,
+        }) => cmd_shortcut(&ctx, remove, !menu_only, !desktop_only),
         Some(Cmd::Lookup(a)) => cmd_lookup(&mut ctx, a, &out),
         Some(Cmd::Suggest {
             prefix,

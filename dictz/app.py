@@ -1,8 +1,9 @@
-"""dictz application entry point.
+"""dictz application entry point (also installed as the short name ``dct``).
 
-    dictz              launch the GUI
-    dictz --version    print the version and exit
-    dictz --selftest   headless check that dictionaries can be read; exit 0/1
+    dictz / dct            launch the GUI
+    dictz FILE...          add dictionaries, launch the GUI
+    dictz <command> ...    command line (``dictz help``)
+    dictz -V               print the version (also -v, --version, --Version)
 """
 from __future__ import annotations
 

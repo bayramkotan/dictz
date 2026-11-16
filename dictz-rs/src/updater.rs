@@ -306,7 +306,21 @@ pub fn run_update(check_only: bool, assume_yes: bool) -> i32 {
             println!("Downloading {} …", asset);
             let result = download(&url)
                 .and_then(|a| extract_binary(&a, asset))
-                .and_then(|bin| replace_executable(&inst.exe, &bin));
+                .and_then(|bin| {
+                    replace_executable(&inst.exe, &bin)?;
+                    // `dictz` and `dct` are the same program: update the sibling too
+                    for name in ["dictz", "dct"] {
+                        let sib = inst.exe.with_file_name(format!(
+                            "{}{}",
+                            name,
+                            std::env::consts::EXE_SUFFIX
+                        ));
+                        if sib != inst.exe && sib.is_file() && !sib.is_symlink() {
+                            replace_executable(&sib, &bin)?;
+                        }
+                    }
+                    Ok(())
+                });
             match result {
                 Ok(()) => {
                     println!("Updated {}. Restart dictz.", inst.exe.display());

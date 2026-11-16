@@ -349,7 +349,15 @@ def test_scan_popup_modules_in_both_editions() -> None:
 
 
 def test_actions_runs_are_named_version_first() -> None:
-    """Every run in the Actions list reads "vX.Y.Z: ..." and a tag on the wrong commit fails."""
+    """Every run in the Actions list reads "vX.Y.Z: <short title>"; a wrong or long title fails."""
     ci = CI_YML.read_text(encoding="utf-8")
-    assert "run-name:" in ci and "format('{0}: {1}', github.ref_name" in ci
+    assert "\nrun-name:" not in ci, "run-name from head_commit.message shows the whole commit body"
+    assert "${#title} -gt 72" in ci
     assert "Check the tagged commit is the release commit" in ci
+
+
+def test_short_name_dct_is_installed() -> None:
+    py = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'dct = "dictz.app:main"' in py
+    cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
+    assert 'name = "dct"' in cargo and (ROOT / "dictz-rs" / "src" / "bin" / "dct.rs").is_file()

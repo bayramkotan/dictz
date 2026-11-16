@@ -48,6 +48,27 @@ Re-pushing the same tag cancels the previous run. PyPI and crates.io uploads are
 | Rust | macOS Apple Silicon | `dictz-rs-macos-arm64.tar.gz` — extract, run `dictz-rs/dictz` |
 | Rust | any | `cargo install dictz` (app, needs ALSA headers on Linux) · `cargo add dictz` (library) |
 
+Every artifact and install method also provides the short name **`dct`** (= `dictz`):
+
+- pip/pipx: a second console script
+- cargo: a second `[[bin]]`
+- tar archives: a `dct → dictz` symlink
+- Windows zips: a `dct.exe` copy (the PyInstaller copy shares `_internal\`)
+
+CI runs `dct -V` on each build.
+
+## Desktop shortcut
+
+`dictz shortcut` (or Dosya → Masaüstü kısayolu oluştur) creates the shortcuts for the copy that is running. `--remove` deletes them, and `--desktop-only` / `--menu-only` limit them.
+
+| Platform | Files |
+|---|---|
+| Linux | `$XDG_DATA_HOME/applications/dictz.desktop` + `<xdg-user-dir DESKTOP>/dictz.desktop` (trusted), icon `<data>/dictz.png` |
+| Windows | `Desktop\dictz.lnk` + `Start Menu\Programs\dictz.lnk` (PowerShell `WScript.Shell`), icon `<data>\dictz.ico` |
+| macOS | `~/Applications/dictz.app` (launcher script + `Info.plist` + `dictz.icns`) + a link on the desktop |
+
+The AppImage shortcut points at `$APPIMAGE`, so it keeps working after `dictz update` replaces the file.
+
 No Intel macOS binary: GitHub's Intel macOS runners do not start reliably for public repositories. Intel Mac users install with `pip`/`pipx`.
 
 ## Self-test
@@ -84,7 +105,7 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 | Python | AppImage | downloads the new AppImage and replaces the running file |
 | Python | portable zip / tar.gz | downloads the new archive to your Downloads folder and says where to extract it |
 | Rust | `cargo install` | `cargo install dictz --locked --force` |
-| Rust | portable binary | downloads the release archive and swaps the executable (Windows keeps `dictz.old` until the next start) |
+| Rust | portable binary | downloads the release archive and swaps the executable, and a sibling `dct` copy (Windows keeps `dictz.old` until the next start) |
 
 `dictz update --check` only compares versions (PyPI or crates.io); `--yes` skips the question.
 

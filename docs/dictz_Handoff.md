@@ -54,7 +54,9 @@ Rust code map (`dictz-rs/src/`):
 | `cli.rs` | the command line (clap) | `dictz/cli.py` (argparse) |
 | `updater.rs` | `dictz update`: cargo install or portable binary swap | `dictz/core/updater.py` |
 | `gui/` | egui window: `app.rs` (window, menus, panels, loader thread), `prefs_window.rs`, `render.rs` (article + find highlight), `fonts.rs`, `audio.rs` (rodio, volume), `system.rs` | `dictz/ui/*` |
-| `selftest.rs`, `main.rs` | selftest; CLI-or-GUI dispatch | `dictz/selftest.py`, `dictz/app.py` |
+| `selftest.rs`, `entry.rs` | selftest; CLI-or-GUI dispatch (`entry::main`, shared by both binaries) | `dictz/selftest.py`, `dictz/app.py` |
+| `main.rs`, `bin/dct.rs` | the two binaries `dictz` and `dct`: three lines each, call `dictz::entry::main()` | `[project.scripts]` dictz / dct |
+| `desktop.rs` | `dictz shortcut`: .desktop / .lnk / .app bundle, PNG / ICO / ICNS icon files | `dictz/core/desktop.py` |
 
 ---
 
@@ -79,10 +81,10 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 ## ⚠️ READ FIRST: the Actions list is one run per version, version first
 
 - CI runs **only for `v*` tags** (plus PRs and manual runs); plain pushes to `main` (docs, fixes) start no run. So the Actions list is a list of versions.
-- Every run is titled **`vX.Y.Z: <details>`**:
-  - The release commit's title starts with the version (`git commit -m "vX.Y.Z: ..."`).
-  - `run-name` in `ci.yml` puts the tag in front if it is ever missing.
-- The release preflight **fails** a tag that is on the wrong commit: the title must start with `vX.Y.Z: `. This happened with v0.0.8: the tag landed on the docs commit, so the run was titled "docs: roadmap…".
+- Every run is titled with the release commit's **title (first line) only**: **`vX.Y.Z: <short title>`**.
+  - ⚠️ **The title is SHORT: a few words, at most 72 characters** (e.g. `v0.0.9: dct short name, version flags, desktop shortcut`). It is a list entry, not an article. All the details go into the following `-m` paragraphs of the commit, which the Actions list does not show.
+  - `ci.yml` has **no `run-name`**. A run-name built from `github.event.head_commit.message` shows the **whole commit message** as the run title (GitHub expressions cannot cut it at the first line) — that is what happened with the first v0.0.9 run, which was cancelled and redone.
+- The release preflight **fails** a tag that is on the wrong commit or has a long title: the title must start with `vX.Y.Z: ` and be at most 72 characters. This happened with v0.0.8: the tag landed on the docs commit, so the run was titled "docs: roadmap…".
   - Fix: `git tag -d vX.Y.Z`, then `git push origin :refs/tags/vX.Y.Z`.
   - Then commit the release with the right title and tag it again.
 - A plain push's commit title never carries a version number. It does not appear in Actions anyway.
@@ -93,7 +95,8 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 
 **v0.0.7**: Python 3.14 Babylon fix and background loading; a full CLI with `dictz update`; 54 shared settings with a detailed Preferences window; a richer interface (dictionary bar, found-in panel, find in page…) — all in both editions.
 **v0.0.8**: the scan popup (Ctrl+C+C / every copy / selection), tray icon, global hotkeys, single instance and `dictz show / popup / watch` — in both editions.
-**Next suggested version:** v0.0.9, dictionary groups (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**v0.0.9**: the short name **`dct`** (= `dictz`), every `--version` spelling, `dct shortcut` / Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions.
+**Next suggested version:** v0.0.10, dictionary groups (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-15)
 
@@ -245,6 +248,15 @@ Every item below was hit and fixed during the v0.0.4 → v0.0.6 releases. Read t
 
 **G6. egui is pinned to 0.31.** The API changes between versions (`id_salt`, `Frame::NONE`, `corner_radius`, `Arc<FontData>`). Upgrading means a compile-and-fix round, so do it on its own, not inside another job.
 
+**G10. v0.0.9 lessons (`dct`, version flags, shortcuts).**
+- `dct` is a second **binary**, not a symlink: `cargo install` only installs `[[bin]]` targets. Both binaries call `dictz::entry::main()` (in the library, gated on the `cli` feature) so nothing is duplicated. Portable archives ship `dct` as a symlink (tar) or a copy (`dct.exe`, Windows zip); the Rust updater replaces a sibling regular-file `dct`/`dct.exe` too.
+- Python: a second console script `dct = "dictz.app:main"`. `program_name()` (both editions) takes the last path part of argv[0] (split on `/` **and** `\\`) so help and errors say `dct` when started as dct.
+- Version spellings are normalised **before** argparse / clap (`normalize_args`, `VERSION_FLAGS`): `-v -V --version --Version --VERSION -version -Version -VERSION`. Single-dash long forms like `-version` would otherwise be parsed as `-v -e -r…`.
+- Rust clap: the program name is set at runtime with `Cli::command().name(prog).bin_name(prog)` + `Cli::from_arg_matches`, not `Cli::parse()`.
+- Shortcuts start the copy that is running: `$APPIMAGE`, the frozen exe, the venv/pipx script (`which dictz`), `pythonw -m dictz` on Windows, or `current_exe()` in Rust. Windows `.lnk` files are made by PowerShell `WScript.Shell`, the values passed in `DICTZ_SC_*` environment variables (no quoting problems). Linux desktop folder comes from `xdg-user-dir DESKTOP` (localized names like *Masaüstü*), the launcher is marked trusted with `gio set … metadata::trusted true`.
+- Icon files are written by hand (PNG via zlib/flate2 + own CRC32, ICO = one PNG entry, ICNS = one `icp6` entry), from the same `app_icon_rgba` pixels as the window icon, so no image library is needed.
+- After a `cargo build` that seems not to pick up a change in `main.rs`, `cargo clean -p dictz` fixed it (stale fingerprint after moving code into `entry.rs`).
+
 **G9. v0.0.8 lessons (scan popup, tray, hotkeys).**
 - The CLI command `scan` already existed (find dictionary files), so scanning is controlled with **`dictz watch`**; the popup is `dictz popup`, the window `dictz show`.
 - Instance protocol: TCP on 127.0.0.1 (port 0), `instance.json` = {port, token, pid, edition, version}, one JSON line each way. Both editions implement client and server; tests in `tests/test_instance.py` and `instance.rs`. A killed process leaves a stale `instance.json`; a failed connect simply means "not running".
@@ -303,7 +315,19 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 ---
 
-## Done this session (v0.0.8)
+## Done this session (v0.0.9)
+
+- `dct` short name in both editions (console script / second `[[bin]]` / portable archives), help shows the typed name.
+- Every version spelling (`-v -V --version --Version --VERSION -version -Version -VERSION`).
+- `dictz shortcut [--remove] [--desktop-only] [--menu-only]` and Dosya → Masaüstü kısayolu oluştur (Linux .desktop + trusted desktop launcher, Windows .lnk Desktop + Start menu, macOS `~/Applications/dictz.app`).
+- Completion for both names; parity goldens regenerated.
+- README + dictz-rs/README rewritten with per-platform install (portable / pipx / pip / cargo, PATH, Gatekeeper, SmartScreen, Wayland, xcb-cursor).
+- CI: `dct -V` checked on the wheel, frozen builds and the Rust release binary; `dct` added to every portable archive.
+- Roadmap shifted: groups → v0.0.10, everything after +1.
+- npm: the name `dictz` is free on npm (`dct` is taken by an unrelated package, which does not matter: the package would be `dictz` with bins `dictz` and `dct`). A thin npm wrapper that downloads the Rust release binary is possible — a separate job later.
+- Verified locally: 118 pytest, ruff, cargo test + clippy (default, `--no-default-features --features cli,gui`, `--no-default-features`), `dct`/`dictz` with all version spellings, `dct shortcut` / `--remove` with a temp HOME in both editions, PNG/ICO validity.
+
+## Done in v0.0.8
 
 - Scan popup in both editions: Ctrl+C+C (`DoubleCopy`), every copy, Linux selection; cleaned text (`clean_scan_text`); popup next to the mouse with pin / open-in-main / auto-hide / size.
 - Tray (Qt / ksni / tray-icon), close and start to tray, global hotkeys, single instance, `dictz show / popup / watch`, `gui --popup`.
@@ -354,15 +378,16 @@ Every feature lands in **both** editions in the same version:
 | Version | Both editions |
 |---|---|
 | ✅ v0.0.8 | scan popup: selection / clipboard / Ctrl+C+C, tray icon, global hotkeys, single instance |
-| v0.0.9 | dictionary groups, custom dictionary names, dictionary metadata file |
-| v0.0.10 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
-| v0.0.11 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
-| v0.0.12 | ZIM, LSA, SDict, Aard, GLS, sound folders / packs; lazy loading, > 4 GB |
-| v0.0.13 | full-text search inside definitions |
-| v0.0.14 | online sources: MediaWiki, websites, DICT servers, Forvo, external programs, proxy |
-| v0.0.15 | TTS (system voices + edge-tts) |
-| v0.0.16 | Anki, favorites folders, flashcards, word of the day |
-| v0.0.17 | article CSS, print, headwords window, shortcut editor, interface languages, portable mode |
+| ✅ v0.0.9 | `dct` short name, version flags, desktop / menu shortcut, per-platform READMEs |
+| v0.0.10 | dictionary groups, custom dictionary names, dictionary metadata file |
+| v0.0.11 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
+| v0.0.12 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
+| v0.0.13 | ZIM, LSA, SDict, Aard, GLS, sound folders / packs; lazy loading, > 4 GB |
+| v0.0.14 | full-text search inside definitions |
+| v0.0.15 | online sources: MediaWiki, websites, DICT servers, Forvo, external programs, proxy |
+| v0.0.16 | TTS (system voices + edge-tts) |
+| v0.0.17 | Anki, favorites folders, flashcards, word of the day |
+| v0.0.18 | article CSS, print, headwords window, shortcut editor, interface languages, portable mode |
 | v0.1.0 | signing, notarization, Intel macOS (universal2), first-run tour |
 
 Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it left-to-right), and maybe an AppImage for the Rust binary.
@@ -374,4 +399,4 @@ Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it le
 - Commit messages are **in English**, long and detailed, with repeated `-m` flags (no `-F`).
 - A version commit title is `vX.Y.Z: ...`. A plain push carries no version in its title, has no tag and doesn't bump the version.
 - No Claude/Anthropic attribution anywhere (no commit trailer, no README, no metadata).
-- Latest tag: `v0.0.8`
+- Latest tag: `v0.0.9`

@@ -97,6 +97,7 @@ enum Confirm {
 }
 
 enum Action {
+    CreateShortcuts,
     SetScan(bool),
     PopupLookup(String),
     ToggleMain,
@@ -1638,6 +1639,28 @@ impl DictzApp {
                 let _ = system::open_external(&self.data_dir.to_string_lossy());
             }
             Action::Quit => self.quit(ctx),
+            Action::CreateShortcuts => {
+                match crate::desktop::create_shortcuts(&self.data_dir, true, true) {
+                    Ok(paths) if !paths.is_empty() => {
+                        let list: Vec<String> =
+                            paths.iter().map(|p| p.display().to_string()).collect();
+                        self.error = Some((
+                            "Kısayol".into(),
+                            format!("Oluşturuldu:\n{}", list.join("\n")),
+                        ));
+                    }
+                    Ok(_) => {
+                        self.error = Some((
+                            "Kısayol".into(),
+                            "Masaüstü veya menü klasörü bulunamadı.".into(),
+                        ))
+                    }
+                    Err(e) => {
+                        self.error =
+                            Some(("Kısayol".into(), format!("Kısayol oluşturulamadı:\n{}", e)))
+                    }
+                }
+            }
             Action::SetScan(on) => self.set_scan(ctx, on),
             Action::PopupLookup(w) => self.popup_lookup(ctx, &w),
             Action::ToggleMain => self.toggle_main(ctx),
@@ -1972,6 +1995,9 @@ impl DictzApp {
                     actions.push(Action::ExportFavorites);
                 }
                 ui.separator();
+                if item(ui, "Masaüstü kısayolu oluştur", "") {
+                    actions.push(Action::CreateShortcuts);
+                }
                 if item(ui, "Çıkış", "Ctrl+Q") {
                     actions.push(Action::Quit);
                 }

@@ -1,9 +1,9 @@
 # dictz PowerShell completion — add to $PROFILE:  dictz completion powershell | Out-String | Invoke-Expression
-Register-ArgumentCompleter -Native -CommandName dictz -ScriptBlock {
+Register-ArgumentCompleter -Native -CommandName dictz, dct -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $words = $commandAst.CommandElements | ForEach-Object { $_.ToString() }
     if ($words.Count -le 2) {
-        @('add', 'completion', 'config', 'dicts', 'disable', 'doctor', 'dump', 'enable', 'f', 'fav', 'favorites', 'fuzzy', 'gui', 'help', 'history', 'info', 'l', 'lookup', 'ls', 'move', 'paths', 'popup', 'random', 'reindex', 'remove', 'rm', 's', 'scan', 'selftest', 'shell', 'show', 'suggest', 'update', 'upgrade', 'version', 'watch') | Where-Object { $_ -like "$wordToComplete*" } |
+        @('add', 'completion', 'config', 'dicts', 'disable', 'doctor', 'dump', 'enable', 'f', 'fav', 'favorites', 'fuzzy', 'gui', 'help', 'history', 'info', 'l', 'lookup', 'ls', 'move', 'paths', 'popup', 'random', 'reindex', 'remove', 'rm', 's', 'scan', 'selftest', 'shell', 'shortcut', 'show', 'suggest', 'update', 'upgrade', 'version', 'watch') | Where-Object { $_ -like "$wordToComplete*" } |
             ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
         return
     }
@@ -15,5 +15,6 @@ Register-ArgumentCompleter -Native -CommandName dictz -ScriptBlock {
         'config' { @('list','get','set','reset','path','export','import') | Where-Object { $_ -like "$wordToComplete*" } }
         'completion' { @('bash','zsh','fish','powershell') | Where-Object { $_ -like "$wordToComplete*" } }
         'watch' { @('on','off','toggle','status') | Where-Object { $_ -like "$wordToComplete*" } }
+        'shortcut' { @('--remove','--desktop-only','--menu-only') | Where-Object { $_ -like "$wordToComplete*" } }
     }
 }

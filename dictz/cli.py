@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,7 @@ COMMANDS = [
     ("show", "bring the running window to the front (starts dictz if needed)"),
     ("popup", "look a word up in the running dictz's scan popup"),
     ("watch", "turn clipboard / selection scanning on or off"),
+    ("shortcut", "create desktop and menu shortcuts (--remove deletes them)"),
     ("help", "show help"),
 ]
 ALIASES = {"l": "lookup", "s": "suggest", "ls": "dicts", "rm": "remove", "fav": "favorites",
@@ -55,6 +57,25 @@ ALIASES = {"l": "lookup", "s": "suggest", "ls": "dicts", "rm": "remove", "fav": 
 COMMAND_NAMES = {c for c, _ in COMMANDS} | set(ALIASES)
 
 EDITION = "Python edition"
+
+# `dictz` and its short name `dct` are the same program.
+PROGRAM_NAMES = ("dictz", "dct")
+
+# Every spelling of "print the version" people type.
+VERSION_FLAGS = {"-v", "-V", "--version", "--Version", "--VERSION", "-version", "-Version", "-VERSION"}
+
+
+def normalize_args(argv: list[str]) -> list[str]:
+    """``dct --Version`` / ``dct -version`` → ``--version`` (before argparse sees them)."""
+    return ["--version" if a in VERSION_FLAGS else a for a in argv]
+
+
+def program_name() -> str:
+    """``dct`` when started as dct, else ``dictz``."""
+    name = re.split(r"[\\/]", sys.argv[0])[-1].lower() if sys.argv and sys.argv[0] else ""
+    for suffix in (".exe", ".py"):
+        name = name.removesuffix(suffix)
+    return "dct" if name == "dct" else "dictz"
 
 
 # --------------------------------------------------------------------- output
@@ -719,13 +740,14 @@ _dictz() {{
         favorites|fav) COMPREPLY=( $(compgen -W "list add remove clear" -- "$cur") ) ;;
         completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
         watch) COMPREPLY=( $(compgen -W "on off toggle status" -- "$cur") ) ;;
+        shortcut) COMPREPLY=( $(compgen -W "--remove --desktop-only --menu-only" -- "$cur") ) ;;
         add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
     esac
 }}
-complete -o default -F _dictz dictz
+complete -o default -F _dictz dictz dct
 """
     if shell == "zsh":
-        return f"""#compdef dictz
+        return f"""#compdef dictz dct
 # dictz zsh completion — add to ~/.zshrc:  eval "$(dictz completion zsh)"
 _dictz() {{
     if (( CURRENT == 2 )); then
@@ -738,10 +760,11 @@ _dictz() {{
         favorites|fav) compadd -- list add remove clear ;;
         completion) compadd -- bash zsh fish powershell ;;
         watch) compadd -- on off toggle status ;;
+        shortcut) compadd -- --remove --desktop-only --menu-only ;;
         *) _files ;;
     esac
 }}
-compdef _dictz dictz
+compdef _dictz dictz dct
 """
     if shell == "fish":
         lines = ["# dictz fish completion — save as ~/.config/fish/completions/dictz.fish",
@@ -755,12 +778,14 @@ compdef _dictz dictz
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from favorites fav' -a 'list add remove clear'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from watch' -a 'on off toggle status'")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from shortcut' -l remove -l desktop-only -l menu-only")
+        lines.append("complete -c dct -w dictz")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from add scan' -F")
         return "\n".join(lines) + "\n"
     if shell == "powershell":
         quoted = ", ".join(f"'{c}'" for c in sorted({c for c, _ in COMMANDS} | set(ALIASES)))
         return f"""# dictz PowerShell completion — add to $PROFILE:  dictz completion powershell | Out-String | Invoke-Expression
-Register-ArgumentCompleter -Native -CommandName dictz -ScriptBlock {{
+Register-ArgumentCompleter -Native -CommandName dictz, dct -ScriptBlock {{
     param($wordToComplete, $commandAst, $cursorPosition)
     $words = $commandAst.CommandElements | ForEach-Object {{ $_.ToString() }}
     if ($words.Count -le 2) {{
@@ -776,6 +801,7 @@ Register-ArgumentCompleter -Native -CommandName dictz -ScriptBlock {{
         'config' {{ @('list','get','set','reset','path','export','import') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
         'completion' {{ @('bash','zsh','fish','powershell') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
         'watch' {{ @('on','off','toggle','status') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'shortcut' {{ @('--remove','--desktop-only','--menu-only') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
     }}
 }}
 """
@@ -901,6 +927,31 @@ def cmd_watch(ctx: Ctx, args) -> int:
     return 0
 
 
+def cmd_shortcut(ctx: Ctx, args) -> int:
+    from .core.desktop import create_shortcuts, remove_shortcuts
+
+    desktop = not args.menu_only
+    menu = not args.desktop_only
+    try:
+        if args.remove:
+            paths = remove_shortcuts(desktop, menu)
+            for p in paths:
+                print(f"removed: {p}")
+            if not paths:
+                print("No dictz shortcuts found.")
+            return 0
+        paths = create_shortcuts(ctx.data_dir, desktop, menu)
+    except (OSError, RuntimeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for p in paths:
+        print(f"created: {p}")
+    if not paths:
+        print("No desktop or menu folder found.")
+        return 1
+    return 0
+
+
 def cmd_selftest(ctx: Ctx, args) -> int:
     from .selftest import run
 
@@ -911,13 +962,14 @@ def cmd_selftest(ctx: Ctx, args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="dictz",
+        prog=program_name(),
         description=f"dictz {__version__} — offline dictionary (StarDict, DSL, Babylon). "
                     "Without a command the window opens.",
-        epilog="Same commands in the Rust edition (cargo install dictz). "
-               "`dictz <command> --help` for details.",
+        epilog="`dct` is the short name of `dictz`. Same commands in the Rust edition "
+               "(cargo install dictz). `dictz <command> --help` for details.",
     )
-    p.add_argument("-v", "-V", "--version", action="store_true", help="print the version and exit")
+    p.add_argument("-v", "-V", "--version", action="store_true",
+                   help="print the version and exit (also --Version, -version)")
     p.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--data-dir", metavar="DIR", help="use another data folder (also DICTZ_DATA_DIR)")
     p.add_argument("--no-color", action="store_true", help="no colors (also NO_COLOR)")
@@ -1043,6 +1095,10 @@ def build_parser() -> argparse.ArgumentParser:
     add("show")
     pp = add("popup")
     pp.add_argument("word", nargs="*", help="default: the clipboard text")
+    sc2 = add("shortcut")
+    sc2.add_argument("--remove", action="store_true", help="delete the shortcuts")
+    sc2.add_argument("--desktop-only", action="store_true", help="only the desktop shortcut")
+    sc2.add_argument("--menu-only", action="store_true", help="only the menu / Start menu entry")
     wt = add("watch")
     wt.add_argument("state", nargs="?", choices=["on", "off", "toggle", "status"], default="status")
 
@@ -1059,7 +1115,7 @@ HANDLERS = {
     "history": cmd_history, "favorites": cmd_favorites, "config": cmd_config, "paths": cmd_paths,
     "doctor": cmd_doctor, "selftest": cmd_selftest, "update": cmd_update, "version": cmd_version,
     "completion": cmd_completion, "shell": cmd_shell, "show": cmd_show, "popup": cmd_popup,
-    "watch": cmd_watch,
+    "watch": cmd_watch, "shortcut": lambda c, a: cmd_shortcut(c, a),
 }
 
 
@@ -1068,11 +1124,11 @@ def is_cli_invocation(argv: list[str]) -> bool:
     if not argv:
         return False
     first = argv[0]
-    return first.startswith("-") or first in COMMAND_NAMES
+    return first.startswith("-") or first in COMMAND_NAMES or first in VERSION_FLAGS
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
+    argv = normalize_args(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.data_dir:

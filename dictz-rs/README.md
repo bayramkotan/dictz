@@ -10,17 +10,29 @@ This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The P
 
 ## Install the app
 
+Both commands get installed: **`dictz`** and its short name **`dct`**. They are the same program.
+
+| Platform | From crates.io | Portable, no Rust needed ([latest release](https://github.com/bayramkotan/dictz/releases/latest)) |
+|---|---|---|
+| 🐧 **Linux** | `sudo apt install build-essential pkg-config libasound2-dev` then `cargo install dictz` | `tar xzf dictz-rs-linux-x86_64.tar.gz` → `./dictz-rs/dct` |
+| 🪟 **Windows 10/11** | `cargo install dictz` ([rustup](https://rustup.rs) with the MSVC build tools) | unzip `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe` (or `dct.exe`) |
+| 🍎 **macOS** | `cargo install dictz` | `tar xzf dictz-rs-macos-arm64.tar.gz` → `./dictz-rs/dct` (Apple Silicon) |
+
+ALSA headers on other distros: `alsa-lib-devel` (Fedora), `alsa-lib` (Arch/CachyOS, usually already installed). To build without in-app sound, use `cargo install dictz --no-default-features --features cli,gui,update,scan`; sounds then open in the system player.
+
+Then:
+
 ```bash
-cargo install dictz
-dictz                 # open the window
-dictz En-Tr.dsl       # add a dictionary and open the window
-dictz lookup apple    # command line (see below)
-dictz update          # update this copy
+dct                   # open the window
+dct shortcut          # desktop + menu shortcut (Linux .desktop, Windows Desktop + Start menu, macOS ~/Applications/dictz.app)
+dct -V                # version (-v, -V, --version, --Version, --VERSION, -version all work)
+dct update            # update this copy (crates.io → cargo install, portable → new release binary)
+dct doctor            # check the installation
 ```
 
-On Linux, building needs the ALSA headers for in-app sound: `sudo apt install libasound2-dev pkg-config` on Debian/Ubuntu (Arch/CachyOS: `alsa-lib`, usually already installed). To build without sound, run `cargo install dictz --no-default-features --features cli,gui,update`; sounds then open in the system player.
+The portable builds are unsigned. On Windows, click SmartScreen's **More info → Run anyway**. On macOS, run `xattr -d com.apple.quarantine dictz-rs/dictz` once if Gatekeeper blocks the binary.
 
-Each [GitHub Release](https://github.com/bayramkotan/dictz/releases/latest) also has ready-made single-file builds: `dictz-rs-linux-x86_64.tar.gz`, `dictz-rs-windows-x86_64.zip` and `dictz-rs-macos-arm64.tar.gz`.
+The Windows binary is a GUI program, but it attaches to the console when you start it from PowerShell or cmd, so the command line prints normally.
 
 ## Features
 
@@ -37,12 +49,13 @@ Each [GitHub Release](https://github.com/bayramkotan/dictz/releases/latest) also
   - background loading with progress; dictionary folders scanned on start
   - light, dark and auto themes, accent color, fonts by name or file, zoom, full screen, always on top
   - drag and drop dictionary files onto the window
+  - **Dosya → Masaüstü kısayolu oluştur**: desktop and menu shortcut with the dictz icon
   - scan popup: Ctrl+C+C / every copy / selection (Linux) in any program shows the articles next to the mouse; tray icon, global hotkeys (Ctrl+F11, Ctrl+F12, Ctrl+Shift+F11), single instance
   - the same shortcuts as the Python edition (F1 lists them)
 
 ## Command line
 
-The same commands, options and output as the Python edition. `dictz help` and `dictz <command> --help` list everything.
+The same commands, options and output as the Python edition. `dct` is the short name of `dictz`. `dct help` and `dct <command> --help` list everything.
 
 ```bash
 dictz lookup apple            # articles as text (-d DICT, -p prefix, -f fuzzy, --json, --html)
@@ -66,13 +79,14 @@ dictz config set article.font_size 18
 dictz config export my.json   # import / reset / path / get
 dictz paths  /  dictz doctor  /  dictz selftest
 dictz update --check          # crates.io or GitHub release, depending on how it was installed
+dictz shortcut [--remove]     # desktop + menu shortcut (--desktop-only, --menu-only)
 dictz show                    # bring the running window to the front
 dictz popup [WORD]            # scan popup in the running dictz (no WORD = clipboard)
 dictz watch on|off|toggle|status   # clipboard / selection scanning
-eval "$(dictz completion bash)"   # also zsh, fish, powershell
+eval "$(dct completion bash)"     # also zsh, fish, powershell — completes both dictz and dct
 ```
 
-Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COLOR`), `-v` / `--version`.
+Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COLOR`), `-V` / `--version` (every spelling: `-v`, `--Version`, `-version`…).
 
 ## Settings
 
@@ -82,7 +96,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ```toml
 [dependencies]
-dictz = { version = "0.0.8", default-features = false }   # no GUI / audio deps
+dictz = { version = "0.0.9", default-features = false }   # no GUI / audio deps
 ```
 
 ```rust
@@ -112,7 +126,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 
 | Flag | Default | Pulls in |
 |---|---|---|
-| `cli` | on | clap (the `dictz` command line; the binary needs it) |
+| `cli` | on | clap (the `dictz` / `dct` command line; both binaries need it) |
 | `gui` | on | eframe/egui, rfd (file dialogs), image |
 | `audio` | on | rodio (needs ALSA headers on Linux) |
 | `update` | on | ureq, tar (`dictz update`) |
