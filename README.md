@@ -364,6 +364,15 @@ The window also has:
 
 To use another folder, pass `--data-dir DIR` or set `DICTZ_DATA_DIR`. A USB stick works too.
 
+| File | What is in it |
+|---|---|
+| `dictionaries.json` | your dictionary list: order, on/off, names (a dictionary is known by its file path; a second one with the same name is shown as `Name (2)`) |
+| `settings.json` | the 76 settings |
+| `dictz_index.db` | the headword index (SQLite FTS5) |
+| `dictz_history.db` | history and favorites |
+
+All four are shared by the Python and the Rust edition.
+
 ## Supported formats
 
 | Format | Extension | Python edition | Rust edition |

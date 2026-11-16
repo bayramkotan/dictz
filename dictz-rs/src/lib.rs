@@ -56,6 +56,7 @@ pub mod instance;
 pub mod media;
 pub mod paths;
 pub mod query;
+pub mod registry;
 pub mod scantext;
 pub mod selftest;
 pub mod settings;
@@ -148,6 +149,9 @@ pub trait Dictionary: Send {
 
     /// Dictionary metadata.
     fn metadata(&self) -> &DictionaryMetadata;
+
+    /// Mutable metadata (the list renames a dictionary to its unique name).
+    fn metadata_mut(&mut self) -> &mut DictionaryMetadata;
 
     /// Headword table (insertion order + case-insensitive sorted order).
     fn words(&self) -> &WordTable;

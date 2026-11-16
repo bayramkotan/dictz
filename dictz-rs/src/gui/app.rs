@@ -961,8 +961,8 @@ impl DictzApp {
             .as_ref()
             .and_then(|i| i.list_dictionaries(false).ok())
             .unwrap_or_default();
-        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-        let mut known: std::collections::HashSet<PathBuf> =
+        let canon = |p: &Path| crate::registry::norm_path(p);
+        let mut known: std::collections::HashSet<String> =
             rows.iter().map(|r| canon(&r.path)).collect();
         let mut new_files: Vec<PathBuf> = Vec::new();
         if self.prefs.bool("dictionaries.scan_on_startup") {
@@ -1020,7 +1020,8 @@ impl DictzApp {
     }
 
     fn loading_finished(&mut self, ctx: &egui::Context) {
-        self.qm.save_order();
+        // the order is already in dictionaries.json; dictionaries that did
+        // not load keep their place there
         self.load_progress = None;
         self.loader = None;
         if let Some(w) = self.pending_popup.take() {
@@ -3444,7 +3445,8 @@ fn load_job(
         i += 1;
         send(LoadMsg::Progress(i, total, file_name(&row.path)));
         match QueryManager::open_file(&row.path) {
-            Ok(d) => {
+            Ok(mut d) => {
+                d.metadata_mut().name = row.name.clone();
                 if reindex && row.changed() {
                     if let Some(s) = store.as_mut() {
                         let _ = s.index_dictionary(d.as_ref());
@@ -3459,8 +3461,12 @@ fn load_job(
         i += 1;
         send(LoadMsg::Progress(i, total, file_name(&f)));
         match QueryManager::open_file(&f) {
-            Ok(d) => {
+            Ok(mut d) => {
                 if let Some(s) = store.as_mut() {
+                    // a unique name in the list ("Name (2)")
+                    if let Ok(name) = s.register_dictionary(d.as_ref()) {
+                        d.metadata_mut().name = name;
+                    }
                     if !s.is_indexed(&d.metadata().name).unwrap_or(false) {
                         let _ = s.index_dictionary(d.as_ref());
                     }

@@ -143,6 +143,22 @@ def test_dictident_golden() -> None:
     assert di.icon_bytes(PARITY / "sample.bgl")[1] == ".ico"
 
 
+def test_registry_golden(tmp_path) -> None:
+    from dictz.storage.registry import Registry, fnv1a64, unique_name
+
+    g = _golden("registry_golden.json")
+    f = tmp_path / "dictionaries.json"
+    f.write_text(g["file"], encoding="utf-8")
+    reg = Registry(f)
+    assert [d["enabled"] for d in reg.items] == [True, False, True]
+    reg.save()
+    assert f.read_text(encoding="utf-8") == g["file"]
+    for base, taken, want in g["unique"]:
+        assert unique_name(base, set(taken)) == want
+    for s, h in g["fnv1a64"]:
+        assert f"{fnv1a64(s.encode()):016x}" == h
+
+
 def test_dictionary_icon_next_to_file(tmp_path) -> None:
     from dictz.core.dictident import icon_bytes, icon_file
 

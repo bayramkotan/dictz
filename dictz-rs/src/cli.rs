@@ -1134,9 +1134,7 @@ fn expand_paths(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
 }
 
 fn renumber(ctx: &mut Ctx, order: &[String]) {
-    for (i, n) in order.iter().enumerate() {
-        let _ = ctx.index().set_sort_order(n, i as i64);
-    }
+    let _ = ctx.index().set_order(order);
 }
 
 fn cmd_add(
@@ -1162,14 +1160,7 @@ fn cmd_add(
         ctx.index = qm.index.take();
         match res {
             Ok(name) => {
-                let mut order: Vec<String> = ctx
-                    .rows()
-                    .into_iter()
-                    .map(|r| r.name)
-                    .filter(|n| *n != name)
-                    .collect();
-                order.push(name.clone());
-                renumber(ctx, &order);
+                // dictionaries.json keeps the order (new ones at the end)
                 if disabled {
                     let _ = ctx.index().set_enabled(&name, false);
                 }
@@ -1310,12 +1301,8 @@ fn cmd_reindex(ctx: &mut Ctx, names: Vec<String>) -> i32 {
 
 fn cmd_scan(ctx: &mut Ctx, folders: &[PathBuf], no_recursive: bool, add: bool) -> i32 {
     let files = expand_paths(folders, !no_recursive);
-    let known: Vec<PathBuf> = ctx
-        .rows()
-        .into_iter()
-        .map(|r| r.path.canonicalize().unwrap_or(r.path))
-        .collect();
-    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let canon = |p: &Path| crate::registry::norm_path(p);
+    let known: Vec<String> = ctx.rows().into_iter().map(|r| canon(&r.path)).collect();
     for f in &files {
         let mark = if known.contains(&canon(f)) {
             "added"
@@ -1791,8 +1778,6 @@ pub fn run(args: Vec<String>) -> Outcome {
                 let _ = ctx.index().remove_dictionary(&n);
                 println!("removed: {}", n);
             }
-            let order: Vec<String> = ctx.rows().into_iter().map(|r| r.name).collect();
-            renumber(&mut ctx, &order);
             0
         }
         Some(Cmd::Enable { names }) => {

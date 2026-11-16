@@ -349,6 +349,36 @@ def write_dictident_golden() -> None:
                                                 encoding="utf-8")
 
 
+REGISTRY_ITEMS = [
+    {"name": "İngilizce–Türkçe Cep Sözlüğü", "path": "/dicts/a/pocket.ifo", "format": "stardict", "enabled": True,
+     "word_count": 6, "source_lang": "English", "target_lang": "Turkish", "description": "cep",
+     "mtime": 1700000000.5, "indexed": True},
+    {"name": "İngilizce–Türkçe Cep Sözlüğü (2)", "path": "/dicts/b/pocket.ifo", "format": "stardict",
+     "enabled": False, "word_count": 6, "mtime": 0.0, "indexed": False},
+    {"name": "Universal", "path": "/dicts/universal-en-ru.dsl", "format": "dsl"},
+]
+UNIQUE_CASES = [["A", [], "A"], ["A", ["A"], "A (2)"], ["A", ["A", "A (2)"], "A (3)"], ["  B ", ["B"], "B (2)"],
+                ["", [], "?"], ["A", ["A (2)"], "A"]]
+
+
+def write_registry_golden() -> None:
+    """dictionaries.json: the exact text both editions write, unique names, path ids."""
+    from dictz.storage.registry import Registry, fnv1a64, unique_name
+
+    reg = Registry(None)
+    reg.items = [Registry._clean({**d, "id": f"{fnv1a64(d['path'].encode()):016x}"}) for d in REGISTRY_ITEMS]
+    text = json.dumps({"version": 1, "dictionaries": reg.items}, ensure_ascii=False, indent=1) + "\n"
+    g = {
+        "file": text,
+        "unique": [[b, t, unique_name(b, set(t))] for b, t, _ in UNIQUE_CASES],
+        "fnv1a64": [[x, f"{fnv1a64(x.encode()):016x}"] for x in ["", "a", "/dicts/a/pocket.ifo",
+                                                                   "C:\\Sözlük\\x.ifo"]],
+    }
+    assert [u[2] for u in g["unique"]] == [u[2] for u in UNIQUE_CASES]
+    (HERE / "registry_golden.json").write_text(json.dumps(g, ensure_ascii=False, indent=1) + "\n",
+                                               encoding="utf-8")
+
+
 def write_i18n() -> None:
     """Rust copy of the interface catalogues and flags (embedded with include_str!/include_bytes!)."""
     import shutil
@@ -371,4 +401,5 @@ if __name__ == "__main__":
     write_dsl()
     write_bgl()
     write_golden()
+    write_registry_golden()
     print("written:", sorted(p.name for p in HERE.iterdir()))

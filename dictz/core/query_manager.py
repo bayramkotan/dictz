@@ -106,6 +106,15 @@ class QueryManager:
         parser_cls = parser_for(path)
         dictionary = parser_cls(path)
         dictionary.load()
+        if self.index_store is not None:
+            # a unique name per file: a second "X" becomes "X (2)"
+            self.index_store.register_dictionary(dictionary)
+        else:
+            from ..storage.registry import unique_name
+
+            taken = {n for n, d in self.dictionaries.items()
+                     if str(d.metadata.file_path) != str(dictionary.metadata.file_path)}
+            dictionary.metadata.name = unique_name(dictionary.metadata.name, taken)
         name = dictionary.metadata.name
         if name in self.dictionaries:
             self._order.remove(name)
@@ -146,6 +155,7 @@ class QueryManager:
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 errors.append(f"{path}: {exc}")
                 continue
+            dictionary.metadata.name = row["name"]  # the name in the list (may be "X (2)")
             self.attach(dictionary, path, bool(row["enabled"]))
             if reindex_changed and _changed(row, path):
                 self.index_store.index_dictionary(dictionary)
@@ -210,11 +220,20 @@ class QueryManager:
             self._headword_cache = None
 
     def _persist_order(self) -> None:
+        """Write the order of the loaded dictionaries to the list.
+
+        Dictionaries that are in the list but not loaded (file missing, failed
+        to open) keep their places: they are never dropped or moved.
+        """
         if self.index_store is None:
             return
-        for i, name in enumerate(self._order):
-            self.index_store.set_sort_order(name, i)
-            self.index_store.set_enabled(name, name in self.enabled_names)
+        all_names = [r["name"] for r in self.index_store.list_dictionaries(enabled_only=False)]
+        loaded = set(self._order)
+        it = iter([n for n in self._order if n in set(all_names)])
+        merged = [next(it) if n in loaded else n for n in all_names]
+        merged += [n for n in self._order if n not in set(all_names)]
+        if merged != all_names:
+            self.index_store.set_order(merged)
 
     def loaded_names(self) -> list[str]:
         """Names in list order."""

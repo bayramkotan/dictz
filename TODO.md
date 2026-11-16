@@ -161,6 +161,9 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Known bugs / limitations
 
+- ⏳ **Slow start**: every dictionary is parsed fully at start. Next job: a persistent index with articles read on demand from the file (like GoldenDict), in both editions
+- ⏳ **Article display** is not yet as clean as GoldenDict's (next job after speed)
+
 - DSL `[s]` media: only `wav`/`mp3` sounds and `jpg/jpeg/gif/tif/tiff/png/bmp` pictures, with case-sensitive extensions (PyGlossary's rule, kept for parity); Lingvo `.spx` sounds are not played
 - Rust GUI: Arabic/Persian **dictionary article** text is not shaped right-to-left (the interface texts are, since v0.1.0)
 - Rust GUI: a font given by name is matched against font file names (no fontconfig lookup); a file path always works
@@ -179,6 +182,8 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 ---
 
 ## Recently done
+
+- ✅ **after v0.1.0 (plain push)** — the dictionary list moved to `dictionaries.json` in both editions: dictionaries are known by file path, a duplicate name becomes `Name (2)`, missing / failed dictionaries keep their place, one-time migration from the SQLite table — fixes dictionaries getting mixed up or lost
 
 - ✅ **v0.1.0** — interface in 25 languages with a flag picker (RTL for ar/fa/ur), dictionary icons + article cards (language pair, format, colour), READMEs with screenshots — in both editions
 - ✅ **v0.0.9** — `dct` short name, every `--version` spelling, `dct shortcut` + Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions

@@ -93,6 +93,7 @@ class DictionaryLoader(QThread):
                 self.progress.emit(i, total, Path(row["path"]).name)
                 try:
                     d = QueryManager.open_file(row["path"])
+                    d.metadata.name = row["name"]  # the name in the list (may be "X (2)")
                     if self.reindex_changed and _changed(row, Path(row["path"])):
                         store.index_dictionary(d)
                     self.loaded.emit(d, row["path"], bool(row["enabled"]))
@@ -103,7 +104,8 @@ class DictionaryLoader(QThread):
                 self.progress.emit(i, total, f.name)
                 try:
                     d = QueryManager.open_file(f)
-                    if not store.is_indexed(d.metadata.name):
+                    name = store.register_dictionary(d)  # unique name: "X (2)" for a second "X"
+                    if not store.is_indexed(name):
                         store.index_dictionary(d)
                     self.loaded.emit(d, str(f), True)
                 except Exception as exc:  # noqa: BLE001
@@ -485,14 +487,16 @@ class MainWindow(QMainWindow):
         qm = self.query_manager
         store = qm.index_store
         rows = [dict(r) for r in store.list_dictionaries(enabled_only=False)] if store else []
-        known = {str(Path(r["path"]).resolve()) for r in rows}
+        from ..storage.registry import norm_path
+
+        known = {norm_path(r["path"]) for r in rows}
         new_files: list[Path] = []
         if self.prefs["dictionaries.scan_on_startup"]:
             for folder in self.prefs["dictionaries.folders"]:
                 new_files += scan_folder(folder, bool(self.prefs["dictionaries.recursive"]))
         new_files += [f for f in self.startup_files if is_dictionary_file(f)]
         seen: set[str] = set()
-        new_files = [f for f in new_files if (r := str(f.resolve())) not in known and not (r in seen or seen.add(r))]
+        new_files = [f for f in new_files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
         if not rows and not new_files:
             self._loading_finished()
             return
@@ -519,7 +523,7 @@ class MainWindow(QMainWindow):
         self._refresh_dictionaries()
 
     def _loading_finished(self) -> None:
-        self.query_manager._persist_order()
+        # the order comes from dictionaries.json; nothing to write back here
         self.progress.hide()
         self._loading_done = True
         self._refresh_dictionaries()

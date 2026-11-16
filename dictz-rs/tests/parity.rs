@@ -301,3 +301,42 @@ fn dictionary_identity_matches_python() {
     let (_, ext) = di::icon_bytes(&parity_dir().join("sample.bgl")).unwrap();
     assert_eq!(ext, ".ico");
 }
+
+#[test]
+fn dictionary_list_file_matches_python() {
+    use dictz::registry::{fnv1a64, unique_name, Registry};
+    let g: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(parity_dir().join("registry_golden.json")).unwrap(),
+    )
+    .unwrap();
+    let text = g["file"].as_str().unwrap();
+    let reg = Registry::from_text(text);
+    assert_eq!(reg.items.len(), 3);
+    assert_eq!(reg.items[1].name, "İngilizce–Türkçe Cep Sözlüğü (2)");
+    assert!(!reg.items[1].enabled);
+    assert!(reg.items[2].enabled, "missing enabled = true");
+    assert_eq!(
+        reg.to_text(),
+        text,
+        "dictionaries.json is written byte for byte like Python"
+    );
+    for case in g["unique"].as_array().unwrap() {
+        let taken = case[1]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            unique_name(case[0].as_str().unwrap(), &taken),
+            case[2].as_str().unwrap()
+        );
+    }
+    for case in g["fnv1a64"].as_array().unwrap() {
+        let s = case[0].as_str().unwrap();
+        assert_eq!(
+            format!("{:016x}", fnv1a64(s.as_bytes())),
+            case[1].as_str().unwrap()
+        );
+    }
+}
