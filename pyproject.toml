@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dictz"
-version = "0.0.8"
+version = "0.0.9"
 description = "dictz — a cross-platform multi-format offline dictionary application (GoldenDict-style)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -60,6 +60,7 @@ dev = [
 
 [project.scripts]
 dictz = "dictz.app:main"
+dct = "dictz.app:main"
 
 [project.urls]
 Homepage = "https://github.com/bayramkotan/dictz"

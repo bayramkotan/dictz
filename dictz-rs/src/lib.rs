@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.0.8", default-features = false }
+//! dictz = { version = "0.0.9", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -40,7 +40,10 @@ use std::path::{Path, PathBuf};
 pub mod babylon;
 #[cfg(feature = "cli")]
 pub mod cli;
+pub mod desktop;
 pub mod dsl;
+#[cfg(feature = "cli")]
+pub mod entry;
 pub mod fuzzy;
 pub mod history;
 pub mod hotkeys;

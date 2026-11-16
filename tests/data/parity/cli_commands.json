@@ -112,6 +112,10 @@
   "turn clipboard / selection scanning on or off"
  ],
  [
+  "shortcut",
+  "create desktop and menu shortcuts (--remove deletes them)"
+ ],
+ [
   "help",
   "show help"
  ]

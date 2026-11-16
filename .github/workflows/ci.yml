@@ -16,18 +16,13 @@ name: CI
 #   CARGO_REGISTRY_TOKEN  crates.io API token
 # A tag release fails within seconds with a clear message if either is missing.
 
-# Every run in the Actions list starts with the version: "v0.0.8: <commit title>".
-# A release commit's title already starts with "vX.Y.Z:"; if a tag lands on any
-# other commit, the tag is put in front so the list still reads version-first
-# (and the preflight below fails that run).
-run-name: >-
-  ${{ github.event_name == 'push'
-      && (startsWith(github.event.head_commit.message, format('{0}:', github.ref_name))
-          && github.event.head_commit.message
-          || format('{0}: {1}', github.ref_name, github.event.head_commit.message))
-      || (github.event_name == 'pull_request'
-          && format('PR #{0}: {1}', github.event.number, github.event.pull_request.title)
-          || format('manual run on {0}', github.ref_name)) }}
+# The Actions list shows each run under the tagged commit's TITLE (its first
+# line only), so the list reads version by version: "v0.0.9: <short title>".
+# There is deliberately no run-name: GitHub expressions cannot cut the commit
+# message at its first line, and a run-name built from head_commit.message
+# showed the whole commit body as the run title (v0.0.9, cancelled).
+# The preflight below fails a tag whose commit title does not start with
+# "vX.Y.Z: " or is longer than 72 characters.
 
 on:
   push:
@@ -96,6 +91,10 @@ jobs:
             *) echo "::error::The tag ${GITHUB_REF_NAME} is on a commit whose title does not start with '${GITHUB_REF_NAME}: ' — it was put on the wrong commit. Delete it (git tag -d ${GITHUB_REF_NAME}; git push origin :refs/tags/${GITHUB_REF_NAME}), commit the release as '${GITHUB_REF_NAME}: ...' and tag again."
                exit 1 ;;
           esac
+          if [ ${#title} -gt 72 ]; then
+            echo "::error::The commit title is ${#title} characters; the Actions list shows it as the run title, so keep it short (at most 72): '${GITHUB_REF_NAME}: <a few words>'. Put the details in the next -m paragraphs."
+            exit 1
+          fi
 
   # ===================================================================
   # 1) Lint
@@ -245,6 +244,8 @@ jobs:
         run: |
           command -v dictz
           dictz --version
+          dct -V
+          dct --Version
           dictz --selftest
 
   # ===================================================================
@@ -376,6 +377,8 @@ jobs:
       - name: Package Linux (tar.gz + AppImage)
         if: runner.os == 'Linux'
         run: |
+          ln -sf dictz dist/dictz/dct   # short name
+          ./dist/dictz/dct -V
           tar -C dist -czf ${{ matrix.artifact }}.tar.gz dictz
           bash packaging/appimage/build_appimage.sh "${GITHUB_REF_NAME#v}"
           cp dist/*.AppImage ${{ matrix.artifact }}.AppImage
@@ -383,7 +386,9 @@ jobs:
       - name: Package Windows (zip)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path dist/dictz -DestinationPath ${{ matrix.artifact }}.zip -Force
+        run: |
+          Copy-Item dist\dictz\dictz.exe dist\dictz\dct.exe -Force   # short name
+          Compress-Archive -Path dist/dictz -DestinationPath ${{ matrix.artifact }}.zip -Force
       - name: Package macOS (zip)
         if: runner.os == 'macOS'
         run: cd dist && zip -qry ../${{ matrix.artifact }}.zip dictz.app
@@ -426,7 +431,9 @@ jobs:
         run: cargo build --release --locked
       - name: Selftest release binary (Linux / macOS)
         if: runner.os != 'Windows'
-        run: ./dictz-rs/target/release/dictz --selftest
+        run: |
+          ./dictz-rs/target/release/dictz --selftest
+          ./dictz-rs/target/release/dct -V
       - name: Selftest release binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -440,6 +447,7 @@ jobs:
         run: |
           mkdir -p pkg/dictz-rs
           cp dictz-rs/target/release/dictz pkg/dictz-rs/
+          ln -sf dictz pkg/dictz-rs/dct   # short name
           cp LICENSE dictz-rs/README.md pkg/dictz-rs/
           tar -C pkg -czf ${{ matrix.artifact }}.tar.gz dictz-rs
       - name: Package (zip)
@@ -447,7 +455,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force pkg\dictz-rs | Out-Null
-          Copy-Item dictz-rs\target\release\dictz.exe, LICENSE, dictz-rs\README.md pkg\dictz-rs\ -Force
+          Copy-Item dictz-rs\target\release\dictz.exe, dictz-rs\target\release\dct.exe, LICENSE, dictz-rs\README.md pkg\dictz-rs\ -Force
           Compress-Archive -Path pkg\dictz-rs -DestinationPath ${{ matrix.artifact }}.zip -Force
       - uses: actions/upload-artifact@v4
         with:
@@ -501,6 +509,7 @@ jobs:
               - Windows: `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe`
               - macOS (Apple Silicon): `dictz-rs-macos-arm64.tar.gz` → `dictz-rs/dictz`
 
+            Both editions install the short name **`dct`** too (`dct -V`, `dct update`, `dct shortcut`).
             Both editions share the dictionary list, history and favorites (same data folder).
 
             See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md).

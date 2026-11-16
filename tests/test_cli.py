@@ -112,3 +112,54 @@ def test_updater_version_compare() -> None:
     assert parse_version("0.0.10") > parse_version("0.0.9")
     assert parse_version("v0.1.0") > parse_version("0.0.99")
     assert parse_version("0.0.7") == parse_version("0.0.7")
+
+
+@pytest.mark.parametrize("flag", ["-V", "-v", "--version", "--Version", "--VERSION", "-version", "-Version"])
+def test_every_version_spelling(data_dir, capsys, flag) -> None:
+    assert is_cli_invocation([flag])
+    rc, out, _ = run(capsys, flag)
+    assert rc == 0 and out.strip() == f"dictz {__version__} (Python edition)"
+
+
+def test_short_name_dct(monkeypatch) -> None:
+    from dictz.cli import program_name
+
+    monkeypatch.setattr("sys.argv", ["/usr/bin/dct"])
+    assert program_name() == "dct"
+    monkeypatch.setattr("sys.argv", [r"C:\x\Scripts\dct.exe"])
+    assert program_name() == "dct"
+    monkeypatch.setattr("sys.argv", ["/usr/bin/dictz"])
+    assert program_name() == "dictz"
+    for shell in ("bash", "zsh", "fish", "powershell"):
+        assert "dct" in completion_script(shell)
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"), reason="Linux .desktop files")
+def test_shortcut_create_and_remove(data_dir, capsys, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    rc, out, _ = run(capsys, "shortcut", "--menu-only")
+    entry = tmp_path / "share" / "applications" / "dictz.desktop"
+    assert rc == 0 and entry.is_file()
+    text = entry.read_text(encoding="utf-8")
+    assert "Exec=" in text and "Name=dictz" in text and "Icon=" in text
+    rc, out, _ = run(capsys, "shortcut", "--remove", "--menu-only")
+    assert rc == 0 and not entry.exists()
+
+
+def test_icon_files_are_valid() -> None:
+    import struct
+    import zlib
+
+    from dictz.core.desktop import icns_bytes, ico_bytes, png_bytes
+
+    png = png_bytes(64)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    w, h = struct.unpack(">II", png[16:24])
+    assert (w, h) == (64, 64)
+    ln = struct.unpack(">I", png[33:37])[0]
+    assert png[37:41] == b"IDAT"
+    assert len(zlib.decompress(png[41:41 + ln])) == 64 * (64 * 4 + 1)
+    ico = ico_bytes(64)
+    assert ico[:6] == b"\x00\x00\x01\x00\x01\x00" and ico[22:] == png
+    assert icns_bytes(64)[:4] == b"icns"

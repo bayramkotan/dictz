@@ -1,6 +1,6 @@
 [package]
 name = "dictz"
-version = "0.0.8"
+version = "0.0.9"
 edition = "2021"
 rust-version = "1.81"
 authors = ["Bayram Kotan"]
@@ -27,6 +27,12 @@ path = "src/lib.rs"
 [[bin]]
 name = "dictz"
 path = "src/main.rs"
+required-features = ["cli"]
+
+# short name, like `vs` for venvstudio: the same program
+[[bin]]
+name = "dct"
+path = "src/bin/dct.rs"
 required-features = ["cli"]
 
 [features]

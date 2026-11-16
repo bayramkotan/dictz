@@ -4,7 +4,7 @@ _dictz() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[1]}"
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=( $(compgen -W "add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths popup random reindex remove rm s scan selftest shell show suggest update upgrade version watch --version --help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths popup random reindex remove rm s scan selftest shell shortcut show suggest update upgrade version watch --version --help" -- "$cur") )
         return
     fi
     case "$prev" in
@@ -15,7 +15,8 @@ _dictz() {
         favorites|fav) COMPREPLY=( $(compgen -W "list add remove clear" -- "$cur") ) ;;
         completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
         watch) COMPREPLY=( $(compgen -W "on off toggle status" -- "$cur") ) ;;
+        shortcut) COMPREPLY=( $(compgen -W "--remove --desktop-only --menu-only" -- "$cur") ) ;;
         add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
     esac
 }
-complete -o default -F _dictz dictz
+complete -o default -F _dictz dictz dct

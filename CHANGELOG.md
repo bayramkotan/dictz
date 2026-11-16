@@ -5,6 +5,36 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9] — 2026-11-16
+
+A **short command name, version flags and desktop shortcuts** in **both editions** (Python and Rust), plus rewritten READMEs.
+
+### Added
+- **`dct`**, the short name of `dictz`: the same program with the same commands.
+  - Python: a second console script (`pip` / `pipx` install `dictz` and `dct`).
+  - Rust: a second binary, `cargo install dictz` installs both.
+  - Portable builds: `dct` next to `dictz` (a link on Linux/macOS, `dct.exe` on Windows); `dictz update` updates both.
+  - Help and errors show the name you typed.
+- **Every version spelling** works and prints `dictz X.Y.Z (… edition)`: `-v`, `-V`, `--version`, `--Version`, `--VERSION`, `-version`, `-Version`, `-VERSION`, `dct version`.
+- **Desktop shortcut:** `dct shortcut` (`--desktop-only`, `--menu-only`, `--remove`) and **Dosya → Masaüstü kısayolu oluştur**.
+  - Linux: `~/.local/share/applications/dictz.desktop` plus a trusted launcher on the desktop (`xdg-user-dir DESKTOP`, so localized folders like *Masaüstü* work), with the dictz icon.
+  - Windows: `dictz.lnk` on the Desktop and in the Start menu, with a `.ico` icon.
+  - macOS: a `~/Applications/dictz.app` launcher bundle (Launchpad, Spotlight) with a `.icns` icon, plus a link on the desktop.
+  - The shortcut starts the copy you are running: the AppImage, the portable exe, the pipx / venv script or the cargo binary. Existing shortcuts are replaced.
+- Shell completion registers both names (bash, zsh, fish, PowerShell).
+
+### Changed
+- README and `dictz-rs/README.md` were rewritten with install steps per platform:
+  - Linux, Windows and macOS, each portable / pipx / pip / cargo
+  - PATH notes for the Windows *Scripts* folder
+  - Gatekeeper / SmartScreen notes
+  - Wayland and `libxcb-cursor0` notes
+  - data folders and a completion table
+- CI checks `dct -V` on the wheel, the frozen builds and the Rust release binary.
+- Rust: the program entry moved into the library (`dictz::entry`), so both binaries share it.
+- Roadmap: dictionary groups move to v0.0.10, and every later version moves up by one.
+- CI: no `run-name` any more. The Actions list shows only the commit title, and the preflight fails a release title longer than 72 characters.
+
 ## [0.0.8] — 2026-11-16
 
 The **scan popup**, GoldenDict's main feature, in **both editions** (Python and Rust), with the same settings, commands and protocol.

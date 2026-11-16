@@ -370,6 +370,7 @@ class MainWindow(QMainWindow):
         m.addAction(self._act("Makaleyi HTML olarak &kaydet…", self._save_article, "Ctrl+S", "save"))
         m.addAction(self._act("Favorileri dışa aktar…", self._export_favorites))
         m.addSeparator()
+        m.addAction(self._act("Masaüstü kısayolu oluştur", self._create_shortcuts))
         m.addAction(self._act("Çı&kış", self.quit_app, "Ctrl+Q"))
 
         e = mb.addMenu("&Düzen")
@@ -1134,6 +1135,20 @@ class MainWindow(QMainWindow):
         from ..app import user_data_dir
 
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(user_data_dir())))
+
+    def _create_shortcuts(self) -> None:
+        from ..app import user_data_dir
+        from ..core.desktop import create_shortcuts
+
+        try:
+            paths = create_shortcuts(user_data_dir())
+        except (OSError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Kısayol", f"Kısayol oluşturulamadı:\n{exc}")
+            return
+        if paths:
+            QMessageBox.information(self, "Kısayol", "Oluşturuldu:\n" + "\n".join(str(p) for p in paths))
+        else:
+            QMessageBox.warning(self, "Kısayol", "Masaüstü veya menü klasörü bulunamadı.")
 
     def _check_updates(self, silent: bool) -> None:
         if self._update_checker is not None and self._update_checker.isRunning():
