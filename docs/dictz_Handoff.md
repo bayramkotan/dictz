@@ -79,6 +79,16 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 4. **After a successful copy the downloaded file is deleted** from Downloads (`rm -f` / `Remove-Item -Force`). Leftover `TODO (2).md`-style duplicates of earlier deliveries are removed in the same block, so Downloads stays clean.
 5. The commands always use the exact versioned file name, never a wildcard that could match an old download.
 
+## ⚠️ READ FIRST: version numbers
+
+- After **x.y.9** comes **x.(y+1).0**, never x.y.10: 0.0.9 → **0.1.0** → 0.1.1 … 0.1.9 → **0.2.0**. Roadmap numbers in `TODO.md` follow this rule.
+
+## ⚠️ READ FIRST: README screenshots
+
+- The PNGs live in `docs/screenshots/` (taken at 2× scale) and the READMEs point at them with **absolute** `https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/<name>.png` URLs, because PyPI and crates.io do not resolve relative image paths. So the screenshots must be pushed to `main` before (or with) the release tag.
+- The demo dictionaries in the pictures are invented sample text: `python docs/screenshots/demo_dicts.py OUT_DIR` rebuilds them (StarDict ×3 incl. one with its own icon, DSL with a picture and a sound, BGL). Never put a real third-party dictionary in a screenshot.
+- `docs/screenshots/` is pruned from the Python sdist (`MANIFEST.in`) and not in the Rust crate's `include`.
+
 ## ⚠️ READ FIRST: the Actions list is one run per version, version first
 
 - CI runs **only for `v*` tags** (plus PRs and manual runs); plain pushes to `main` (docs, fixes) start no run. So the Actions list is a list of versions.
@@ -97,7 +107,8 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 **v0.0.7**: Python 3.14 Babylon fix and background loading; a full CLI with `dictz update`; 54 shared settings with a detailed Preferences window; a richer interface (dictionary bar, found-in panel, find in page…) — all in both editions.
 **v0.0.8**: the scan popup (Ctrl+C+C / every copy / selection), tray icon, global hotkeys, single instance and `dictz show / popup / watch` — in both editions.
 **v0.0.9**: the short name **`dct`** (= `dictz`), every `--version` spelling, `dct shortcut` / Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions.
-**Next suggested version:** v0.0.10, dictionary groups (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**v0.1.0**: the interface in **25 languages** with a flag picker at the top right (RTL for ar/fa/ur), dictionary icons and article cards, READMEs with screenshots — in both editions.
+**Next suggested version:** v0.1.1, dictionary groups (**in both editions**). The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-15)
 
@@ -151,7 +162,7 @@ Every item below was hit and fixed during the v0.0.4 → v0.0.6 releases. Read t
 
 **B1. Never use `macos-13` (Intel).**
 - Mistake: on public repos, the macos-13 runner often never gets assigned. The whole release waited on it and the screen said "hepsi durdu" (everything stalled).
-- Rule: macOS is only `macos-latest` (Apple Silicon arm64). Intel Mac users use `pip`/`pipx`. If an Intel binary is ever wanted, the plan is universal2 (v0.1.0).
+- Rule: macOS is only `macos-latest` (Apple Silicon arm64). Intel Mac users use `pip`/`pipx`. If an Intel binary is ever wanted, the plan is universal2 (v0.2.0).
 - `test_ci_workflow_never_uses_starved_intel_mac_runner` checks this. Careful: the test greps the text, so even writing "macos-13" in a **comment** fails it.
 
 **B2. Do not use labels like `macos-14-arm64`.**
@@ -316,14 +327,15 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 ---
 
-## Done after v0.0.9 (unreleased, plain push)
+## Done in v0.1.0 (icons + cards were pushed first as plain pushes, then released together)
 
 - **Interface languages (25)** in both editions, flag picker at the top right of the toolbar, setting `general.language` (`auto` = system language → else English).
   - The UI is written in Turkish; `t("…")` (Python, `dictz/core/i18n.py`) and `tr("…")` / `tr_args("…", &[("n", &x)])` (Rust, `src/i18n.rs`) look the text up. Placeholders are named: `{n}`, `{name}`, `{word}`… — never positional. An `&` mnemonic is ignored for the lookup and put back.
   - Catalogues: `dictz/resources/i18n/<code>.json` ({Turkish: translation}); Rust embeds `src/i18n/catalog.json`, written by `make_samples.py` (`write_i18n`) together with the flags (`dictz/resources/flags/*.png` → `dictz-rs/src/flags/`, from flag-icons, MIT).
   - `tests/data/parity/i18n_keys.py` collects every key from both editions (t()/tr() calls, settings labels/help/choices, page titles, shortcuts); `tests/test_i18n.py` fails if any language misses a key or a placeholder. **A new UI text needs a translation in all 24 catalogues.**
   - Python switches language by restarting itself (tabs restored); Rust switches live. Qt mirrors the layout for ar/fa/ur; egui cannot shape Arabic, so Rust's `tr()` returns shaped (ar-reshaper) and visually reordered (unicode-bidi) text for RTL languages. Hindi in the Rust edition shows without Devanagari shaping (egui limitation).
-  - Malay was derived from the Indonesian catalogue and adjusted; native speakers may want to review it.
+  - READMEs rewritten with screenshots (light/dark main window, language picker, preferences, scan popup, Arabic and Turkish interface) — see "README screenshots" above.
+- Malay was derived from the Indonesian catalogue and adjusted; native speakers may want to review it.
 
 - Dictionary icons and article cards in both editions: `core/dictident.py` + `ui/dicticons.py` (Python), `src/dictident.rs` + `src/gui/dictbadge.rs` (Rust).
   - Icon order: same-name picture next to the file → Babylon info block 0x0B → generated monogram badge on a colour from FNV-1a of the name. A picture smaller than 8 px is ignored (placeholder).
@@ -395,18 +407,19 @@ Every feature lands in **both** editions in the same version:
 |---|---|
 | ✅ v0.0.8 | scan popup: selection / clipboard / Ctrl+C+C, tray icon, global hotkeys, single instance |
 | ✅ v0.0.9 | `dct` short name, version flags, desktop / menu shortcut, per-platform READMEs |
-| v0.0.10 | dictionary groups, custom dictionary names, dictionary metadata file |
-| v0.0.11 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
-| v0.0.12 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
-| v0.0.13 | ZIM, LSA, SDict, Aard, GLS, sound folders / packs; lazy loading, > 4 GB |
-| v0.0.14 | full-text search inside definitions |
-| v0.0.15 | online sources: MediaWiki, websites, DICT servers, Forvo, external programs, proxy |
-| v0.0.16 | TTS (system voices + edge-tts) |
-| v0.0.17 | Anki, favorites folders, flashcards, word of the day |
-| v0.0.18 | article CSS, print, headwords window, shortcut editor, interface languages, portable mode |
-| v0.1.0 | signing, notarization, Intel macOS (universal2), first-run tour |
+| ✅ v0.1.0 | 25 interface languages + flag picker, dictionary icons and article cards, READMEs with screenshots |
+| v0.1.1 | dictionary groups, custom dictionary names, dictionary metadata file |
+| v0.1.2 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
+| v0.1.3 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
+| v0.1.4 | ZIM, LSA, SDict, Aard, GLS, sound folders / packs; lazy loading, > 4 GB |
+| v0.1.5 | full-text search inside definitions |
+| v0.1.6 | online sources: MediaWiki, websites, DICT servers, Forvo, external programs, proxy |
+| v0.1.7 | TTS (system voices + edge-tts) |
+| v0.1.8 | Anki, favorites folders, flashcards, word of the day |
+| v0.1.9 | article CSS, print, headwords window, shortcut editor, portable mode |
+| v0.2.0 | signing, notarization, Intel macOS (universal2), first-run tour |
 
-Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it left-to-right), and maybe an AppImage for the Rust binary.
+Rust-only follow-ups: right-to-left shaping of Arabic/Persian **article** text (interface texts are shaped since v0.1.0), Devanagari shaping, and maybe an AppImage for the Rust binary.
 
 ---
 
@@ -415,4 +428,4 @@ Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it le
 - Commit messages are **in English**, long and detailed, with repeated `-m` flags (no `-F`).
 - A version commit title is `vX.Y.Z: ...`. A plain push carries no version in its title, has no tag and doesn't bump the version.
 - No Claude/Anthropic attribution anywhere (no commit trailer, no README, no metadata).
-- Latest tag: `v0.0.9`
+- Latest tag: `v0.1.0`

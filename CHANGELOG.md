@@ -5,7 +5,9 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-11-16
+
+The **interface in 25 languages**, **dictionary icons and article cards**, and READMEs with screenshots — in **both editions** (Python and Rust). After 0.0.9 the version moves to 0.1.0, not 0.0.10.
 
 ### Added
 - **25 interface languages** in **both editions**, chosen from the flag at the top right of the window (or Tercihler → Genel → Arayüz dili, `general.language`; `auto` follows the system language):
@@ -20,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Each article is a card. Its header carries the badge, the name, the language pair (`EN → TR`, from the dictionary's metadata or its name: `En2Tr`, `English-Turkish`, `İngilizce → Türkçe`), the format (`StarDict` / `DSL` / `BGL`), the article count, copy / "only this one" and a collapse arrow, on a strip in the dictionary's colour.
   - Tooltips show name, languages, format and word count.
 - `dictz/core/dictident.py` / `dictz-rs/src/dictident.rs` with a new parity golden (`dictident_golden.json`); the parity BGL sample now carries an icon.
+- README and `dictz-rs/README.md` show screenshots: main window (light and dark), language picker, preferences, scan popup, Arabic interface, Turkish interface. `docs/screenshots/demo_dicts.py` rebuilds the invented demo dictionaries they use.
+
+### Changed
+- New setting `general.language` (76 settings).
+- The Rust toolbar leaves room for longer translated labels; the language button is always shown.
+- Roadmap renumbered: dictionary groups are v0.1.1, and later versions follow (x.y.9 is followed by x.(y+1).0).
 
 ## [0.0.9] — 2026-11-16
 

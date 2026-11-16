@@ -12,24 +12,24 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 
 | Area | GoldenDict-ng | dictz now | Planned |
 |---|---|---|---|
-| StarDict, DSL, Babylon | ✓ | ✓ | `.syn`, `sametypesequence`, DSL abbreviations, `.spx` sound — v0.0.12 |
-| MDict (.mdx/.mdd), XDXF, DictD, Slob | ✓ | — | v0.0.12 |
-| ZIM, Lingoes LSA, SDict, Aard, zipped sound packs, sound folders, Epwing, GLS | ✓ | — | v0.0.13 |
-| Dictionaries > 4 GB, millions of headwords | ✓ | partial (BGL loads into memory) | v0.0.13 |
-| Scan popup (selection / clipboard / Ctrl+C+C), tray icon, global hotkeys | ✓ | ✓ (v0.0.8) | modifier-key-only scan, popup groups — v0.0.10 |
-| Dictionary groups (switch, hotkeys, per-group order, group tabs) | ✓ | — | v0.0.10 |
-| Custom dictionary names, dictionary metadata file | ✓ | — | v0.0.10 |
-| Ignore case / diacritics / punctuation / whitespace | ✓ | case + diacritics | v0.0.11 |
-| Hunspell morphology, stemming, spelling suggestions | ✓ | — (fuzzy instead) | v0.0.11 |
-| Transliteration (Cyrillic, Greek, Romaji, Chinese conversion…) | ✓ | — | v0.0.11 |
-| Wildcard / regex headword search | ✓ | prefix only | v0.0.11 |
-| Full-text search inside definitions | ✓ (Xapian) | — | v0.0.14 |
-| Wikipedia / Wiktionary (MediaWiki), websites, DICT servers, Forvo, external programs | ✓ | — | v0.0.15 |
-| Voice engines (TTS) | ✓ | — | v0.0.16 |
-| Anki | ✓ | — | v0.0.17 |
-| Favorites folders, history / favorites export | ✓ | flat favorites, export | v0.0.17 |
-| Article CSS (global + per dictionary), print, headwords dialog + export | ✓ | — | v0.0.18 |
-| Shortcut editor, interface languages, portable mode | partial | listed only | v0.0.18 |
+| StarDict, DSL, Babylon | ✓ | ✓ | `.syn`, `sametypesequence`, DSL abbreviations, `.spx` sound — v0.1.3 |
+| MDict (.mdx/.mdd), XDXF, DictD, Slob | ✓ | — | v0.1.3 |
+| ZIM, Lingoes LSA, SDict, Aard, zipped sound packs, sound folders, Epwing, GLS | ✓ | — | v0.1.4 |
+| Dictionaries > 4 GB, millions of headwords | ✓ | partial (BGL loads into memory) | v0.1.4 |
+| Scan popup (selection / clipboard / Ctrl+C+C), tray icon, global hotkeys | ✓ | ✓ (v0.0.8) | modifier-key-only scan, popup groups — v0.1.1 |
+| Dictionary groups (switch, hotkeys, per-group order, group tabs) | ✓ | — | v0.1.1 |
+| Custom dictionary names, dictionary metadata file | ✓ | — | v0.1.1 |
+| Ignore case / diacritics / punctuation / whitespace | ✓ | case + diacritics | v0.1.2 |
+| Hunspell morphology, stemming, spelling suggestions | ✓ | — (fuzzy instead) | v0.1.2 |
+| Transliteration (Cyrillic, Greek, Romaji, Chinese conversion…) | ✓ | — | v0.1.2 |
+| Wildcard / regex headword search | ✓ | prefix only | v0.1.2 |
+| Full-text search inside definitions | ✓ (Xapian) | — | v0.1.5 |
+| Wikipedia / Wiktionary (MediaWiki), websites, DICT servers, Forvo, external programs | ✓ | — | v0.1.6 |
+| Voice engines (TTS) | ✓ | — | v0.1.7 |
+| Anki | ✓ | — | v0.1.8 |
+| Favorites folders, history / favorites export | ✓ | flat favorites, export | v0.1.8 |
+| Article CSS (global + per dictionary), print, headwords dialog + export | ✓ | — | v0.1.9 |
+| Shortcut editor, portable mode | partial | listed only | v0.1.9 |
 | Fuzzy "did you mean" with scores | — | ✓ | ➕ dictz only |
 | Interface in 25 languages with a flag picker (RTL for ar/fa/ur) | yes, in Preferences only | ✓ | ➕ dictz only |
 | Dictionary icons (own file, BGL icon, generated monogram badge), language pair + format on every article card | file icons only | ✓ | ➕ dictz only |
@@ -58,14 +58,14 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - ✅ completion scripts register both names
 - ✅ READMEs rewritten with per-platform install (Linux / Windows / macOS × portable / pipx / cargo)
 
-### v0.0.10 — dictionary groups
+### v0.1.1 — dictionary groups
 - 📋 Groups with name, icon, order and their own dictionary list; "All" group
 - 📋 Group selector in the toolbar, popup and CLI (`dictz lookup -g NAME`, `dictz groups`)
 - 📋 Hotkey per group; a tab remembers its group
 - 📋 Automatic groups by language pair (En→Tr, Tr→En…)
 - 📋 Custom display name per dictionary; `dictz.toml` metadata next to a dictionary (name, language, disable full-text)
 
-### v0.0.11 — smarter matching
+### v0.1.2 — smarter matching
 - 📋 Ignore punctuation and whitespace (case and diacritics already work); each one a setting
 - 📋 Hunspell morphology: lemma lookup ("went" → "go", "kitaplarımızdan" → "kitap"), spelling suggestions; dictionaries downloadable from the app
 - 📋 Turkish stemming (Zemberek-style suffix stripping) as a dictz extra
@@ -73,40 +73,40 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - 📋 Transliteration: Cyrillic ↔ Latin, Greek, Romaji, Ottoman Latin, Chinese simplified ↔ traditional
 - 📋 Multi-word phrases: look up the whole phrase, then each word
 
-### v0.0.12 — formats I
+### v0.1.3 — formats I
 - 📋 MDict `.mdx` / `.mdd` (with CSS, images, sounds) — the most requested format
 - 📋 XDXF, DictD (`.index` + `.dict.dz`), Slob / Aard 2
 - 📋 StarDict `.syn` synonyms and `sametypesequence`; latin-1 fallback for `.ifo`
 - 📋 DSL: abbreviation files (`_abrv.dsl`), `.spx` sounds, case-insensitive media extensions
 
-### v0.0.13 — formats II and large dictionaries
+### v0.1.4 — formats II and large dictionaries
 - 📋 ZIM (Kiwix: offline Wikipedia), Lingoes LSA sound packs, SDict, Aard, GLS
 - 📋 Sound folders and zipped sound packs as pronunciation dictionaries
 - 💡 Epwing
 - 📋 Lazy loading for big files (BGL, MDX) and dictionaries > 4 GB; millions of headwords without memory blow-up
 
-### v0.0.14 — full-text search
+### v0.1.5 — full-text search
 - 📋 Search inside definitions (SQLite FTS5 content index per dictionary, built in the background, can be turned off per dictionary)
 - 📋 Modes: words, phrase, wildcard, regex, "near"; results list with context snippets
 - 📋 Full-text search window and `dictz search` in the CLI
 
-### v0.0.15 — online sources
+### v0.1.6 — online sources
 - 📋 Wikipedia / Wiktionary (MediaWiki API) per language
 - 📋 Any website as a dictionary (URL template with `%GDWORD%`-style placeholder), shown in a tab or opened in the browser
 - 📋 DICT protocol servers, Forvo pronunciations (API key), external programs as dictionaries
 - 📋 Proxy settings and a "no network" switch; everything online is off by default
 
-### v0.0.16 — pronunciation (TTS)
+### v0.1.7 — pronunciation (TTS)
 - 📋 System voices (SAPI / NSSpeech / speech-dispatcher) and edge-tts neural voices
 - 📋 Voice per language and per dictionary; "pronounce" button and hotkey; auto-pronounce
 
-### v0.0.17 — learning
+### v0.1.8 — learning
 - 📋 Anki via AnkiConnect (word + selected article + sound), deck / model / field mapping
 - 📋 Favorites folders, drag and drop, import / export (txt, csv, json); history export
 - 📋 Built-in flashcards with spaced repetition from favorites (dictz extra)
 - 📋 Word of the day (dictz extra)
 
-### v0.0.18 — customization
+### v0.1.9 — customization
 - 📋 Article CSS: user stylesheet, per-dictionary stylesheet, ready styles (Modern, Lingvo, Compact)
 - 📋 Print article, headwords window with filter and export
 - 📋 Shortcut editor
@@ -143,7 +143,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ---
 
-## v0.1.0 — first polished release
+## v0.2.0 — first polished release
 - ✅ Preferences dialog with pages, search, reset, Shortcuts and Advanced pages (v0.0.7)
 - ✅ Export / import settings (v0.0.7, also `dictz config export/import`)
 - ✅ Diagnostics: `dictz doctor` (v0.0.7)
@@ -162,16 +162,16 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 ## Known bugs / limitations
 
 - DSL `[s]` media: only `wav`/`mp3` sounds and `jpg/jpeg/gif/tif/tiff/png/bmp` pictures, with case-sensitive extensions (PyGlossary's rule, kept for parity); Lingvo `.spx` sounds are not played
-- Rust GUI: Arabic/Persian text is not shaped right-to-left
+- Rust GUI: Arabic/Persian **dictionary article** text is not shaped right-to-left (the interface texts are, since v0.1.0)
 - Rust GUI: a font given by name is matched against font file names (no fontconfig lookup); a file path always works
 - Scan popup on Wayland: global hotkeys and "near the mouse" are not possible (Wayland does not allow them); the Rust edition minimizes instead of hiding to the tray there
 - Rust edition on Windows: "hidden to the tray" moves the window off screen without a taskbar button (a hidden egui window stops drawing, and the popup is drawn from it)
 - `dictz update` on a Python portable zip / tar.gz build only downloads the new archive (a running PyInstaller folder cannot replace itself); the AppImage is replaced in place
 
-- `.syn` synonym files in StarDict are ignored (v0.0.12)
-- `sametypesequence` in StarDict `.ifo` is not interpreted (v0.0.12)
-- UTF-8 assumed for `.ifo` headers, no latin-1 fallback (v0.0.12)
-- Large `.bgl` files load eagerly into memory (v0.0.13)
+- `.syn` synonym files in StarDict are ignored (v0.1.3)
+- `sametypesequence` in StarDict `.ifo` is not interpreted (v0.1.3)
+- UTF-8 assumed for `.ifo` headers, no latin-1 fallback (v0.1.3)
+- Large `.bgl` files load eagerly into memory (v0.1.4)
 - QWebEngine missing on some PySide6 slim installs → falls back to QTextBrowser
 - Windows SmartScreen warning on first run (unsigned)
 - macOS Gatekeeper warning on first run (unnotarized)
@@ -180,6 +180,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Recently done
 
+- ✅ **v0.1.0** — interface in 25 languages with a flag picker (RTL for ar/fa/ur), dictionary icons + article cards (language pair, format, colour), READMEs with screenshots — in both editions
 - ✅ **v0.0.9** — `dct` short name, every `--version` spelling, `dct shortcut` + Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions
 - ✅ **v0.0.8** — scan popup (Ctrl+C+C, every copy, selection), tray icon, global hotkeys, single instance, `dictz show / popup / watch`, 21 new settings (75 in 9 pages) — in both editions
 - ✅ **v0.0.7** — Python 3.14 Babylon fix + no more start-up hang (background loading); full CLI incl. `dictz update` in both editions; 54 shared settings with a detailed Preferences window; dictionary bar, found-in panel, collapsible articles, find in page, save/copy article, random word, full screen, Git/Sözlükler menus

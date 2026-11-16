@@ -15,7 +15,13 @@
 
 StarDict · ABBYY Lingvo DSL · Babylon — many dictionaries, one search, no network.
 
-[Install](#install) · [Quick start](#quick-start) · [Command line](#command-line-dictz--dct) · [Scan popup](#scan-popup-like-goldendict) · [Settings](#settings) · [Türkçe](#türkçe)
+[Screenshots](#screenshots) · [Install](#install) · [Quick start](#quick-start) · [Command line](#command-line-dictz--dct) · [Scan popup](#scan-popup-like-goldendict) · [Languages](#25-interface-languages) · [Settings](#settings) · [Türkçe](#türkçe)
+
+<br>
+
+<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-light.png" alt="dictz main window: five dictionaries answer “apple” — each article is a card with the dictionary's icon, language pair and format; the DSL article shows its picture and sound" width="100%">
+
+<sub>Five dictionaries, one search. Every article is a card with the dictionary's own icon, colour, language pair and format; DSL pictures and sounds show inline.</sub>
 
 </div>
 
@@ -35,6 +41,25 @@ dictz comes in **two editions with the same features**. Both are released togeth
 Both read dictionaries identically, which CI checks against shared golden files. They also use **one data folder**, so dictionaries, history, favorites and settings added in one edition show up in the other. Either edition's command line can control either edition's window.
 
 Both install two commands: **`dictz`** and its short name **`dct`**. They are the same program.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="Rust edition, dark theme"><br><sub><b>Rust edition, dark theme</b> — one native binary, same features</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/languages.png" alt="Language picker with flags"><br><sub><b>25 interface languages</b> — the flag at the top right</sub></td>
+</tr>
+<tr>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 76 settings, searchable, per-setting reset</sub></td>
+</tr>
+<tr>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/python-dark.png" alt="Python edition, dark theme"><br><sub><b>Python edition, dark theme</b> — light, dark or follow the system</sub></td>
+</tr>
+</table>
+
+<sub>The dictionaries in the pictures are small invented samples (`docs/screenshots/demo_dicts.py`); dictz ships no dictionary content.</sub>
 
 ## Highlights
 
@@ -282,6 +307,28 @@ They work on Windows, macOS and Linux X11. On Wayland, use desktop shortcuts run
 
 ---
 
+## 25 interface languages
+
+Click the flag at the top right of the window (or Tercihler → Genel → Arayüz dili, or `dct config set general.language de`). **Otomatik** follows the system language.
+
+| | | | | |
+|---|---|---|---|---|
+| 🇹🇷 Türkçe | 🇬🇧 English | 🇦🇿 Azərbaycan türkcəsi | 🇩🇪 Deutsch | 🇫🇷 Français |
+| 🇪🇸 Español | 🇮🇹 Italiano | 🇵🇹 Português | 🇳🇱 Nederlands | 🇵🇱 Polski |
+| 🇷🇺 Русский | 🇺🇦 Українська | 🇸🇦 العربية | 🇮🇷 فارسی | 🇵🇰 اردو |
+| 🇰🇿 Қазақша | 🇰🇬 Кыргызча | 🇺🇿 Oʻzbekcha | 🇹🇲 Türkmençe | 🇨🇳 中文 |
+| 🇯🇵 日本語 | 🇰🇷 한국어 | 🇮🇩 Bahasa Indonesia | 🇲🇾 Bahasa Melayu | 🇮🇳 हिन्दी |
+
+Every menu, button, message and setting is translated, in both editions. Arabic, Persian and Urdu are laid out right to left. Corrections are welcome: the catalogues are plain JSON in [`dictz/resources/i18n/`](dictz/resources/i18n/), and a test fails if any text is missing in any language.
+
+## Dictionary icons
+
+Every dictionary has a face: its own icon if it has one, otherwise a monogram badge in a colour that stays the same everywhere.
+
+- Put `Name.png` (or `.ico`, `.bmp`, `.jpg`, `.gif`) next to `Name.ifo` / `Name.dsl` / `Name.bgl` to give a dictionary your own icon, as in GoldenDict.
+- Babylon `.bgl` files bring their icon inside the file.
+- The language pair (`EN → TR`) comes from the dictionary itself, or from its name (`En2Tr`, `English-Turkish`, `İngilizce → Türkçe`).
+
 ## Settings
 
 **Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 76 settings, stored in `settings.json` in the data folder and shared by both editions:
@@ -372,6 +419,8 @@ See [`docs/PACKAGING.md`](docs/PACKAGING.md) for details. CI builds, self-tests 
 ---
 
 ## Türkçe
+
+<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/turkish.png" alt="dictz Türkçe arayüz" width="100%">
 
 dictz; Windows, Linux ve macOS için çevrimdışı çalışan, çoklu format destekli, GoldenDict tarzı modern bir sözlük uygulamasıdır. **Python** ve **Rust** olmak üzere iki sürümü vardır. İkisinin özellikleri ve sürüm numarası aynıdır, veri klasörünü de paylaşırlar: sözlükler, geçmiş, favoriler ve ayarlar ortaktır. İki sürüm de **`dictz`** ve kısa adı **`dct`** komutlarını kurar; ikisi aynı programdır.
 

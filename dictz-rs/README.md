@@ -8,6 +8,17 @@ Cross-platform, multi-format **offline dictionary** — a GoldenDict-style deskt
 
 This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder, so dictionaries, history and favorites added in one edition show up in the other.
 
+<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, dark theme: five dictionaries answer “apple”, each article a card with the dictionary's icon, language pair and format" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/rust-light.png" alt="Rust edition, light theme"><br><sub><b>Light theme</b> — articles as cards, one colour per dictionary</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic-rust.png" alt="Rust edition in Arabic"><br><sub><b>25 interface languages</b> — here Arabic, shaped right to left</sub></td>
+</tr>
+</table>
+
+<sub>The dictionaries in the pictures are small invented samples; dictz ships no dictionary content.</sub>
+
 ## Install the app
 
 Both commands get installed: **`dictz`** and its short name **`dct`**. They are the same program.
@@ -37,6 +48,8 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 ## Features
 
 - **Formats:** StarDict (`.ifo` / `.idx[.gz]` / `.dict[.dz]`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`) and Babylon (`.bgl`). All three are parsed natively, with no Python and no PyGlossary.
+- **25 interface languages** from the flag at the top right (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語, 한국어 …); Arabic, Persian and Urdu interface texts are shaped and drawn right to left.
+- **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
 - **Multi-dictionary search** in your own order. You can enable, disable and reorder dictionaries in the dictionary manager.
 - **Fuzzy search:** "did you mean" suggestions. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
 - **DSL pictures and sounds** are read from `X.dsl.files/` or `X.dsl.files.zip`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
@@ -97,7 +110,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ```toml
 [dependencies]
-dictz = { version = "0.0.9", default-features = false }   # no GUI / audio deps
+dictz = { version = "0.1.0", default-features = false }   # no GUI / audio deps
 ```
 
 ```rust
