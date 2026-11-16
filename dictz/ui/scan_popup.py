@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import t
 from ..storage.settings import Preferences
 from .definition_view import DefinitionView
 
@@ -29,26 +30,26 @@ class ScanPopup(QWidget):
     def __init__(self, prefs: Preferences, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.WindowType.Tool)
         self.prefs = prefs
-        self.setWindowTitle("dictz — tarama")
+        self.setWindowTitle(t("dictz — tarama"))
         self.setObjectName("scan_popup")
         self.word = ""
 
         bar = QHBoxLayout()
         bar.setContentsMargins(6, 6, 6, 2)
         self.word_box = QLineEdit(self)
-        self.word_box.setPlaceholderText("Kelime…")
+        self.word_box.setPlaceholderText(t("Kelime…"))
         self.word_box.returnPressed.connect(lambda: self.lookup_requested.emit(self.word_box.text().strip()))
         self.pin = QToolButton(self)
         self.pin.setText("📌")
         self.pin.setCheckable(True)
-        self.pin.setToolTip("Sabitle (fare çıkınca kapanmaz)")
+        self.pin.setToolTip(t("Sabitle (fare çıkınca kapanmaz)"))
         self.open_main = QToolButton(self)
         self.open_main.setText("⤢")
-        self.open_main.setToolTip("Ana pencerede aç")
+        self.open_main.setToolTip(t("Ana pencerede aç"))
         self.open_main.clicked.connect(lambda: self.open_in_main.emit(self.word))
         self.close_btn = QToolButton(self)
         self.close_btn.setText("✕")
-        self.close_btn.setToolTip("Kapat (Esc)")
+        self.close_btn.setToolTip(t("Kapat (Esc)"))
         self.close_btn.clicked.connect(self.hide)
         bar.addWidget(self.word_box, 1)
         bar.addWidget(self.pin)
@@ -93,7 +94,7 @@ class ScanPopup(QWidget):
         self.word = word
         self.word_box.setText(word)
         n = len({e.dictionary_id for e in entries})
-        self.info.setText(f"{len(entries)} madde · {n} sözlük" if entries else "")
+        self.info.setText(t("{n} madde · {m} sözlük", n=len(entries), m=n) if entries else "")
         if entries:
             self.view.show_entries(word, entries)
         else:

@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import t
 from ..core.shortcuts import SHORTCUTS
 from ..storage.settings import SCHEMA, SECTIONS, Preferences, Setting
 
@@ -60,7 +61,7 @@ class _ColorButton(QPushButton):
         self.setStyleSheet(f"background:{self.value}; color:{fg}; border-radius:6px; padding:4px;")
 
     def _pick(self) -> None:
-        c = QColorDialog.getColor(QColor(self.value), self, "Renk seçin")
+        c = QColorDialog.getColor(QColor(self.value), self, t("Renk seçin"))
         if c.isValid():
             self.value = c.name()
             self._paint()
@@ -84,8 +85,8 @@ class _FolderList(QWidget):
             self.list.addItem(f)
         lay.addWidget(self.list)
         row = QHBoxLayout()
-        add = QPushButton("Klasör ekle…")
-        rm = QPushButton("Kaldır")
+        add = QPushButton(t("Klasör ekle…"))
+        rm = QPushButton(t("Kaldır"))
         add.clicked.connect(self._add)
         rm.clicked.connect(self._remove)
         row.addWidget(add)
@@ -94,7 +95,7 @@ class _FolderList(QWidget):
         lay.addLayout(row)
 
     def _add(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Sözlük klasörü seçin")
+        d = QFileDialog.getExistingDirectory(self, t("Sözlük klasörü seçin"))
         if d and not self.list.findItems(d, Qt.MatchFlag.MatchExactly):
             self.list.addItem(d)
             self.changed.emit()
@@ -119,7 +120,7 @@ class PreferencesDialog(QDialog):
 
     def __init__(self, prefs: Preferences, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Tercihler")
+        self.setWindowTitle(t("Tercihler"))
         self.resize(900, 640)
         self.prefs = prefs
         self.draft = prefs.copy()
@@ -129,7 +130,7 @@ class PreferencesDialog(QDialog):
         root = QVBoxLayout(self)
         top = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Ayar ara…  (ör. yazı tipi, bulanık, ses)")
+        self.search.setPlaceholderText(t("Ayar ara…  (ör. yazı tipi, bulanık, ses)"))
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._filter)
         top.addWidget(self.search)
@@ -153,9 +154,9 @@ class PreferencesDialog(QDialog):
         self.nav.setCurrentRow(0)
 
         bottom = QHBoxLayout()
-        reset_page = QPushButton("Bu sayfayı varsayılana döndür")
+        reset_page = QPushButton(t("Bu sayfayı varsayılana döndür"))
         reset_page.clicked.connect(self._reset_page)
-        reset_all = QPushButton("Tümünü varsayılana döndür")
+        reset_all = QPushButton(t("Tümünü varsayılana döndür"))
         reset_all.clicked.connect(self._reset_all)
         bottom.addWidget(reset_page)
         bottom.addWidget(reset_all)
@@ -163,9 +164,9 @@ class PreferencesDialog(QDialog):
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Apply
             | QDialogButtonBox.StandardButton.Cancel)
-        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Tamam")
-        self.buttons.button(QDialogButtonBox.StandardButton.Apply).setText("Uygula")
-        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("İptal")
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(t("Tamam"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Apply).setText(t("Uygula"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(t("İptal"))
         self.buttons.accepted.connect(self._ok)
         self.buttons.rejected.connect(self.reject)
         self.buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._apply)
@@ -176,7 +177,7 @@ class PreferencesDialog(QDialog):
     def _page_container(self, title: str) -> tuple[QWidget, QVBoxLayout]:
         page = QWidget()
         lay = QVBoxLayout(page)
-        lab = QLabel(title)
+        lab = QLabel(t(title))
         lab.setObjectName("section_title")
         lay.addWidget(lab)
         scroll = QScrollArea()
@@ -202,18 +203,18 @@ class PreferencesDialog(QDialog):
             rl.addWidget(editor, 1)
             reset = QToolButton()
             reset.setText("↺")
-            reset.setToolTip(f"Varsayılan: {self._fmt_default(s)}")
+            reset.setToolTip(t("Varsayılan:") + f" {self._fmt_default(s)}")
             reset.clicked.connect(lambda _=False, key=s.key: self._reset_key(key))
             rl.addWidget(reset)
-            label = QLabel(s.label)
-            tip = s.help + ("\n" if s.help else "") + f"Anahtar: {s.key}   (dictz config set {s.key} …)"
+            label = QLabel(t(s.label))
+            tip = t(s.help) + ("\n" if s.help else "") + t("Anahtar:") + f" {s.key}   (dictz config set {s.key} …)"
             label.setToolTip(tip)
             editor.setToolTip(tip)
             if s.kind == "bool":
                 label = QLabel("")
             form.addRow(label, row)
             if s.help and s.kind != "list":
-                hint = QLabel(s.help)
+                hint = QLabel(t(s.help))
                 hint.setObjectName("hint")
                 hint.setWordWrap(True)
                 form.addRow("", hint)
@@ -223,21 +224,21 @@ class PreferencesDialog(QDialog):
         lay.addStretch(1)
         self.page_keys.append(keys)
         self.stack.addWidget(page)
-        QListWidgetItem(title, self.nav)
+        QListWidgetItem(t(title), self.nav)
 
     def _fmt_default(self, s: Setting) -> str:
         if s.kind == "bool":
-            return "açık" if s.default else "kapalı"
+            return t("açık") if s.default else t("kapalı")
         if s.kind == "choice":
-            return dict(s.choices).get(s.default, s.default)
+            return t(dict(s.choices).get(s.default, s.default))
         if s.kind == "list":
-            return "boş"
-        return str(s.default) if s.default != "" else "boş"
+            return t("boş")
+        return str(s.default) if s.default != "" else t("boş")
 
     def _editor_for(self, s: Setting) -> QWidget:
         v = self.draft[s.key]
         if s.kind == "bool":
-            w = QCheckBox(s.label)
+            w = QCheckBox(t(s.label))
             w.setChecked(bool(v))
             w.toggled.connect(lambda val, k=s.key: self._set(k, val))
         elif s.kind == "int":
@@ -245,7 +246,7 @@ class PreferencesDialog(QDialog):
             w.setRange(int(s.min if s.min is not None else -10**9), int(s.max if s.max is not None else 10**9))
             w.setValue(int(v))
             if s.help and len(s.help) < 30:
-                w.setSuffix(f"  {s.help}")
+                w.setSuffix(f"  {t(s.help)}")
             w.valueChanged.connect(lambda val, k=s.key: self._set(k, val))
         elif s.kind == "float":
             w = QDoubleSpinBox()
@@ -254,12 +255,12 @@ class PreferencesDialog(QDialog):
             w.setRange(float(s.min if s.min is not None else -1e9), float(s.max if s.max is not None else 1e9))
             w.setValue(float(v))
             if s.help and len(s.help) < 30:
-                w.setSuffix(f"  {s.help}")
+                w.setSuffix(f"  {t(s.help)}")
             w.valueChanged.connect(lambda val, k=s.key: self._set(k, val))
         elif s.kind == "choice":
             w = QComboBox()
             for val, label in s.choices:
-                w.addItem(label, val)
+                w.addItem(t(label), val)
             w.setCurrentIndex(max(0, w.findData(v)))
             w.currentIndexChanged.connect(lambda _i, k=s.key, c=w: self._set(k, c.currentData()))
         elif s.kind == "color":
@@ -277,7 +278,7 @@ class PreferencesDialog(QDialog):
             box.setCurrentFont(QFont(v) if v else QFont())
             if not v:
                 box.setEditText("")
-            box.lineEdit().setPlaceholderText("Sistem yazı tipi")
+            box.lineEdit().setPlaceholderText(t("Sistem yazı tipi"))
             box.currentTextChanged.connect(lambda t, k=s.key: self._set(k, t.strip()))
             hl.addWidget(box, 1)
             w.box = box  # type: ignore[attr-defined]
@@ -323,74 +324,74 @@ class PreferencesDialog(QDialog):
                 self._reset_key(k)
 
     def _reset_all(self) -> None:
-        if QMessageBox.question(self, "Tercihler", "Tüm ayarlar varsayılana dönsün mü?") \
+        if QMessageBox.question(self, t("Tercihler"), t("Tüm ayarlar varsayılana dönsün mü?")) \
                 == QMessageBox.StandardButton.Yes:
             for keys in self.page_keys:
                 for k in keys:
                     self._reset_key(k)
 
     def _filter(self, text: str) -> None:
-        t = text.strip().lower()
+        q = text.strip().lower()
         first_visible = None
         for page_index, keys in enumerate(self.page_keys):
             any_visible = False
             for k in keys:
                 editor, row = self.editors[k]
                 setting = next(s for s in SCHEMA if s.key == k)
-                hay = f"{setting.label} {setting.help} {k}".lower()
-                visible = not t or t in hay
+                hay = f"{setting.label} {setting.help} {t(setting.label)} {t(setting.help)} {k}".lower()
+                visible = not q or q in hay
                 row.setVisible(visible)
                 form = row.parentWidget().layout() if row.parentWidget() else None
                 if isinstance(form, QFormLayout):
                     form.setRowVisible(row, visible)
                 any_visible |= visible
             item = self.nav.item(page_index)
-            item.setHidden(bool(t) and not any_visible)
+            item.setHidden(bool(q) and not any_visible)
             if any_visible and first_visible is None:
                 first_visible = page_index
-        if t and first_visible is not None:
+        if q and first_visible is not None:
             self.nav.setCurrentRow(first_visible)
 
     def _add_shortcuts_page(self) -> None:
-        page, lay = self._page_container("Kısayollar")
+        page, lay = self._page_container(t("Kısayollar"))
         table = QTableWidget(len(SHORTCUTS), 2)
-        table.setHorizontalHeaderLabels(["Kısayol", "İşlem"])
+        table.setHorizontalHeaderLabels([t("Kısayol"), t("İşlem")])
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         for i, (keys, desc) in enumerate(SHORTCUTS):
             table.setItem(i, 0, QTableWidgetItem(keys))
-            table.setItem(i, 1, QTableWidgetItem(desc))
+            table.setItem(i, 1, QTableWidgetItem(t(desc)))
         table.resizeColumnsToContents()
         table.horizontalHeader().setStretchLastSection(True)
         lay.addWidget(table)
         self.page_keys.append([])
         self.stack.addWidget(page)
-        QListWidgetItem("Kısayollar", self.nav)
+        QListWidgetItem(t("Kısayollar"), self.nav)
 
     def _add_advanced_page(self) -> None:
         from ..app import user_data_dir
 
-        page, lay = self._page_container("Gelişmiş")
-        info = QLabel(f"Veri klasörü: <b>{user_data_dir()}</b><br>"
-                      "Sözlük listesi, indeks, geçmiş, favoriler ve bu ayarlar burada tutulur; "
-                      "Python ve Rust sürümleri aynı klasörü kullanır.")
+        page, lay = self._page_container(t("Gelişmiş"))
+        info = QLabel(t("Veri klasörü:") + f" <b>{user_data_dir()}</b><br>"
+                      + t("Sözlük listesi, indeks, geçmiş, favoriler ve bu ayarlar burada tutulur; "
+                          "Python ve Rust sürümleri aynı klasörü kullanır."))
         info.setWordWrap(True)
         info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(info)
         grid = QVBoxLayout()
         for label, action in [
-            ("Veri klasörünü aç", "open_data"),
-            ("Tüm sözlüklerin indeksini yeniden oluştur", "reindex"),
-            ("Güncellemeleri şimdi denetle", "check_updates"),
-            ("Geçmişi temizle", "clear_history"),
-            ("Favorileri temizle", "clear_favorites"),
+            (t("Veri klasörünü aç"), "open_data"),
+            (t("Tüm sözlüklerin indeksini yeniden oluştur"), "reindex"),
+            (t("Güncellemeleri şimdi denetle"), "check_updates"),
+            (t("Geçmişi temizle"), "clear_history"),
+            (t("Favorileri temizle"), "clear_favorites"),
         ]:
             b = QPushButton(label)
             b.clicked.connect(lambda _=False, a=action: self.action_requested.emit(a))
             grid.addWidget(b)
         row = QHBoxLayout()
-        exp = QPushButton("Ayarları dışa aktar…")
-        imp = QPushButton("Ayarları içe aktar…")
+        exp = QPushButton(t("Ayarları dışa aktar…"))
+        imp = QPushButton(t("Ayarları içe aktar…"))
         exp.clicked.connect(self._export)
         imp.clicked.connect(self._import)
         row.addWidget(exp)
@@ -398,35 +399,35 @@ class PreferencesDialog(QDialog):
         row.addStretch(1)
         grid.addLayout(row)
         lay.addLayout(grid)
-        cli = QLabel("Komut satırından: <code>dictz config list</code> · <code>dictz config set KEY VALUE</code> "
+        cli = QLabel(t("Komut satırından:") + " <code>dictz config list</code> · <code>dictz config set KEY VALUE</code> "
                      "· <code>dictz help</code>")
         cli.setObjectName("hint")
         lay.addWidget(cli)
         lay.addStretch(1)
         self.page_keys.append([])
         self.stack.addWidget(page)
-        QListWidgetItem("Gelişmiş", self.nav)
+        QListWidgetItem(t("Gelişmiş"), self.nav)
 
     def _export(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Ayarları dışa aktar", "dictz-settings.json", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, t("Ayarları dışa aktar"), "dictz-settings.json", t("JSON (*.json)"))
         if path:
             Path(path).write_text(json.dumps(self.draft.export(), ensure_ascii=False, indent=2) + "\n",
                                   encoding="utf-8")
 
     def _import(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Ayarları içe aktar", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, t("Ayarları içe aktar"), "", t("JSON (*.json)"))
         if not path:
             return
         try:
             errors = self.draft.import_dict(json.loads(Path(path).read_text(encoding="utf-8")))
         except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "İçe aktarma", str(exc))
+            QMessageBox.warning(self, t("İçe aktarma"), str(exc))
             return
         for keys in self.page_keys:
             for k in keys:
                 self._load_editor(k)
         if errors:
-            QMessageBox.information(self, "İçe aktarma", "\n".join(errors[:20]))
+            QMessageBox.information(self, t("İçe aktarma"), "\n".join(errors[:20]))
 
     # ------------------------------------------------------------ apply
     def _apply(self) -> None:

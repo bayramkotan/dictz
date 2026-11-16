@@ -10,6 +10,7 @@ mod app;
 mod audio;
 mod dictbadge;
 mod fonts;
+mod langflags;
 mod prefs_window;
 mod render;
 mod services;

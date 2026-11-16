@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import t
 from . import dicticons
 from .icons import icon
 
@@ -43,7 +44,7 @@ class _ListPane(QWidget):
             header.addWidget(self.action_btn)
         layout.addLayout(header)
         self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Süz…")
+        self.filter.setPlaceholderText(t("Süz…"))
         self.filter.setClearButtonEnabled(True)
         self.filter.textChanged.connect(self._apply_filter)
         layout.addWidget(self.filter)
@@ -65,14 +66,14 @@ class _ListPane(QWidget):
         self._apply_filter(self.filter.text())
 
     def _apply_filter(self, text: str) -> None:
-        t = text.strip().lower()
+        q = text.strip().lower()
         shown = 0
         for i in range(self.list.count()):
             it = self.list.item(i)
-            hide = bool(t) and t not in it.text().lower()
+            hide = bool(q) and q not in it.text().lower()
             it.setHidden(hide)
             shown += 0 if hide else 1
-        self.count_label.setText(f"{shown} / {self.list.count()}" if t else f"{self.list.count()} öğe")
+        self.count_label.setText(f"{shown} / {self.list.count()}" if q else t("{n} öğe", n=self.list.count()))
 
     def _emit_activated(self, item: QListWidgetItem) -> None:
         self.item_activated.emit(item.data(Qt.ItemDataRole.UserRole) or item.text())
@@ -82,8 +83,8 @@ class _ListPane(QWidget):
         if it is None:
             return
         menu = QMenu(self)
-        open_act = menu.addAction("Aç")
-        rm_act = menu.addAction(icon("remove"), "Listeden kaldır")
+        open_act = menu.addAction(t("Aç"))
+        rm_act = menu.addAction(icon("remove"), t("Listeden kaldır"))
         chosen = menu.exec(self.list.mapToGlobal(pos))
         if chosen == open_act:
             self.item_activated.emit(it.text())
@@ -102,7 +103,7 @@ class Sidebar(QDockWidget):
     export_favorites_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Kenar çubuğu", parent)
+        super().__init__(t("Kenar çubuğu"), parent)
         self.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetClosable
             | QDockWidget.DockWidgetFeature.DockWidgetMovable
@@ -112,7 +113,7 @@ class Sidebar(QDockWidget):
         self.tabs = QTabWidget(self)
         self.tabs.setDocumentMode(True)
 
-        self.dicts_pane = _ListPane("Sözlükler", action_label="Yönet…")
+        self.dicts_pane = _ListPane(t("Sözlükler"), action_label=t("Yönet…"))
         self.dicts_pane.action_triggered.connect(self.manage_dictionaries_requested)
         self.dicts_pane.list.itemChanged.connect(self._on_dict_item_changed)
         self.dicts_pane.list.itemActivated.disconnect()
@@ -120,19 +121,19 @@ class Sidebar(QDockWidget):
         self.dicts_pane.list.itemDoubleClicked.connect(
             lambda it: self.dictionary_activated.emit(it.data(Qt.ItemDataRole.UserRole)))
 
-        self.favorites_pane = _ListPane("Favoriler", action_label="Dışa aktar…", removable=True)
+        self.favorites_pane = _ListPane(t("Favoriler"), action_label=t("Dışa aktar…"), removable=True)
         self.favorites_pane.item_activated.connect(self.word_selected)
         self.favorites_pane.remove_requested.connect(self.favorite_remove_requested)
         self.favorites_pane.action_triggered.connect(self.export_favorites_requested)
 
-        self.history_pane = _ListPane("Geçmiş", action_label="Temizle", removable=True)
+        self.history_pane = _ListPane(t("Geçmiş"), action_label=t("Temizle"), removable=True)
         self.history_pane.action_triggered.connect(self.clear_history_requested)
         self.history_pane.item_activated.connect(self.word_selected)
         self.history_pane.remove_requested.connect(self.history_remove_requested)
 
-        self.tabs.addTab(self.dicts_pane, icon("dict"), "Sözlükler")
-        self.tabs.addTab(self.favorites_pane, icon("star"), "Favoriler")
-        self.tabs.addTab(self.history_pane, icon("history"), "Geçmiş")
+        self.tabs.addTab(self.dicts_pane, icon("dict"), t("Sözlükler"))
+        self.tabs.addTab(self.favorites_pane, icon("star"), t("Favoriler"))
+        self.tabs.addTab(self.history_pane, icon("history"), t("Geçmiş"))
         self.setWidget(self.tabs)
 
     def set_dictionaries(self, items: list[tuple[str, bool, int]]) -> None:
@@ -142,7 +143,7 @@ class Sidebar(QDockWidget):
         for name, enabled, _words in items:
             it = QListWidgetItem(dicticons.qicon(name), name)
             it.setData(Qt.ItemDataRole.UserRole, name)
-            it.setToolTip(dicticons.look(name).tooltip() + "\n\nÇift tık: bilgiler")
+            it.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Çift tık: bilgiler"))
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             lst.addItem(it)

@@ -41,9 +41,9 @@ impl DictLook {
             s.push_str(&format!("\n{} → {}", a, b));
         }
         s.push_str(&format!(
-            "\n{} · {} kelime",
+            "\n{} · {}",
             self.fmt,
-            super::app::group(self.words)
+            crate::i18n::tr_args("{n} kelime", &[("n", &super::app::group(self.words))])
         ));
         s
     }

@@ -107,6 +107,13 @@ def run_gui(files: list[str] | None = None, popup: str | None = None) -> int:
 
     prefs = Preferences.load(data_dir / SETTINGS_FILE)
     migrate_from_qsettings(prefs)
+    from PySide6.QtCore import Qt
+
+    from .core import i18n
+
+    i18n.set_language(prefs["general.language"])
+    if i18n.is_rtl():
+        app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
     query_manager = QueryManager(index_store=index_store)
 
     # The window opens at once; dictionaries load in the background.

@@ -20,11 +20,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.i18n import t
 from ..core.query_manager import QueryManager, scan_folder
 from .icons import icon
 
-FILE_FILTER = ("Tüm sözlükler (*.ifo *.dsl *.dz *.bgl);;StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dz);;"
-               "Babylon (*.bgl);;Tüm dosyalar (*)")
+
+def file_filter() -> str:
+    return (t("Tüm sözlükler") + " (*.ifo *.dsl *.dz *.bgl);;StarDict (*.ifo);;DSL / Lingvo (*.dsl *.dz);;"
+            "Babylon (*.bgl);;" + t("Tüm dosyalar") + " (*)")
 
 
 def info_html(qm: QueryManager, name: str) -> str:
@@ -38,13 +41,13 @@ def info_html(qm: QueryManager, name: str) -> str:
     mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)) if p.exists() else "—"
     media = qm.media(name)
     rows = [
-        ("Ad", m.name), ("Biçim", m.format), ("Kelime", f"{m.word_count:,}"),
-        ("Kaynak dil", m.source_language or "—"), ("Hedef dil", m.target_language or "—"),
-        ("Yazar", m.author or "—"), ("Dosya", str(p)), ("Boyut", f"{size / 1024:,.0f} KB"),
-        ("Değiştirilme", mtime), ("Etkin", "evet" if qm.is_enabled(name) else "hayır"),
-        ("Medya klasörleri", "<br>".join(html.escape(str(x)) for x in (media.search_locations() if media else []))),
+        (t("Ad"), m.name), (t("Biçim"), m.format), (t("Kelime"), f"{m.word_count:,}"),
+        (t("Kaynak dil"), m.source_language or "—"), (t("Hedef dil"), m.target_language or "—"),
+        (t("Yazar"), m.author or "—"), (t("Dosya"), str(p)), (t("Boyut"), f"{size / 1024:,.0f} KB"),
+        (t("Değiştirilme"), mtime), (t("Etkin"), t("evet") if qm.is_enabled(name) else t("hayır")),
+        (t("Medya klasörleri"), "<br>".join(html.escape(str(x)) for x in (media.search_locations() if media else []))),
     ]
-    body = "".join(f"<tr><td><b>{k}</b></td><td>{v if k == 'Medya klasörleri' else html.escape(v)}</td></tr>"
+    body = "".join(f"<tr><td><b>{k}</b></td><td>{v if k == t('Medya klasörleri') else html.escape(v)}</td></tr>"
                    for k, v in rows)
     desc = f"<p>{html.escape(m.description)}</p>" if m.description else ""
     return f"<table cellpadding=4>{body}</table>{desc}"
@@ -59,13 +62,12 @@ class DictionaryManagerDialog(QDialog):
     def __init__(self, query_manager: QueryManager, parent: QWidget | None = None):
         super().__init__(parent)
         self.query_manager = query_manager
-        self.setWindowTitle("Sözlük yöneticisi")
+        self.setWindowTitle(t("Sözlük yöneticisi"))
         self.resize(940, 520)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Sözlükler arama sırasına göre listelenir. Kutu = etkin. "
-                                "Çift tık: ayrıntılar."))
+        layout.addWidget(QLabel(t("Sözlükler arama sırasına göre listelenir. Kutu = etkin. Çift tık: ayrıntılar.")))
         self.table = QTableWidget(0, len(self.COLS))
-        self.table.setHorizontalHeaderLabels(self.COLS)
+        self.table.setHorizontalHeaderLabels([t(c) for c in self.COLS])
         self.table.verticalHeader().setVisible(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -80,11 +82,11 @@ class DictionaryManagerDialog(QDialog):
 
         row = QHBoxLayout()
         buttons = [
-            ("Dosya ekle…", "open", self._add_files), ("Klasör ekle…", "folder", self._add_folder),
-            ("Kaldır", "remove", self._remove), ("En üste", "up", lambda: self._move("top")),
-            ("Yukarı", "up", lambda: self._move(-1)), ("Aşağı", "down", lambda: self._move(1)),
-            ("En alta", "down", lambda: self._move("bottom")), ("Yeniden indeksle", "refresh", self._reindex),
-            ("Bilgi", "help", self._info),
+            (t("Dosya ekle…"), "open", self._add_files), (t("Klasör ekle…"), "folder", self._add_folder),
+            (t("Kaldır"), "remove", self._remove), (t("En üste"), "up", lambda: self._move("top")),
+            (t("Yukarı"), "up", lambda: self._move(-1)), (t("Aşağı"), "down", lambda: self._move(1)),
+            (t("En alta"), "down", lambda: self._move("bottom")), (t("Yeniden indeksle"), "refresh", self._reindex),
+            (t("Bilgi"), "help", self._info),
         ]
         for label, ic, fn in buttons:
             b = QPushButton(icon(ic), label)
@@ -95,7 +97,7 @@ class DictionaryManagerDialog(QDialog):
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         bb.rejected.connect(self.reject)
         bb.accepted.connect(self.accept)
-        bb.button(QDialogButtonBox.StandardButton.Close).setText("Kapat")
+        bb.button(QDialogButtonBox.StandardButton.Close).setText(t("Kapat"))
         layout.addWidget(bb)
         self.summary = QLabel("")
         self.summary.setObjectName("hint")
@@ -124,7 +126,7 @@ class DictionaryManagerDialog(QDialog):
         self.table.blockSignals(False)
         enabled = [n for n in names if qm.is_enabled(n)]
         words = sum(qm.dictionaries[n].metadata.word_count for n in enabled)
-        self.summary.setText(f"{len(enabled)} / {len(names)} sözlük etkin · {words:,} kelime")
+        self.summary.setText(t("{n} / {m} sözlük etkin · {w} kelime", n=len(enabled), m=len(names), w=f"{words:,}"))
 
     def _selected_name(self) -> str | None:
         r = self.table.currentRow()
@@ -138,17 +140,17 @@ class DictionaryManagerDialog(QDialog):
                 return
 
     def _add_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Sözlük dosyası seçin", "", FILE_FILTER)
+        paths, _ = QFileDialog.getOpenFileNames(self, t("Sözlük dosyası seçin"), "", file_filter())
         if paths:
             self.add_paths_requested.emit([Path(p) for p in paths])
 
     def _add_folder(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Sözlük klasörü seçin")
+        d = QFileDialog.getExistingDirectory(self, t("Sözlük klasörü seçin"))
         if not d:
             return
         files = scan_folder(d, recursive=True)
         if not files:
-            QMessageBox.information(self, "Klasör ekle", "Bu klasörde sözlük dosyası bulunamadı.")
+            QMessageBox.information(self, t("Klasör ekle"), t("Bu klasörde sözlük dosyası bulunamadı."))
             return
         self.add_paths_requested.emit(files)
 
@@ -156,8 +158,8 @@ class DictionaryManagerDialog(QDialog):
         name = self._selected_name()
         if not name:
             return
-        if QMessageBox.question(self, "Sözlüğü kaldır",
-                                f"“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)") \
+        if QMessageBox.question(self, t("Sözlüğü kaldır"),
+                                t("“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)", name=name)) \
                 != QMessageBox.StandardButton.Yes:
             return
         self.query_manager.remove_dictionary(name)
@@ -185,7 +187,7 @@ class DictionaryManagerDialog(QDialog):
         if not name or qm.index_store is None:
             return
         n = qm.index_store.index_dictionary(qm.dictionaries[name])
-        QMessageBox.information(self, "Yeniden indeksle", f"{name}: {n:,} kelime indekslendi.")
+        QMessageBox.information(self, t("Yeniden indeksle"), t("{name}: {n} kelime indekslendi.", name=name, n=f"{n:,}"))
 
     def _info(self) -> None:
         name = self._selected_name()

@@ -15,6 +15,7 @@ from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QImage, QPainter, QPixmap
 
 from ..core import dictident
+from ..core.i18n import t
 
 _qm = None
 _cache: dict[tuple[str, str], DictLook] = {}
@@ -40,7 +41,7 @@ class DictLook:
         parts = [self.name]
         if self.langs:
             parts.append(f"{self.langs[0]} → {self.langs[1]}")
-        parts.append(f"{self.fmt} · {self.words:,} kelime".replace(",", "."))
+        parts.append(f"{self.fmt} · " + t("{n} kelime", n=f"{self.words:,}".replace(",", ".")))
         return "\n".join(parts)
 
 

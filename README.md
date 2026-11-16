@@ -50,7 +50,8 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - collapsible articles and find in page
   - favorites and history
   - light and dark themes, accent color, fonts and zoom
-- **75 settings** in 9 pages with search and per-setting reset.
+- **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
+- **76 settings** in 9 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
 - **Offline and private:** no telemetry. The only network use is `dct update` / the update check, and only when you ask.
 - **Portable:** each release ships standalone builds of both editions, and CI self-tests every build before publishing.
@@ -283,11 +284,11 @@ They work on Windows, macOS and Linux X11. On Wayland, use desktop shortcuts run
 
 ## Settings
 
-**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 75 settings, stored in `settings.json` in the data folder and shared by both editions:
+**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 76 settings, stored in `settings.json` in the data folder and shared by both editions:
 
 | Page | Examples |
 |---|---|
-| Genel | restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, single instance |
+| Genel | interface language, restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, single instance |
 | Görünüm | theme, accent color, UI font and size, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
 | Makale | font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, picture height, find highlight color |
 | Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
@@ -406,7 +407,8 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **Resim ve ses:** DSL `[s]` dosyaları.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
-- **Ayarlar:** 9 sayfada 75 ayar, arama kutusu ve ayar başına sıfırlama.
+- **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
+- **Ayarlar:** 9 sayfada 76 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
 
 ### Lisans

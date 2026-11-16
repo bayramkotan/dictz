@@ -58,6 +58,8 @@ if sys.platform.startswith("linux"):
 # files in the bundle — not only inside the PYZ archive. include_py_files=True
 # ships them; dictz.parsers.pyglossary_base points PyGlossary at that folder.
 datas = collect_data_files("pyglossary", include_py_files=True)
+# interface languages and their flags (dictz/resources/i18n, dictz/resources/flags)
+datas += collect_data_files("dictz", includes=["resources/**/*"])
 
 # Strip imports we never use (kept small, don't trim essentials)
 excludes = [

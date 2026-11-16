@@ -185,8 +185,11 @@ impl Services {
                     let (h, errors) = hotkeys::Hotkeys::new(wanted, self.sender());
                     self.hotkeys = h;
                     if !errors.is_empty() {
-                        self.messages
-                            .push(format!("Genel kısayollar: {}", errors.join("; ")));
+                        self.messages.push(format!(
+                            "{} {}",
+                            crate::i18n::tr("Genel kısayollar:"),
+                            errors.join("; ")
+                        ));
                     }
                 }
             }
@@ -194,9 +197,11 @@ impl Services {
                 if self.tray.is_none() {
                     match tray::Tray::new(self.sender(), scan) {
                         Ok(t) => self.tray = Some(t),
-                        Err(e) => self
-                            .messages
-                            .push(format!("Tepsi simgesi gösterilemedi: {}", e)),
+                        Err(e) => self.messages.push(format!(
+                            "{} {}",
+                            crate::i18n::tr("Tepsi simgesi gösterilemedi:"),
+                            e
+                        )),
                     }
                 }
                 if let Some(t) = &self.tray {
@@ -553,7 +558,7 @@ mod hotkeys {
             #[cfg(target_os = "linux")]
             if std::env::var_os("DISPLAY").is_none() {
                 errors.push(
-                    "Wayland'da desteklenmiyor; masaüstü ayarlarında `dictz show` / `dictz popup` komutuna kısayol atayın"
+                    crate::i18n::tr("Wayland'da desteklenmiyor; masaüstü ayarlarında `dictz show` / `dictz popup` komutuna kısayol atayın")
                         .to_string(),
                 );
                 return (None, errors);
@@ -595,7 +600,7 @@ mod hotkeys {
                     };
                 }
                 let Some(c) = code(&hk.key) else {
-                    errors.push(format!("{}: tuş desteklenmiyor", hk));
+                    errors.push(format!("{}: {}", hk, crate::i18n::tr("tuş desteklenmiyor")));
                     continue;
                 };
                 let h = HotKey::new(if mods.is_empty() { None } else { Some(mods) }, c);
@@ -668,13 +673,13 @@ mod tray {
             use ksni::menu::{CheckmarkItem, StandardItem};
             vec![
                 StandardItem {
-                    label: "Göster / gizle".into(),
+                    label: crate::i18n::tr("Göster / gizle"),
                     activate: Box::new(|t: &mut Self| (t.send)(Event::Tray(TrayAction::Toggle))),
                     ..Default::default()
                 }
                 .into(),
                 CheckmarkItem {
-                    label: "Tarama".into(),
+                    label: crate::i18n::tr("Tarama"),
                     checked: self.scan,
                     activate: Box::new(|t: &mut Self| {
                         t.scan = !t.scan;
@@ -684,7 +689,7 @@ mod tray {
                 }
                 .into(),
                 StandardItem {
-                    label: "Panodaki kelimeyi ara".into(),
+                    label: crate::i18n::tr("Panodaki kelimeyi ara"),
                     activate: Box::new(|t: &mut Self| {
                         (t.send)(Event::Tray(TrayAction::LookupClipboard))
                     }),
@@ -693,7 +698,7 @@ mod tray {
                 .into(),
                 ksni::MenuItem::Separator,
                 StandardItem {
-                    label: "Tercihler…".into(),
+                    label: crate::i18n::tr("Tercihler…"),
                     activate: Box::new(|t: &mut Self| {
                         (t.send)(Event::Tray(TrayAction::Preferences))
                     }),
@@ -701,7 +706,7 @@ mod tray {
                 }
                 .into(),
                 StandardItem {
-                    label: "Çıkış".into(),
+                    label: crate::i18n::tr("Çıkış"),
                     activate: Box::new(|t: &mut Self| (t.send)(Event::Tray(TrayAction::Quit))),
                     ..Default::default()
                 }
@@ -758,11 +763,11 @@ mod tray {
             send: impl Fn(Event) + Send + Sync + Clone + 'static,
             scan: bool,
         ) -> Result<Self, String> {
-            let toggle = MenuItem::new("Göster / gizle", true, None);
-            let scan_item = CheckMenuItem::new("Tarama", true, scan, None);
-            let lookup = MenuItem::new("Panodaki kelimeyi ara", true, None);
-            let prefs = MenuItem::new("Tercihler…", true, None);
-            let quit = MenuItem::new("Çıkış", true, None);
+            let toggle = MenuItem::new(crate::i18n::tr("Göster / gizle"), true, None);
+            let scan_item = CheckMenuItem::new(crate::i18n::tr("Tarama"), true, scan, None);
+            let lookup = MenuItem::new(crate::i18n::tr("Panodaki kelimeyi ara"), true, None);
+            let prefs = MenuItem::new(crate::i18n::tr("Tercihler…"), true, None);
+            let quit = MenuItem::new(crate::i18n::tr("Çıkış"), true, None);
             let sep = PredefinedMenuItem::separator();
             let menu = Menu::new();
             let items: [&dyn IsMenuItem; 6] = [&toggle, &scan_item, &lookup, &sep, &prefs, &quit];

@@ -15,6 +15,9 @@ categories = ["text-processing", "gui", "command-line-utilities"]
 include = [
     "src/**/*.rs",
     "src/completion/*.txt",
+    "src/i18n/catalog.json",
+    "src/flags/*.png",
+    "src/flags/LICENSE-flag-icons.txt",
     "Cargo.toml",
     "Cargo.lock",
     "README.md",
@@ -43,7 +46,8 @@ required-features = ["cli"]
 # Library-only users: `dictz = { version = "...", default-features = false }`.
 default = ["cli", "gui", "audio", "update", "scan"]
 cli = ["dep:clap"]
-gui = ["dep:eframe", "dep:egui_extras", "dep:rfd", "dep:image", "dep:raw-window-handle"]
+gui = ["dep:eframe", "dep:egui_extras", "dep:rfd", "dep:image", "dep:raw-window-handle", "dep:ar-reshaper",
+       "dep:unicode-bidi"]
 audio = ["dep:rodio"]
 update = ["dep:ureq", "dep:tar"]
 scan = ["gui", "dep:arboard", "dep:clipboard-master", "dep:global-hotkey", "dep:mouse_position",
@@ -70,9 +74,12 @@ clipboard-master = { version = "4", optional = true }
 global-hotkey = { version = "0.7", optional = true }
 mouse_position = { version = "0.1.4", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
+# right-to-left interface languages (Arabic, Persian, Urdu): egui does not shape text itself
+ar-reshaper = { version = "1.5", optional = true }
+unicode-bidi = { version = "0.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Globalization"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 tray-icon = { version = "0.21", optional = true, default-features = false }

@@ -7,6 +7,7 @@ from urllib.parse import quote
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtWidgets import QTextBrowser, QVBoxLayout, QWidget
 
+from ..core.i18n import t
 from ..parsers.base import DictionaryEntry
 from ..storage.settings import Preferences
 from . import dicticons, themes
@@ -90,16 +91,15 @@ class DefinitionView(QWidget):
     # ------------------------------------------------------------ content
     def show_welcome(self) -> None:
         self.word, self.entries, self.suggestions = "", [], []
-        body = """
+        keys = " · ".join(f"<b>{k}</b> {html.escape(t(v))}" for k, v in (
+            ("Ctrl+F", "ara"), ("Ctrl+T", "yeni sekme"), ("Ctrl+D", "favori"), ("Ctrl+R", "rastgele kelime"),
+            ("Ctrl+Shift+F", "sayfada bul"), ("Ctrl+,", "tercihler"), ("F11", "tam ekran")))
+        body = f"""
         <div style="text-align:center; padding: 80px 24px;">
             <h1 style="font-size: 2.2em; margin: 0;">dictz</h1>
-            <p class="muted" style="margin: 6px 0 26px 0;">çok formatlı çevrimdışı sözlük</p>
-            <p class="muted">Başlamak için <b>Dosya → Sözlük Ekle</b> (Ctrl+O) veya <b>Klasör Ekle</b> ile
-            StarDict (.ifo), DSL (.dsl) ya da Babylon (.bgl) sözlüğü ekleyin;<br>dosyaları pencereye
-            sürükleyip bırakabilirsiniz.</p>
-            <p class="muted" style="font-size: .85em; margin-top: 36px;">
-            <b>Ctrl+F</b> ara · <b>Ctrl+T</b> yeni sekme · <b>Ctrl+D</b> favori · <b>Ctrl+R</b> rastgele kelime ·
-            <b>Ctrl+Shift+F</b> sayfada bul · <b>Ctrl+,</b> tercihler · <b>F11</b> tam ekran</p>
+            <p class="muted" style="margin: 6px 0 26px 0;">{html.escape(t("çok formatlı çevrimdışı sözlük"))}</p>
+            <p class="muted">{html.escape(t("Başlamak için Dosya → Sözlük Ekle (Ctrl+O) veya Klasör Ekle ile StarDict (.ifo), DSL (.dsl) ya da Babylon (.bgl) sözlüğü ekleyin; dosyaları pencereye sürükleyip bırakabilirsiniz."))}</p>
+            <p class="muted" style="font-size: .85em; margin-top: 36px;">{keys}</p>
         </div>"""
         self.set_html(body)
 
@@ -112,11 +112,11 @@ class DefinitionView(QWidget):
                 f' <span class="score">%{score:.0f}</span></li>'
                 for w, score in suggestions
             )
-            did_you_mean = f'<h3>Bunu mu demek istediniz?</h3><ul class="did-you-mean">{items}</ul>'
+            did_you_mean = f'<h3>{html.escape(t("Bunu mu demek istediniz?"))}</h3><ul class="did-you-mean">{items}</ul>'
         body = f"""
         <div style="padding: 36px 8px;">
-            <h2>Sonuç yok</h2>
-            <p class="muted"><b>{html.escape(query)}</b> için hiçbir sözlükte eşleşme bulunamadı.</p>
+            <h2>{html.escape(t("Sonuç yok"))}</h2>
+            <p class="muted">{t("“{word}” için hiçbir sözlükte eşleşme bulunamadı.", word=html.escape(query))}</p>
             {did_you_mean}
         </div>"""
         self.set_html(body)
@@ -137,7 +137,7 @@ class DefinitionView(QWidget):
             lk = dicticons.look(dict_name)
             tint = themes._mix(lk.color, "#1b1f26" if dark else "#ffffff", 0.80 if dark else 0.88)
             ink = themes._mix(lk.color, "#ffffff", 0.40) if dark else lk.color
-            count = f'<span class="count">{len(items)} madde</span>' if len(items) > 1 else ""
+            count = f'<span class="count">{t("{n} madde", n=len(items))}</span>' if len(items) > 1 else ""
             langs = (f'<span class="chip lang">{html.escape(lk.langs[0])} → {html.escape(lk.langs[1])}</span>'
                      if lk.langs else "")
             fmt = f'<span class="chip fmt">{html.escape(lk.fmt)}</span>' if lk.fmt else ""
@@ -146,8 +146,8 @@ class DefinitionView(QWidget):
                 f'<summary title="{html.escape(lk.tooltip())}">'
                 f'{dicticons.badge_html(dict_name)}<span class="dname">{html.escape(dict_name)}</span>'
                 f'{langs}{fmt}{count}'
-                f'<span class="actions"><a href="dictz-action:copy:{i}" title="Makaleyi kopyala">⧉ kopyala</a>'
-                f'<a href="dictz-action:only:{i}" title="Yalnızca bu sözlükte ara">◎ yalnızca bu</a></span>'
+                f'<span class="actions"><a href="dictz-action:copy:{i}" title="{t("Makaleyi kopyala")}">⧉ {t("kopyala")}</a>'
+                f'<a href="dictz-action:only:{i}" title="{t("Yalnızca bu sözlükte ara")}">◎ {t("yalnızca bu")}</a></span>'
                 f'<span class="chev">▾</span></summary><div class="dbody">'
             )
             for e in items:

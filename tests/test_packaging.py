@@ -361,3 +361,11 @@ def test_short_name_dct_is_installed() -> None:
     assert 'dct = "dictz.app:main"' in py
     cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
     assert 'name = "dct"' in cargo and (ROOT / "dictz-rs" / "src" / "bin" / "dct.rs").is_file()
+
+
+def test_interface_languages_are_packaged() -> None:
+    cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
+    assert '"src/i18n/catalog.json"' in cargo and '"src/flags/*.png"' in cargo
+    spec = (ROOT / "packaging" / "pyinstaller" / "dictz.spec").read_text(encoding="utf-8")
+    assert 'collect_data_files("dictz", includes=["resources/**/*"])' in spec
+    assert "recursive-include dictz/resources *" in (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
