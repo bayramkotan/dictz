@@ -44,7 +44,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **Interface:**
   - tabs, back/forward, random word, favorites and history (with filters)
   - dictionary bar (one-click on/off, right-click = only this one) and a "found in" panel
-  - collapsible articles per dictionary with copy / "only this dictionary" buttons
+  - collapsible article cards per dictionary: its icon (or monogram badge in its own colour), language pair, format, copy / "only this dictionary" buttons
   - find in page with highlighting, save article as HTML / text
   - background loading with progress; dictionary folders scanned on start
   - light, dark and auto themes, accent color, fonts by name or file, zoom, full screen, always on top

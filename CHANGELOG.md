@@ -5,6 +5,16 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Dictionary icons and article cards** in **both editions**. Every place that names a dictionary shows the same badge: article headers, the dictionary bar, "found in" and the sidebar list.
+  - The badge is the dictionary's own icon when it has one: a picture next to it with the same name (`Oxford.ifo` → `Oxford.ico` / `.png` / `.bmp` / `.jpg` / `.gif`, as in GoldenDict), or the icon stored inside a Babylon `.bgl` file.
+  - Otherwise it is a generated badge: the dictionary's monogram (`Adil Hindistan En2Tr` → **AH**) on its own colour, which stays the same everywhere and between runs.
+  - Each article is a card. Its header carries the badge, the name, the language pair (`EN → TR`, from the dictionary's metadata or its name: `En2Tr`, `English-Turkish`, `İngilizce → Türkçe`), the format (`StarDict` / `DSL` / `BGL`), the article count, copy / "only this one" and a collapse arrow, on a strip in the dictionary's colour.
+  - Tooltips show name, languages, format and word count.
+- `dictz/core/dictident.py` / `dictz-rs/src/dictident.rs` with a new parity golden (`dictident_golden.json`); the parity BGL sample now carries an icon.
+
 ## [0.0.9] — 2026-11-16
 
 A **short command name, version flags and desktop shortcuts** in **both editions** (Python and Rust), plus rewritten READMEs.

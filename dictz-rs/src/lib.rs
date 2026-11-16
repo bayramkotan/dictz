@@ -41,6 +41,7 @@ pub mod babylon;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod desktop;
+pub mod dictident;
 pub mod dsl;
 #[cfg(feature = "cli")]
 pub mod entry;

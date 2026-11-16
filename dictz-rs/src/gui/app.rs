@@ -278,6 +278,7 @@ pub struct DictzApp {
 
     fonts_key: Option<(String, String)>,
     media_cache: HashMap<(String, String), Option<Arc<[u8]>>>,
+    dict_looks: super::dictbadge::DictLooks,
 
     win: MainWindow,
     services: Services,
@@ -375,6 +376,7 @@ impl DictzApp {
             update_msg: None,
             fonts_key: None,
             media_cache: HashMap::new(),
+            dict_looks: Default::default(),
             win,
             services,
             popup: Popup::default(),
@@ -2348,15 +2350,30 @@ impl DictzApp {
                             .dictionary(&n)
                             .map(|d| d.metadata().word_count)
                             .unwrap_or(0);
+                        let _ = words;
+                        let look = self.dict_looks.get(ui.ctx(), &self.qm, &n);
                         let mut text = RichText::new(truncate(&n, 24));
                         if !on {
                             text = text.weak().strikethrough();
                         }
-                        let r = ui.selectable_label(on, text).on_hover_text(format!(
-                            "{}\n{} kelime\nTık: aç/kapat · Sağ tık: yalnızca bu",
-                            n,
-                            group(words)
-                        ));
+                        let r = ui
+                            .horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 3.0;
+                                let b = super::dictbadge::badge(ui, &look, 16.0);
+                                if !on {
+                                    ui.painter().rect_filled(
+                                        b.rect,
+                                        4.0,
+                                        ui.visuals().panel_fill.gamma_multiply(0.6),
+                                    );
+                                }
+                                ui.selectable_label(on, text)
+                            })
+                            .inner
+                            .on_hover_text(format!(
+                                "{}\n\nTık: aç/kapat · Sağ tık: yalnızca bu",
+                                look.tooltip()
+                            ));
                         if r.clicked() {
                             actions.push(Action::SetEnabled(n.clone(), !on));
                         }
@@ -2410,13 +2427,16 @@ impl DictzApp {
                     for name in names.into_iter().filter(|n| keep(n)) {
                         let mut on = self.qm.is_enabled(&name);
                         let count = self.qm.dictionary(&name).map(|d| d.metadata().word_count).unwrap_or(0);
+                        let _ = count;
+                        let look = self.dict_looks.get(ui.ctx(), &self.qm, &name);
                         ui.horizontal(|ui| {
                             if ui.checkbox(&mut on, "").changed() {
                                 actions.push(Action::SetEnabled(name.clone(), on));
                             }
+                            super::dictbadge::badge(ui, &look, 18.0);
                             let r = ui
                                 .add(egui::Label::new(&name).sense(egui::Sense::click()).truncate())
-                                .on_hover_text(format!("{} kelime · çift tık: bilgi", group(count)));
+                                .on_hover_text(format!("{}\n\nÇift tık: bilgi", look.tooltip()));
                             if r.double_clicked() {
                                 actions.push(Action::Info(name.clone()));
                             }
@@ -2520,6 +2540,10 @@ impl DictzApp {
         if groups.is_empty() {
             ui.weak("—");
         }
+        let looks: Vec<_> = groups
+            .iter()
+            .map(|g| self.dict_looks.get(ui.ctx(), &self.qm, &g.dict))
+            .collect();
         egui::ScrollArea::vertical()
             .id_salt("found-in")
             .show(ui, |ui| {
@@ -2529,11 +2553,14 @@ impl DictzApp {
                     } else {
                         g.dict.clone()
                     };
-                    if ui
-                        .selectable_label(false, label)
-                        .on_hover_text("Makaleye git")
-                        .clicked()
-                    {
+                    let r = ui
+                        .horizontal(|ui| {
+                            super::dictbadge::badge(ui, &looks[i], 18.0);
+                            ui.add(egui::Button::new(label).frame(false).truncate())
+                        })
+                        .inner
+                        .on_hover_text(format!("{}\n\nTıkla: makaleye git", looks[i].tooltip()));
+                    if r.clicked() {
                         actions.push(Action::ScrollToDict(i));
                     }
                 }
@@ -2681,6 +2708,14 @@ impl DictzApp {
         };
         let expand_all = self.expand_all.take();
         let scroll_to = self.scroll_to_dict.take();
+        let dark = ui.visuals().dark_mode;
+        let looks: Vec<_> = match self.tabs.get(self.current).map(|t| &t.content) {
+            Some(Content::Articles(groups)) => groups
+                .iter()
+                .map(|g| self.dict_looks.get(ui.ctx(), &self.qm, &g.dict))
+                .collect(),
+            _ => Vec::new(),
+        };
         let Some(tab) = self.tabs.get(self.current) else {
             return;
         };
@@ -2762,31 +2797,73 @@ impl DictzApp {
                                         }
                                     };
                                     if show_headers {
-                                        ui.add_space(8.0);
-                                        let header = state.show_header(ui, |ui| {
-                                            let r = ui.label(RichText::new(&g.dict).size(size * 0.85).color(accent).strong());
-                                            if scroll_to == Some(gi) {
-                                                r.scroll_to_me(Some(egui::Align::TOP));
-                                            }
-                                            if g.articles.len() > 1 {
-                                                ui.weak(format!("({})", g.articles.len()));
-                                            }
-                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                if ui.small_button("yalnızca bu").on_hover_text("Bu sözlükte yeni sekmede ara").clicked() {
-                                                    actions.push(Action::OpenWordIn { word: tab.word.clone(), dicts: vec![g.dict.clone()] });
-                                                }
-                                                if ui.small_button("kopyala").on_hover_text("Bu makaleyi metin olarak kopyala").clicked() {
-                                                    actions.push(Action::CopyArticle(Some(gi)));
-                                                }
+                                        let look = looks[gi].clone();
+                                        let border = ui.visuals().widgets.noninteractive.bg_stroke.color;
+                                        let open = state.is_open();
+                                        let radius = 10u8;
+                                        egui::Frame::NONE
+                                            .stroke(egui::Stroke::new(1.0_f32, border))
+                                            .corner_radius(radius)
+                                            .fill(ui.visuals().extreme_bg_color)
+                                            .show(ui, |ui| {
+                                                ui.set_width(ui.available_width());
+                                                let bottom = if open { 0 } else { radius };
+                                                let hdr = egui::Frame::NONE
+                                                    .fill(look.tint(dark))
+                                                    .corner_radius(egui::CornerRadius { nw: radius, ne: radius, sw: bottom, se: bottom })
+                                                    .inner_margin(egui::Margin { left: 14, right: 10, top: 6, bottom: 6 })
+                                                    .show(ui, |ui| {
+                                                        ui.set_width(ui.available_width());
+                                                        ui.horizontal(|ui| {
+                                                            ui.spacing_mut().item_spacing.x = 8.0;
+                                                            super::dictbadge::badge(ui, &look, size * 1.55);
+                                                            let name = ui
+                                                                .add(egui::Label::new(RichText::new(&g.dict).size(size * 0.92).strong().color(ui.visuals().strong_text_color())).sense(egui::Sense::click()).truncate())
+                                                                .on_hover_text(look.tooltip())
+                                                                .on_hover_cursor(egui::CursorIcon::PointingHand);
+                                                            if name.clicked() {
+                                                                state.toggle(ui);
+                                                            }
+                                                            if scroll_to == Some(gi) {
+                                                                name.scroll_to_me(Some(egui::Align::TOP));
+                                                            }
+                                                            if let Some((a, b)) = &look.langs {
+                                                                super::dictbadge::chip(ui, &format!("{} → {}", a, b), look.ink(dark), size * 0.66);
+                                                            }
+                                                            if !look.fmt.is_empty() {
+                                                                super::dictbadge::chip(ui, &look.fmt, ui.visuals().weak_text_color(), size * 0.66);
+                                                            }
+                                                            if g.articles.len() > 1 {
+                                                                ui.label(RichText::new(format!("{} madde", g.articles.len())).size(size * 0.78).weak());
+                                                            }
+                                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                                state.show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
+                                                                if ui.small_button("◎ yalnızca bu").on_hover_text("Bu sözlükte yeni sekmede ara").clicked() {
+                                                                    actions.push(Action::OpenWordIn { word: tab.word.clone(), dicts: vec![g.dict.clone()] });
+                                                                }
+                                                                if ui.small_button("📋 kopyala").on_hover_text("Bu makaleyi metin olarak kopyala").clicked() {
+                                                                    actions.push(Action::CopyArticle(Some(gi)));
+                                                                }
+                                                            });
+                                                        });
+                                                    });
+                                                let r = hdr.response.rect;
+                                                let cr = egui::CornerRadius { nw: radius, ne: 0, sw: bottom, se: 0 };
+                                                ui.painter().rect_filled(egui::Rect::from_min_size(r.min, egui::vec2(4.0, r.height())), cr, look.color);
+                                                state.show_body_unindented(ui, |ui| {
+                                                    egui::Frame::NONE
+                                                        .inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 4 })
+                                                        .show(ui, |ui| {
+                                                            ui.set_width(ui.available_width());
+                                                            body(ui, &mut find);
+                                                        });
+                                                });
                                             });
-                                        });
-                                        let open = header.is_open();
-                                        header.body(|ui| body(ui, &mut find));
                                         if !open && !opts.find.is_empty() {
                                             // still count hidden matches so n/m stays right
                                             find.counter += g.articles.iter().map(|a| render::count_matches(&a.lines, &opts.find) + render::find_ranges(&a.headword, &opts.find).len()).sum::<usize>();
                                         }
-                                        ui.separator();
+                                        ui.add_space(12.0);
                                     } else {
                                         body(ui, &mut find);
                                     }
@@ -3385,7 +3462,7 @@ fn file_name(p: &Path) -> String {
 }
 
 /// 12345 → "12,345" (same grouping as the Python edition's `{:,}`).
-fn group(n: usize) -> String {
+pub(crate) fn group(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {

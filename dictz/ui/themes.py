@@ -122,18 +122,37 @@ main {{ {width} }}
 a {{ color: {link}; text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
 h1, h2, h3 {{ color: {head_fg}; font-weight: 600; }}
-details.dict {{ margin: 0 0 14px 0; }}
-details.dict > summary {{ list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
-        background: {card}; border-left: 3px solid {accent}; padding: 7px 12px; border-radius: 5px;
-        font-size: 0.78em; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: {head_fg}; }}
+details.dict {{ margin: 0 0 16px 0; border: 1px solid {border}; border-radius: 10px; overflow: hidden;
+        background: {bg}; box-shadow: 0 1px 3px rgba(0,0,0,{.35 if dark else .05}); }}
+details.dict > summary {{ list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px;
+        padding: 7px 12px 7px 10px; border-left: 4px solid var(--dc, {accent});
+        background: linear-gradient(90deg, var(--dt, {card}) 0%, {card} 85%);
+        font-size: 0.9em; font-weight: 600; color: {fg}; user-select: none; }}
 details.dict > summary::-webkit-details-marker {{ display: none; }}
-details.dict > summary .chev {{ transition: transform .15s; display: inline-block; }}
-details.dict[open] > summary .chev {{ transform: rotate(90deg); }}
-details.dict > summary .count {{ color: {muted}; font-weight: 400; text-transform: none; letter-spacing: 0; }}
-details.dict > summary .actions {{ margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; white-space: nowrap; font-size: .95em; }}
-details.dict > summary .actions a {{ margin-left: 10px; }}
+details.dict:not([open]) > summary {{ opacity: .85; }}
+.dicon {{ flex: none; width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center;
+        justify-content: center; background: var(--dc, {accent}); color: #fff; font-size: 11px; font-weight: 700;
+        letter-spacing: 0; box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); }}
+.dicon.img {{ background: transparent; box-shadow: none; }}
+.dicon img {{ width: 24px; height: 24px; object-fit: contain; }}
+.dname {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }}
+.chip {{ flex: none; font-size: 0.74em; font-weight: 600; padding: 1px 8px; border-radius: 10px; white-space: nowrap;
+        border: 1px solid {border}; background: {bg}; color: {muted}; letter-spacing: .3px; }}
+.chip.lang {{ color: var(--dk, {accent}); border-color: var(--dk, {accent}); }}
+details.dict > summary .count {{ flex: none; color: {muted}; font-weight: 400; font-size: .85em; }}
+details.dict > summary .actions {{ margin-left: auto; white-space: nowrap; font-weight: 400; font-size: .82em;
+        opacity: .45; transition: opacity .15s; }}
+details.dict > summary:hover .actions {{ opacity: 1; }}
+details.dict > summary .actions a {{ margin-left: 12px; }}
+details.dict > summary .chev {{ flex: none; color: {muted}; transition: transform .15s; display: inline-block;
+        transform: rotate(-90deg); }}
+details.dict[open] > summary .chev {{ transform: none; }}
+.dbody {{ padding: 2px 18px 6px 18px; }}
+.nohead {{ border: none; box-shadow: none; background: transparent; }}
 .nohead > summary {{ display: none !important; }}
-.article {{ padding: 6px 0 10px 14px; border-left: 2px solid {border}; margin: 8px 0 12px 4px; }}
+.nohead > .dbody {{ padding: 0; }}
+.article {{ padding: 8px 0 10px 0; }}
+.article + .article {{ border-top: 1px dashed {border}; }}
 .headword {{ font-size: {head:.2f}em; font-weight: 600; color: {head_fg}; margin: 2px 0 4px 0; }}
 .definition pre {{ white-space: pre-wrap; font-family: inherit; margin: 0; }}
 .definition img {{ max-width: 100%; max-height: {img_h}px; vertical-align: middle; }}

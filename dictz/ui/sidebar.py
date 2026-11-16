@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import dicticons
 from .icons import icon
 
 
@@ -138,10 +139,10 @@ class Sidebar(QDockWidget):
         lst = self.dicts_pane.list
         lst.blockSignals(True)
         lst.clear()
-        for name, enabled, words in items:
-            it = QListWidgetItem(name)
+        for name, enabled, _words in items:
+            it = QListWidgetItem(dicticons.qicon(name), name)
             it.setData(Qt.ItemDataRole.UserRole, name)
-            it.setToolTip(f"{name}\n{words:,} kelime\nÇift tık: bilgiler")
+            it.setToolTip(dicticons.look(name).tooltip() + "\n\nÇift tık: bilgiler")
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             lst.addItem(it)

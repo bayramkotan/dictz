@@ -8,7 +8,7 @@ import contextlib
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QSettings, QSize, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -41,7 +41,7 @@ from ..core.query_manager import QueryManager, Suggestion, is_dictionary_file, s
 from ..parsers.base import DictionaryEntry
 from ..storage.history import HistoryStore
 from ..storage.settings import Preferences
-from . import themes
+from . import dicticons, themes
 from .definition_tabs import DefinitionTabs
 from .definition_view import group_by_dictionary
 from .dictionary_manager import FILE_FILTER, DictionaryManagerDialog, info_html
@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
                  startup_files: list[Path] | None = None):
         super().__init__()
         self.query_manager = query_manager
+        dicticons.set_query_manager(query_manager)
         self.history = history_store
         self.prefs = preferences
         self.startup_files = list(startup_files or [])
@@ -286,6 +287,7 @@ class MainWindow(QMainWindow):
     def _build_dictionary_bar(self) -> None:
         bar = QToolBar("Sözlük çubuğu")
         bar.setObjectName("dictionary_bar")
+        bar.setIconSize(QSize(18, 18))
         bar.setMovable(True)
         self.addToolBarBreak()
         self.addToolBar(bar)
@@ -305,10 +307,11 @@ class MainWindow(QMainWindow):
             b = QToolButton()
             short = name if len(name) <= 22 else name[:21] + "…"
             b.setText(short)
+            b.setIcon(dicticons.qicon(name))
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             b.setCheckable(True)
             b.setChecked(qm.is_enabled(name))
-            m = qm.dictionaries[name].metadata
-            b.setToolTip(f"{m.display_name}\n{m.word_count:,} kelime\nTıkla: aç/kapat · Sağ tık: yalnızca bu")
+            b.setToolTip(dicticons.look(name).tooltip() + "\n\nTıkla: aç/kapat · Sağ tık: yalnızca bu")
             b.toggled.connect(lambda on, n=name: self._set_dictionary_enabled(n, on))
             b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             b.customContextMenuRequested.connect(lambda _p, n=name: self._solo_dictionary(n))
@@ -752,9 +755,9 @@ class MainWindow(QMainWindow):
     def _refresh_found_in(self, entries: list[DictionaryEntry]) -> None:
         self.found_list.clear()
         for i, (name, items) in enumerate(group_by_dictionary(entries)):
-            it = QListWidgetItem(f"{name}  ({len(items)})" if len(items) > 1 else name)
+            it = QListWidgetItem(dicticons.qicon(name), f"{name}  ({len(items)})" if len(items) > 1 else name)
             it.setData(Qt.ItemDataRole.UserRole, i)
-            it.setToolTip("Makaleye git")
+            it.setToolTip(dicticons.look(name).tooltip() + "\n\nTıkla: makaleye git")
             self.found_list.addItem(it)
 
     def _on_found_in_clicked(self, item: QListWidgetItem) -> None:

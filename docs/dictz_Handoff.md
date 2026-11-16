@@ -316,6 +316,14 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 ---
 
+## Done after v0.0.9 (unreleased, plain push)
+
+- Dictionary icons and article cards in both editions: `core/dictident.py` + `ui/dicticons.py` (Python), `src/dictident.rs` + `src/gui/dictbadge.rs` (Rust).
+  - Icon order: same-name picture next to the file → Babylon info block 0x0B → generated monogram badge on a colour from FNV-1a of the name. A picture smaller than 8 px is ignored (placeholder).
+  - Language pair from metadata, else from the name (`En2Tr`, `English-Turkish`, `X to Y`, `İngilizce → Türkçe`). `fold()` = lower-case minus U+0307 so `İ` matches.
+  - Parity golden `dictident_golden.json` (monogram, colour, pair, language codes, BGL icon hash); `sample.bgl` now has an icon.
+  - Python: article headers are HTML cards (`--dc` colour, `--dt` tint, `--dk` chip ink); Qt lists use `dicticons.qicon()`. Rust: `DictLooks` cache of textures, `badge()` / `chip()`; the header uses `CollapsingState::show_toggle_button` + `show_body_unindented`.
+
 ## Done this session (v0.0.9)
 
 - `dct` short name in both editions (console script / second `[[bin]]` / portable archives), help shows the typed name.
