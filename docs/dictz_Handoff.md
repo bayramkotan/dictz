@@ -46,7 +46,10 @@ Rust code map (`dictz-rs/src/`):
 | `fuzzy.rs` | RapidFuzz `fuzz.ratio` (InDel/LCS), `extract`, `rank` | `dictz/core/fuzzy.py` |
 | `media.rs` | DSL/StarDict media lookup | `dictz/core/media.py` |
 | `html.rs` | article HTML → styled lines (egui) and → text (`to_text`, CLI / copy) | QtWebEngine, `dictz/core/htmltext.py` |
-| `settings.rs` | shared `settings.json`: schema (54 settings), coerce, Preferences | `dictz/storage/settings.py` |
+| `settings.rs` | shared `settings.json`: schema (75 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
+| `instance.rs` | single instance + `dictz show/popup/watch` protocol (127.0.0.1 + token in `instance.json`) | `dictz/core/instance.py` |
+| `scantext.rs`, `hotkeys.rs`, `icon.rs` | scan text cleaning + Ctrl+C+C, hotkey parsing, the app icon pixels | `dictz/core/scantext.py`, `dictz/core/hotkeys.py`, `dictz/ui/icons.py` |
+| `gui/services.rs`, `gui/window.rs` | clipboard / selection watcher, global hotkeys, tray, instance server; hide-to-tray per platform | `dictz/ui/scanner.py`, `dictz/core/hotkeys.py`, `dictz/ui/main_window.py` |
 | `shortcuts.rs` | the shortcut list | `dictz/core/shortcuts.py` |
 | `cli.rs` | the command line (clap) | `dictz/cli.py` (argparse) |
 | `updater.rs` | `dictz update`: cargo install or portable binary swap | `dictz/core/updater.py` |
@@ -58,7 +61,8 @@ Rust code map (`dictz-rs/src/`):
 ## Current version
 
 **v0.0.7**: Python 3.14 Babylon fix and background loading; a full CLI with `dictz update`; 54 shared settings with a detailed Preferences window; a richer interface (dictionary bar, found-in panel, find in page…) — all in both editions.
-**Next suggested version:** v0.0.8, the scan popup (GoldenDict's main feature) with tray icon and global hotkeys (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**v0.0.8**: the scan popup (Ctrl+C+C / every copy / selection), tray icon, global hotkeys, single instance and `dictz show / popup / watch` — in both editions.
+**Next suggested version:** v0.0.9, dictionary groups (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-15)
 
@@ -210,6 +214,17 @@ Every item below was hit and fixed during the v0.0.4 → v0.0.6 releases. Read t
 
 **G6. egui is pinned to 0.31.** The API changes between versions (`id_salt`, `Frame::NONE`, `corner_radius`, `Arc<FontData>`). Upgrading means a compile-and-fix round, so do it on its own, not inside another job.
 
+**G9. v0.0.8 lessons (scan popup, tray, hotkeys).**
+- The CLI command `scan` already existed (find dictionary files), so scanning is controlled with **`dictz watch`**; the popup is `dictz popup`, the window `dictz show`.
+- Instance protocol: TCP on 127.0.0.1 (port 0), `instance.json` = {port, token, pid, edition, version}, one JSON line each way. Both editions implement client and server; tests in `tests/test_instance.py` and `instance.rs`. A killed process leaves a stale `instance.json`; a failed connect simply means "not running".
+- egui: a **hidden** window stops getting frames on Windows (no WM_PAINT) and on Wayland/macOS, and the popup is an immediate viewport drawn from the main window. `gui/window.rs` therefore moves the window off screen with the tool-window style on Windows, minimizes on Wayland/macOS, and only really hides on X11 (verified under Xvfb: frames keep coming).
+- `clipboard-master` on X11 polls every 500 ms and drops events that arrive before it re-subscribes, so two quick copies became one and Ctrl+C+C never fired. On X11 dictz listens to XFixes `SetSelectionOwner` on CLIPBOARD itself (x11rb); clipboard-master stays for Windows (format listener) and macOS (change count, polled every 60 ms), polling is the last resort.
+- The primary selection changes content without a new owner while dragging, so selection scanning polls (250 ms) and waits until the text is stable.
+- Linux tray in Rust = `ksni` (StatusNotifierItem over D-Bus, pure Rust, `blocking` + `async-io` features, no tokio). `tray-icon` only on Windows/macOS: on Linux it needs GTK and libxdo dev packages. muda menu items are not `Send`, so the menu handler must not capture them (the scan entry sends `ToggleScan`).
+- Python hotkeys: `RegisterHotKey` via ctypes (Windows), `XGrabKey` via python-xlib (Linux X11, grabs also with NumLock/CapsLock masks), pynput only on macOS (`dictz[hotkeys]`). pynput on Linux needs evdev (a C build) — that is why it is not used there.
+- `lib.rs` is `#![deny(unsafe_code)]` (was `forbid`) so `gui/window.rs` can `#[allow]` its few Win32 calls.
+- The Windows code paths (`gui/window.rs` win module, `tray-icon` menu) could not be compiled in the container (no Windows target); CI builds them. If CI fails there, look first at windows-sys 0.59 types (HWND is `*mut c_void`) and the muda item types.
+
 **G8. v0.0.7 lessons (CLI, settings, Python 3.14).**
 - Python 3.14 moved `_compression` to `compression._common._streams`; PyGlossary's Babylon plugin imports the old name and is skipped ("Module '_compression' not found … skipping plugin 'babylon_bgl'"). `pyglossary_base._python314_compat()` registers the new module under the old name before PyGlossary is imported. CI now tests 3.14.
 - Silence PyGlossary with `pyglossary.core.log.setVerbosity(1)` **after** importing PyGlossary. Calling `logging.getLogger("pyglossary")` first breaks PyGlossary's own logger class (`getVerbosity` missing).
@@ -257,7 +272,14 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 ---
 
-## Done this session (v0.0.7)
+## Done this session (v0.0.8)
+
+- Scan popup in both editions: Ctrl+C+C (`DoubleCopy`), every copy, Linux selection; cleaned text (`clean_scan_text`); popup next to the mouse with pin / open-in-main / auto-hide / size.
+- Tray (Qt / ksni / tray-icon), close and start to tray, global hotkeys, single instance, `dictz show / popup / watch`, `gui --popup`.
+- 21 new settings (75, 9 pages); Rust schema generated from Python; `scan_golden.json` parity file.
+- Verified locally: 106 pytest, ruff, cargo test + clippy (default and `--no-default-features --features cli,gui`), both GUIs under Xvfb: Ctrl+C+C from another process opens the popup, `dictz popup` / `show` / `watch`, second start hands over, hotkey Ctrl+F12 toggles scanning, popup shows while the Rust main window is hidden, Rust CLI ↔ Python window and Python CLI ↔ Rust window.
+
+## Done in v0.0.7
 
 - **Python 3.14**: `_compression` shim + quiet PyGlossary; the 5–10 s hang is gone because dictionaries load in the background (Python `QThread`, Rust thread + channel) with a progress bar.
 - **CLI** in both editions (26 commands, aliases, `--json`, `--data-dir`, completion, `shell`, `doctor`), **`dictz update`** (Python: pip/pipx/venv/user/system/editable/AppImage/portable; Rust: cargo/portable).
@@ -300,7 +322,7 @@ Every feature lands in **both** editions in the same version:
 
 | Version | Both editions |
 |---|---|
-| v0.0.8 | scan popup: selection / clipboard / Ctrl+C+C, tray icon, global hotkeys, single instance |
+| ✅ v0.0.8 | scan popup: selection / clipboard / Ctrl+C+C, tray icon, global hotkeys, single instance |
 | v0.0.9 | dictionary groups, custom dictionary names, dictionary metadata file |
 | v0.0.10 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
 | v0.0.11 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
@@ -321,4 +343,4 @@ Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it le
 - Commit messages are **in English**, long and detailed, with repeated `-m` flags (no `-F`).
 - A version commit title is `vX.Y.Z: ...`. A plain push carries no version in its title, has no tag and doesn't bump the version.
 - No Claude/Anthropic attribution anywhere (no commit trailer, no README, no metadata).
-- Latest tag: `v0.0.7`
+- Latest tag: `v0.0.8`

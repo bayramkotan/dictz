@@ -1,0 +1,255 @@
+{
+ "clean": [
+  [
+   "  Hello, ",
+   "Hello"
+  ],
+  [
+   "\"apple.\"",
+   "apple"
+  ],
+  [
+   "two  words",
+   "two words"
+  ],
+  [
+   "a\nb",
+   null
+  ],
+  [
+   "123",
+   null
+  ],
+  [
+   "",
+   null
+  ],
+  [
+   "(kitap)…",
+   "kitap"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   null
+  ],
+  [
+   "İstanbul’da",
+   "İstanbul’da"
+  ],
+  [
+   "«merhaba»",
+   "merhaba"
+  ],
+  [
+   "  — dash —  ",
+   "dash"
+  ],
+  [
+   "e-mail",
+   "e-mail"
+  ],
+  [
+   "C++",
+   "C"
+  ],
+  [
+   "naïve café",
+   "naïve café"
+  ],
+  [
+   "tab\tsep",
+   "tab sep"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   null
+  ],
+  [
+   "¿qué?",
+   "qué"
+  ],
+  [
+   "日本語",
+   "日本語"
+  ],
+  [
+   "...",
+   null
+  ],
+  [
+   "'quoted'",
+   "quoted"
+  ]
+ ],
+ "double_copy_500": [
+  [
+   "a",
+   0,
+   false
+  ],
+  [
+   "a",
+   300,
+   true
+  ],
+  [
+   "a",
+   400,
+   false
+  ],
+  [
+   "a",
+   1000,
+   false
+  ],
+  [
+   "a",
+   1600,
+   false
+  ],
+  [
+   "b",
+   1700,
+   false
+  ],
+  [
+   "a",
+   1800,
+   false
+  ],
+  [
+   "a",
+   2400,
+   false
+  ],
+  [
+   "a",
+   2401,
+   true
+  ]
+ ],
+ "hotkeys": [
+  [
+   "Ctrl+F11",
+   {
+    "ok": true,
+    "mods": [
+     "ctrl"
+    ],
+    "key": "f11",
+    "text": "Ctrl+F11"
+   }
+  ],
+  [
+   "ctrl+alt+d",
+   {
+    "ok": true,
+    "mods": [
+     "alt",
+     "ctrl"
+    ],
+    "key": "d",
+    "text": "Ctrl+Alt+D"
+   }
+  ],
+  [
+   "Shift+Super+Space",
+   {
+    "ok": true,
+    "mods": [
+     "shift",
+     "super"
+    ],
+    "key": "space",
+    "text": "Shift+Super+Space"
+   }
+  ],
+  [
+   "F5",
+   {
+    "ok": true,
+    "mods": [],
+    "key": "f5",
+    "text": "F5"
+   }
+  ],
+  [
+   "Ctrl+PgUp",
+   {
+    "ok": true,
+    "mods": [
+     "ctrl"
+    ],
+    "key": "prior",
+    "text": "Ctrl+PgUp"
+   }
+  ],
+  [
+   "Alt+Enter",
+   {
+    "ok": true,
+    "mods": [
+     "alt"
+    ],
+    "key": "return",
+    "text": "Alt+Enter"
+   }
+  ],
+  [
+   "a",
+   {
+    "ok": false,
+    "error": "a hotkey needs a modifier: 'a'"
+   }
+  ],
+  [
+   "Ctrl+",
+   {
+    "ok": false,
+    "error": "empty hotkey: 'Ctrl+'"
+   }
+  ],
+  [
+   "Hyper+A",
+   {
+    "ok": false,
+    "error": "unknown modifier 'hyper' in 'Hyper+A'"
+   }
+  ],
+  [
+   "Ctrl+F25",
+   {
+    "ok": false,
+    "error": "unknown key 'f25' in 'Ctrl+F25'"
+   }
+  ],
+  [
+   "Win+1",
+   {
+    "ok": true,
+    "mods": [
+     "super"
+    ],
+    "key": "1",
+    "text": "Super+1"
+   }
+  ],
+  [
+   "Cmd+Shift+K",
+   {
+    "ok": true,
+    "mods": [
+     "shift",
+     "super"
+    ],
+    "key": "k",
+    "text": "Shift+Super+K"
+   }
+  ]
+ ],
+ "icon_fnv1a64": "df9b872ba60c0ccd"
+}

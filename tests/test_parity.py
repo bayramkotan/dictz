@@ -100,3 +100,27 @@ def test_shortcuts_golden() -> None:
     from dictz.core.shortcuts import SHORTCUTS
 
     assert [list(s) for s in SHORTCUTS] == _golden("shortcuts.json")
+
+
+def test_scan_golden() -> None:
+    from dictz.core.hotkeys import parse_hotkey
+    from dictz.core.icon import app_icon_rgba
+    from dictz.core.scantext import DoubleCopy, clean_scan_text
+
+    g = _golden("scan_golden.json")
+    for text, want in g["clean"]:
+        assert clean_scan_text(text, 80) == want, text
+    d = DoubleCopy(500)
+    for text, ms, want in g["double_copy_500"]:
+        assert d.feed(text, ms) == want
+    for text, want in g["hotkeys"]:
+        try:
+            h = parse_hotkey(text)
+            assert want["ok"] and str(h) == want["text"] and h.key == want["key"]
+            assert sorted(h.mods) == want["mods"]
+        except ValueError as exc:
+            assert not want["ok"] and str(exc) == want["error"]
+    h = 0xcbf29ce484222325
+    for b in app_icon_rgba(64):
+        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    assert f"{h:016x}" == g["icon_fnv1a64"]

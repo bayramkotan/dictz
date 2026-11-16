@@ -42,6 +42,12 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("version", "print the version"),
     ("completion", "shell completion script"),
     ("shell", "interactive lookup prompt"),
+    (
+        "show",
+        "bring the running window to the front (starts dictz if needed)",
+    ),
+    ("popup", "look a word up in the running dictz's scan popup"),
+    ("watch", "turn clipboard / selection scanning on or off"),
     ("help", "show help"),
 ];
 
@@ -96,7 +102,13 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// open the window (default)
-    Gui { files: Vec<PathBuf> },
+    Gui {
+        /// dictionary files to add first
+        files: Vec<PathBuf>,
+        /// open the scan popup with WORD (empty = clipboard)
+        #[arg(long, value_name = "WORD")]
+        popup: Option<String>,
+    },
     /// look a word up and print the articles
     #[command(alias = "l")]
     Lookup(LookupArgs),
@@ -279,6 +291,18 @@ enum Cmd {
     },
     /// interactive lookup prompt
     Shell,
+    /// bring the running window to the front (starts dictz if needed)
+    Show,
+    /// look a word up in the running dictz's scan popup
+    Popup {
+        /// default: the clipboard text
+        word: Vec<String>,
+    },
+    /// turn clipboard / selection scanning on or off
+    Watch {
+        #[arg(value_enum, default_value = "status")]
+        state: WatchState,
+    },
 }
 
 #[derive(Args)]
@@ -348,12 +372,115 @@ enum Shell {
     Powershell,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum WatchState {
+    On,
+    Off,
+    Toggle,
+    Status,
+}
+
 /// What `main` should do after the CLI ran.
 pub enum Outcome {
     /// Exit with this code.
     Exit(i32),
-    /// Open the window, adding these files first.
-    Gui(Vec<PathBuf>),
+    /// Open the window, adding these files first; `popup` = open the scan
+    /// popup with this word (empty = clipboard).
+    Gui {
+        /// Dictionary files.
+        files: Vec<PathBuf>,
+        /// Scan popup word.
+        popup: Option<String>,
+    },
+}
+
+fn start_detached(extra: &[&str]) -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("gui").args(extra);
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x00000008 | 0x00000200); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    match cmd.spawn() {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("error: cannot start dictz: {}", e);
+            false
+        }
+    }
+}
+
+fn remote(ctx: &Ctx, msg: Value) -> Option<Value> {
+    crate::instance::send(&ctx.data_dir, &msg, std::time::Duration::from_secs(2))
+}
+
+fn cmd_show(ctx: &Ctx) -> i32 {
+    if remote(ctx, json!({"cmd": "show"}))
+        .map(|a| a["ok"] == true)
+        .unwrap_or(false)
+    {
+        return 0;
+    }
+    println!("dictz is not running; starting it.");
+    if start_detached(&[]) {
+        0
+    } else {
+        1
+    }
+}
+
+fn cmd_popup(ctx: &Ctx, word: Vec<String>) -> i32 {
+    let word = word.join(" ").trim().to_string();
+    match remote(ctx, json!({"cmd": "popup", "word": word})) {
+        Some(a) if a["ok"] == true => 0,
+        Some(a) => {
+            eprintln!("error: {}", a["error"].as_str().unwrap_or("failed"));
+            1
+        }
+        None => {
+            println!("dictz is not running; starting it.");
+            if start_detached(&["--popup", &word]) {
+                0
+            } else {
+                1
+            }
+        }
+    }
+}
+
+fn cmd_watch(ctx: &Ctx, state: WatchState) -> i32 {
+    let state = match state {
+        WatchState::On => "on",
+        WatchState::Off => "off",
+        WatchState::Toggle => "toggle",
+        WatchState::Status => "status",
+    };
+    match remote(ctx, json!({"cmd": "scan", "state": state})) {
+        None => {
+            eprintln!("error: dictz is not running (start it with `dictz` or `dictz show`)");
+            1
+        }
+        Some(a) if a["ok"] != true => {
+            eprintln!("error: {}", a["error"].as_str().unwrap_or("failed"));
+            1
+        }
+        Some(a) => {
+            println!("scanning: {}", if a["scan"] == true { "on" } else { "off" });
+            0
+        }
+    }
 }
 
 // ------------------------------------------------------------------ output
@@ -1527,8 +1654,16 @@ pub fn run(args: Vec<String>) -> Outcome {
         prefs: None,
     };
     let code = match cli.command {
-        None => return Outcome::Gui(Vec::new()),
-        Some(Cmd::Gui { files }) => return Outcome::Gui(files),
+        None => {
+            return Outcome::Gui {
+                files: Vec::new(),
+                popup: None,
+            }
+        }
+        Some(Cmd::Gui { files, popup }) => return Outcome::Gui { files, popup },
+        Some(Cmd::Show) => cmd_show(&ctx),
+        Some(Cmd::Popup { word }) => cmd_popup(&ctx, word),
+        Some(Cmd::Watch { state }) => cmd_watch(&ctx, state),
         Some(Cmd::Lookup(a)) => cmd_lookup(&mut ctx, a, &out),
         Some(Cmd::Suggest {
             prefix,

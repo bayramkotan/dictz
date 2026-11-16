@@ -5,6 +5,55 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] — 2026-11-16
+
+The **scan popup**, GoldenDict's main feature, in **both editions** (Python and Rust), with the same settings, commands and protocol.
+
+### Added — scan popup
+- When scanning is on, a word copied or selected in **any program** opens in a small window next to the mouse:
+  - **Ctrl+C+C**: the same text copied twice quickly (interval adjustable, 500 ms by default)
+  - **every copy** (optional)
+  - **selection** on Linux (X11 and the Wayland desktops that allow it) — select a word, no key needed
+- Copied text is cleaned: punctuation around it is stripped, spaces are joined; lines and text longer than the limit are ignored. Copies made inside dictz itself are ignored.
+- The popup window:
+  - search box, 📌 pin, ⤢ "open in the main window", ✕ / Esc
+  - opens next to the mouse and stays on top (both switchable)
+  - hides when the mouse leaves (delay adjustable) unless pinned
+  - remembers its size
+  - links inside an article open in the popup; sounds play
+  - lookups go to the history (switchable)
+- "Tarama" button in the toolbar and Görünüm menu; "look the clipboard up in the popup" menu item.
+
+### Added — tray, hotkeys, single instance
+- **Tray icon**: click = show / hide; menu with scanning on/off, look up clipboard, preferences, quit. Optional "close to tray" and "start in tray".
+  - Python: Qt tray. Rust: StatusNotifierItem on Linux (KDE, GNOME with the AppIndicator extension, …), the native tray on Windows and macOS.
+- **Global hotkeys** (work while dictz is not focused):
+  - Ctrl+F11 shows / hides the main window
+  - Ctrl+F12 turns scanning on / off
+  - Ctrl+Shift+F11 looks the clipboard up in the popup
+  - Changeable or off in Tercihler → Genel kısayollar.
+  - Supported on Windows, macOS and Linux X11; on Wayland, bind a desktop shortcut to the new commands instead.
+- **Single instance**: starting dictz again brings the running window to the front, passing on any dictionary files.
+- New commands, the same in both editions:
+  - `dictz show`: brings the running window to the front, starting it if needed
+  - `dictz popup [WORD]`: opens the scan popup; with no WORD it uses the clipboard
+  - `dictz watch on|off|toggle|status`
+  - `dictz gui --popup WORD`
+  - Either edition's command line talks to either edition's window over a local, token-protected connection (`instance.json` in the data folder).
+- The window and tray use the dictz icon, with identical pixels in both editions.
+
+### Added — settings
+- 21 new settings, for **75 in 9 pages**:
+  - New page "Tarama penceresi": on/off, Ctrl+C+C, every copy, selection, Ctrl+C+C interval, maximum length, near the mouse, always on top, auto-hide, hide delay, width, height, record in history.
+  - New page "Genel kısayollar": on/off and the three hotkeys.
+  - General page: tray icon, close to tray, start in tray, single instance.
+
+### Changed
+- Python: `python-xlib` is a dependency on Linux (global hotkeys through XGrabKey, no compiler needed). On macOS, `pip install "dictz[hotkeys]"` adds pynput.
+- Rust: new default feature `scan`. It is pure Rust on Linux: x11rb and the D-Bus tray, with no new system packages.
+- The Rust settings schema is now generated from the Python one by `tests/data/parity/make_samples.py`.
+- New parity golden file `scan_golden.json` covers text cleaning, Ctrl+C+C timing, hotkey parsing and the icon pixels. Both test suites check it.
+
 ## [0.0.7] — 2026-11-15
 
 Everything below is in **both editions** (Python `pip install dictz`, Rust `cargo install dictz`), with the same commands, settings and output.

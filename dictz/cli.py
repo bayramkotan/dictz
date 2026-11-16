@@ -45,6 +45,9 @@ COMMANDS = [
     ("version", "print the version"),
     ("completion", "shell completion script"),
     ("shell", "interactive lookup prompt"),
+    ("show", "bring the running window to the front (starts dictz if needed)"),
+    ("popup", "look a word up in the running dictz's scan popup"),
+    ("watch", "turn clipboard / selection scanning on or off"),
     ("help", "show help"),
 ]
 ALIASES = {"l": "lookup", "s": "suggest", "ls": "dicts", "rm": "remove", "fav": "favorites",
@@ -715,6 +718,7 @@ _dictz() {{
         config) COMPREPLY=( $(compgen -W "list get set reset path export import" -- "$cur") ) ;;
         favorites|fav) COMPREPLY=( $(compgen -W "list add remove clear" -- "$cur") ) ;;
         completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
+        watch) COMPREPLY=( $(compgen -W "on off toggle status" -- "$cur") ) ;;
         add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
     esac
 }}
@@ -733,6 +737,7 @@ _dictz() {{
         config) compadd -- list get set reset path export import ;;
         favorites|fav) compadd -- list add remove clear ;;
         completion) compadd -- bash zsh fish powershell ;;
+        watch) compadd -- on off toggle status ;;
         *) _files ;;
     esac
 }}
@@ -749,6 +754,7 @@ compdef _dictz dictz
                      "-a 'list get set reset path export import'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from favorites fav' -a 'list add remove clear'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from watch' -a 'on off toggle status'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from add scan' -F")
         return "\n".join(lines) + "\n"
     if shell == "powershell":
@@ -769,6 +775,7 @@ Register-ArgumentCompleter -Native -CommandName dictz -ScriptBlock {{
         }}
         'config' {{ @('list','get','set','reset','path','export','import') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
         'completion' {{ @('bash','zsh','fish','powershell') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'watch' {{ @('on','off','toggle','status') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
     }}
 }}
 """
@@ -835,6 +842,65 @@ def cmd_update(ctx: Ctx, args) -> int:
     return run_update(check_only=args.check, assume_yes=args.yes)
 
 
+def _start_detached(extra: list[str]) -> bool:
+    """Start the window in the background (``dictz gui …``)."""
+    import subprocess
+
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "gui", *extra]
+    else:
+        cmd = [sys.executable, "-m", "dictz", "gui", *extra]
+    kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
+    try:
+        subprocess.Popen(cmd, **kw)  # noqa: S603
+        return True
+    except OSError as exc:
+        print(f"error: cannot start dictz: {exc}", file=sys.stderr)
+        return False
+
+
+def cmd_show(ctx: Ctx, args) -> int:
+    from .core.instance import send
+
+    answer = send(ctx.data_dir, {"cmd": "show"})
+    if answer and answer.get("ok"):
+        return 0
+    print("dictz is not running; starting it.")
+    return 0 if _start_detached([]) else 1
+
+
+def cmd_popup(ctx: Ctx, args) -> int:
+    from .core.instance import send
+
+    word = " ".join(args.word).strip()
+    answer = send(ctx.data_dir, {"cmd": "popup", "word": word})
+    if answer and answer.get("ok"):
+        return 0
+    if answer:
+        print(f"error: {answer.get('error', 'failed')}", file=sys.stderr)
+        return 1
+    print("dictz is not running; starting it.")
+    return 0 if _start_detached(["--popup", word]) else 1
+
+
+def cmd_watch(ctx: Ctx, args) -> int:
+    from .core.instance import send
+
+    answer = send(ctx.data_dir, {"cmd": "scan", "state": args.state})
+    if not answer:
+        print("error: dictz is not running (start it with `dictz` or `dictz show`)", file=sys.stderr)
+        return 1
+    if not answer.get("ok"):
+        print(f"error: {answer.get('error', 'failed')}", file=sys.stderr)
+        return 1
+    print("scanning: " + ("on" if answer.get("scan") else "off"))
+    return 0
+
+
 def cmd_selftest(ctx: Ctx, args) -> int:
     from .selftest import run
 
@@ -863,6 +929,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = add("gui")
     g.add_argument("files", nargs="*", help="dictionary files to add first")
+    g.add_argument("--popup", metavar="WORD", help="open the scan popup with WORD (empty = clipboard)")
 
     lk = add("lookup", ["l"])
     lk.add_argument("word", nargs="+")
@@ -973,6 +1040,12 @@ def build_parser() -> argparse.ArgumentParser:
     sh = add("shell")
     sh.add_argument("--no-color", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
+    add("show")
+    pp = add("popup")
+    pp.add_argument("word", nargs="*", help="default: the clipboard text")
+    wt = add("watch")
+    wt.add_argument("state", nargs="?", choices=["on", "off", "toggle", "status"], default="status")
+
     hp = add("help")
     hp.add_argument("topic", nargs="?", metavar="COMMAND")
     return p
@@ -985,7 +1058,8 @@ HANDLERS = {
     "move": cmd_move, "info": cmd_info, "reindex": cmd_reindex, "scan": cmd_scan, "dump": cmd_dump,
     "history": cmd_history, "favorites": cmd_favorites, "config": cmd_config, "paths": cmd_paths,
     "doctor": cmd_doctor, "selftest": cmd_selftest, "update": cmd_update, "version": cmd_version,
-    "completion": cmd_completion, "shell": cmd_shell,
+    "completion": cmd_completion, "shell": cmd_shell, "show": cmd_show, "popup": cmd_popup,
+    "watch": cmd_watch,
 }
 
 
@@ -1014,7 +1088,7 @@ def main(argv: list[str] | None = None) -> int:
     if cmd is None or cmd == "gui":
         from .app import run_gui
 
-        return run_gui(getattr(args, "files", []) or [])
+        return run_gui(getattr(args, "files", []) or [], popup=getattr(args, "popup", None))
     if cmd == "help":
         if args.topic:
             parser.parse_args([ALIASES.get(args.topic, args.topic), "--help"])

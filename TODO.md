@@ -16,7 +16,7 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 | MDict (.mdx/.mdd), XDXF, DictD, Slob | ✓ | — | v0.0.11 |
 | ZIM, Lingoes LSA, SDict, Aard, zipped sound packs, sound folders, Epwing, GLS | ✓ | — | v0.0.12 |
 | Dictionaries > 4 GB, millions of headwords | ✓ | partial (BGL loads into memory) | v0.0.12 |
-| Scan popup (selection / clipboard / Ctrl+C+C), tray icon, global hotkeys | ✓ | — | **v0.0.8** |
+| Scan popup (selection / clipboard / Ctrl+C+C), tray icon, global hotkeys | ✓ | ✓ (v0.0.8) | modifier-key-only scan, popup groups — v0.0.9 |
 | Dictionary groups (switch, hotkeys, per-group order, group tabs) | ✓ | — | v0.0.9 |
 | Custom dictionary names, dictionary metadata file | ✓ | — | v0.0.9 |
 | Ignore case / diacritics / punctuation / whitespace | ✓ | case + diacritics | v0.0.10 |
@@ -34,7 +34,8 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 | Full command line (lookup, dump, config, doctor, update…) | a few switches | ✓ | ➕ dictz only |
 | Self-update (`dictz update`) | — | ✓ | ➕ dictz only |
 | Find in page with counter, dictionary bar, found-in panel | ✓ | ✓ | — |
-| Searchable 54-setting preferences, export / import | — | ✓ | ➕ dictz only |
+| Searchable 75-setting preferences, export / import | — | ✓ | ➕ dictz only |
+| Scan popup driven from the CLI (`dictz popup`, `watch`, `show`) across both editions | — | ✓ | ➕ dictz only |
 | Same app in Python and Rust, shared data files | — | ✓ | ➕ dictz only |
 
 ### v0.0.8 — scan popup (GoldenDict's main feature)
@@ -122,6 +123,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
   - full egui GUI
   - fuzzy search and DSL media (the v0.0.6 features, in both editions)
   - portable Rust binaries and golden-file parity tests
+- ✅ v0.0.8: scan popup, tray icon, global hotkeys, single instance, `dictz show / popup / watch` — in both editions
 - ✅ v0.0.7: CLI (same commands and output), `dictz update`, 54-setting shared `settings.json`, detailed preferences window, dictionary bar, found-in panel, find in page, background loading — in both editions
 - 📋 v0.0.8+: every feature above lands in both editions in the same version
 - 💡 Rust: right-to-left shaping for Arabic/Persian articles (egui draws RTL text left-to-right)
@@ -150,6 +152,8 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 - DSL `[s]` media: only `wav`/`mp3` sounds and `jpg/jpeg/gif/tif/tiff/png/bmp` pictures, with case-sensitive extensions (PyGlossary's rule, kept for parity); Lingvo `.spx` sounds are not played
 - Rust GUI: Arabic/Persian text is not shaped right-to-left
 - Rust GUI: a font given by name is matched against font file names (no fontconfig lookup); a file path always works
+- Scan popup on Wayland: global hotkeys and "near the mouse" are not possible (Wayland does not allow them); the Rust edition minimizes instead of hiding to the tray there
+- Rust edition on Windows: "hidden to the tray" moves the window off screen without a taskbar button (a hidden egui window stops drawing, and the popup is drawn from it)
 - `dictz update` on a Python portable zip / tar.gz build only downloads the new archive (a running PyInstaller folder cannot replace itself); the AppImage is replaced in place
 
 - `.syn` synonym files in StarDict are ignored (v0.0.11)
@@ -164,6 +168,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Recently done
 
+- ✅ **v0.0.8** — scan popup (Ctrl+C+C, every copy, selection), tray icon, global hotkeys, single instance, `dictz show / popup / watch`, 21 new settings (75 in 9 pages) — in both editions
 - ✅ **v0.0.7** — Python 3.14 Babylon fix + no more start-up hang (background loading); full CLI incl. `dictz update` in both editions; 54 shared settings with a detailed Preferences window; dictionary bar, found-in panel, collapsible articles, find in page, save/copy article, random word, full screen, Git/Sözlükler menus
 - ✅ **v0.0.6** — Rust edition is a full app (native StarDict/DSL/Babylon, FTS5, GUI, portable binaries); fuzzy "did you mean" + DSL pictures/sounds in both editions; dictionaries restored on start; order kept; link clicks fixed; parity golden tests; CI triggers on tags only
 - ✅ **v0.0.5** — portable binaries actually start and read DSL/Babylon (PyInstaller entry point + PyGlossary bundle paths fixed); `dictz --selftest` run on every binary in CI; one tag → PyPI + crates.io + GitHub Releases via API-token secrets; `dictz-rs/` Rust crate scaffold

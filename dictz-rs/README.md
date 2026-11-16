@@ -37,6 +37,7 @@ Each [GitHub Release](https://github.com/bayramkotan/dictz/releases/latest) also
   - background loading with progress; dictionary folders scanned on start
   - light, dark and auto themes, accent color, fonts by name or file, zoom, full screen, always on top
   - drag and drop dictionary files onto the window
+  - scan popup: Ctrl+C+C / every copy / selection (Linux) in any program shows the articles next to the mouse; tray icon, global hotkeys (Ctrl+F11, Ctrl+F12, Ctrl+Shift+F11), single instance
   - the same shortcuts as the Python edition (F1 lists them)
 
 ## Command line
@@ -65,6 +66,9 @@ dictz config set article.font_size 18
 dictz config export my.json   # import / reset / path / get
 dictz paths  /  dictz doctor  /  dictz selftest
 dictz update --check          # crates.io or GitHub release, depending on how it was installed
+dictz show                    # bring the running window to the front
+dictz popup [WORD]            # scan popup in the running dictz (no WORD = clipboard)
+dictz watch on|off|toggle|status   # clipboard / selection scanning
 eval "$(dictz completion bash)"   # also zsh, fish, powershell
 ```
 
@@ -72,13 +76,13 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-54 settings in 7 pages (general, appearance, article, search, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+75 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 
 ```toml
 [dependencies]
-dictz = { version = "0.0.7", default-features = false }   # no GUI / audio deps
+dictz = { version = "0.0.8", default-features = false }   # no GUI / audio deps
 ```
 
 ```rust
@@ -112,6 +116,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `gui` | on | eframe/egui, rfd (file dialogs), image |
 | `audio` | on | rodio (needs ALSA headers on Linux) |
 | `update` | on | ureq, tar (`dictz update`) |
+| `scan` | on | arboard, clipboard-master, x11rb, global-hotkey, mouse_position, ksni (Linux tray) / tray-icon (Windows, macOS) — scan popup, global hotkeys, tray icon |
 
 ## License
 

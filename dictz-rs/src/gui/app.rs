@@ -22,7 +22,10 @@ use crate::{Dictionary, DictionaryEntry, VERSION};
 
 use super::prefs_window::{self, Advanced, PrefsWindow};
 use super::render::{self, Click, MediaSource};
+use super::services::{Event as SvcEvent, Services, TrayAction};
+use super::window::MainWindow;
 use super::{audio, fonts, system};
+use crate::scantext::{clean_scan_text, DoubleCopy};
 
 const NEW_TAB: &str = "Yeni sekme";
 
@@ -94,6 +97,9 @@ enum Confirm {
 }
 
 enum Action {
+    SetScan(bool),
+    PopupLookup(String),
+    ToggleMain,
     OpenWord(String),
     OpenWordIn { word: String, dicts: Vec<String> },
     Explicit { new_tab: bool },
@@ -178,6 +184,39 @@ impl MediaSource for MediaCache<'_> {
     }
 }
 
+/// Scan popup state.
+struct Popup {
+    open: bool,
+    word: String,
+    edit: String,
+    content: Content,
+    generation: u64,
+    pinned: bool,
+    pos: Option<egui::Pos2>,
+    entered: bool,
+    left_at: Option<Instant>,
+    focused: bool,
+    size: Option<egui::Vec2>,
+}
+
+impl Default for Popup {
+    fn default() -> Self {
+        Self {
+            open: false,
+            word: String::new(),
+            edit: String::new(),
+            content: Content::Welcome,
+            generation: 0,
+            pinned: false,
+            pos: None,
+            entered: false,
+            left_at: None,
+            focused: false,
+            size: None,
+        }
+    }
+}
+
 /// The application.
 pub struct DictzApp {
     qm: QueryManager,
@@ -238,6 +277,17 @@ pub struct DictzApp {
 
     fonts_key: Option<(String, String)>,
     media_cache: HashMap<(String, String), Option<Arc<[u8]>>>,
+
+    win: MainWindow,
+    services: Services,
+    popup: Popup,
+    double_copy: DoubleCopy,
+    frame_no: u64,
+    start_hidden: bool,
+    quitting: bool,
+    pending_popup: Option<String>,
+    tray_hint_shown: bool,
+    started: Instant,
 }
 
 impl DictzApp {
@@ -247,8 +297,13 @@ impl DictzApp {
         data_dir: PathBuf,
         prefs: Preferences,
         files: Vec<PathBuf>,
+        popup: Option<String>,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        let mut services = Services::new(&cc.egui_ctx, prefs.bool("scan.enabled"));
+        services.start_server(&data_dir);
+        let win = MainWindow::new(cc);
+        let double_copy = DoubleCopy::new(prefs.int("scan.double_copy_ms") as f64);
         let _ = std::fs::create_dir_all(&data_dir);
         let mut status = None;
         let index = match IndexStore::open(&data_dir.join(INDEX_DB)) {
@@ -319,8 +374,19 @@ impl DictzApp {
             update_msg: None,
             fonts_key: None,
             media_cache: HashMap::new(),
+            win,
+            services,
+            popup: Popup::default(),
+            double_copy,
+            frame_no: 0,
+            start_hidden: false,
+            quitting: false,
+            pending_popup: popup,
+            tray_hint_shown: false,
+            started: Instant::now(),
             prefs,
         };
+        app.start_hidden = app.prefs.bool("general.start_in_tray");
         app.apply_prefs(&cc.egui_ctx);
         app.refresh_lists();
         app.start_loading(&cc.egui_ctx, files);
@@ -328,6 +394,458 @@ impl DictzApp {
             app.check_updates(&cc.egui_ctx, true);
         }
         app
+    }
+
+    // ------------------------------------------------------------ scan popup, tray
+
+    fn set_scan(&mut self, ctx: &egui::Context, on: bool) {
+        if self.prefs.bool("scan.enabled") != on {
+            self.set_pref("scan.enabled", Value::Bool(on));
+        }
+        self.apply_prefs(ctx);
+        self.set_status(
+            if on {
+                "Tarama açık"
+            } else {
+                "Tarama kapalı"
+            },
+            3,
+        );
+    }
+
+    fn show_main(&mut self, ctx: &egui::Context) {
+        self.win.show(ctx);
+    }
+
+    fn toggle_main(&mut self, ctx: &egui::Context) {
+        let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
+        if self.win.is_hidden() || minimized {
+            self.win.show(ctx);
+        } else if self.services.has_tray() {
+            self.win.hide(ctx);
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        }
+    }
+
+    fn quit(&mut self, ctx: &egui::Context) {
+        self.quitting = true;
+        self.allow_close = true;
+        if self.win.is_hidden() {
+            // put the window back where it was so its position is saved
+            self.win.show(ctx);
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    /// Show `word` (empty = the clipboard text) in the scan popup.
+    fn popup_lookup(&mut self, ctx: &egui::Context, word: &str) {
+        let mut word = word.trim().to_string();
+        if word.is_empty() {
+            let max = (self.prefs.int("scan.max_length").max(1) as usize).max(200);
+            match Services::clipboard_text().and_then(|t| clean_scan_text(&t, max)) {
+                Some(w) => word = w,
+                None => {
+                    self.set_status("Panoda aranacak kelime yok.", 3);
+                    return;
+                }
+            }
+        }
+        if self.loader.is_some() {
+            self.pending_popup = Some(word);
+            return;
+        }
+        let (entries, fz) = self.search_with_fallback(&word, None);
+        let found = !entries.is_empty();
+        let auto_play = found && self.prefs.bool("audio.auto_play");
+        self.generation += 1;
+        self.popup.generation = self.generation;
+        self.popup.content = if found {
+            Content::Articles(Self::groups(entries))
+        } else {
+            Content::NotFound {
+                query: word.clone(),
+                suggestions: fz,
+            }
+        };
+        self.popup.word = word.clone();
+        self.popup.edit = word.clone();
+        if !self.popup.open {
+            self.popup.open = true;
+            self.popup.entered = false;
+            self.popup.left_at = None;
+            self.popup.size = None;
+            self.popup.pos = None;
+            if self.prefs.bool("scan.near_cursor") {
+                if let Some((x, y)) = Services::mouse_position() {
+                    let ppp = ctx
+                        .input(|i| i.viewport().native_pixels_per_point)
+                        .unwrap_or(1.0)
+                        .max(0.5);
+                    self.popup.pos = Some(egui::pos2(x as f32 / ppp + 16.0, y as f32 / ppp + 20.0));
+                }
+            }
+        }
+        self.popup.left_at = None;
+        if found && self.prefs.bool("history.enabled") && self.prefs.bool("scan.record_history") {
+            if let Some(h) = &self.history {
+                let _ = h.record(&word, "");
+            }
+            self.refresh_lists();
+        }
+        if auto_play {
+            let first = match &self.popup.content {
+                Content::Articles(groups) => groups.iter().find_map(|g| {
+                    g.articles.iter().find_map(|a| {
+                        render::first_audio(&a.lines).map(|s| (g.dict.clone(), s.to_string()))
+                    })
+                }),
+                _ => None,
+            };
+            if let Some((d, s)) = first {
+                self.play_audio(&d, &s);
+            }
+        }
+        ctx.request_repaint();
+    }
+
+    fn handle_services(&mut self, ctx: &egui::Context) {
+        let focused = ctx.input(|i| i.focused) || self.popup.focused;
+        for ev in self.services.poll() {
+            if std::env::var_os("DICTZ_DEBUG").is_some() {
+                eprintln!("dictz: event {:?} (focused: {})", ev, focused);
+            }
+            match ev {
+                SvcEvent::Clipboard(text, at) => {
+                    if !self.prefs.bool("scan.enabled") || focused {
+                        continue;
+                    }
+                    let Some(word) =
+                        clean_scan_text(&text, self.prefs.int("scan.max_length").max(1) as usize)
+                    else {
+                        continue;
+                    };
+                    let now = at.duration_since(self.started).as_secs_f64() * 1000.0;
+                    let double = self.double_copy.feed(&word, now);
+                    if self.prefs.bool("scan.clipboard")
+                        || (self.prefs.bool("scan.ctrl_c_c") && double)
+                    {
+                        self.popup_lookup(ctx, &word);
+                    }
+                }
+                SvcEvent::Selection(text) => {
+                    if !self.prefs.bool("scan.enabled")
+                        || !self.prefs.bool("scan.selection")
+                        || focused
+                    {
+                        continue;
+                    }
+                    if let Some(word) =
+                        clean_scan_text(&text, self.prefs.int("scan.max_length").max(1) as usize)
+                    {
+                        self.popup_lookup(ctx, &word);
+                    }
+                }
+                SvcEvent::Hotkey(name) => match name {
+                    "show_main" => self.toggle_main(ctx),
+                    "toggle_scan" => {
+                        let on = !self.prefs.bool("scan.enabled");
+                        self.set_scan(ctx, on);
+                    }
+                    _ => self.popup_lookup(ctx, ""),
+                },
+                SvcEvent::Tray(a) => match a {
+                    TrayAction::Toggle => self.toggle_main(ctx),
+                    TrayAction::Scan(on) => self.set_scan(ctx, on),
+                    TrayAction::ToggleScan => {
+                        let on = !self.prefs.bool("scan.enabled");
+                        self.set_scan(ctx, on);
+                    }
+                    TrayAction::LookupClipboard => self.popup_lookup(ctx, ""),
+                    TrayAction::Preferences => {
+                        self.show_main(ctx);
+                        self.prefs_win = Some(PrefsWindow::new(&self.prefs));
+                    }
+                    TrayAction::Quit => self.quit(ctx),
+                },
+                SvcEvent::Remote(req) => {
+                    let word = req["word"].as_str().unwrap_or("").trim().to_string();
+                    match req["cmd"].as_str().unwrap_or("") {
+                        "show" => self.show_main(ctx),
+                        "hide" => self.win.hide(ctx),
+                        "toggle" => self.toggle_main(ctx),
+                        "lookup" => {
+                            self.show_main(ctx);
+                            self.open_word(&word, None, false);
+                        }
+                        "popup" => self.popup_lookup(ctx, &word),
+                        "scan" => {
+                            let on = req["on"].as_bool().unwrap_or(false);
+                            self.set_scan(ctx, on);
+                        }
+                        "open" => {
+                            let files: Vec<PathBuf> = req["files"]
+                                .as_array()
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|f| f.as_str())
+                                        .map(PathBuf::from)
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            self.show_main(ctx);
+                            if !files.is_empty() {
+                                self.add_paths(files);
+                            }
+                        }
+                        "quit" => self.quit(ctx),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for m in std::mem::take(&mut self.services.messages) {
+            self.set_status(m, 10);
+        }
+    }
+
+    fn popup_viewport(&mut self, ctx: &egui::Context) {
+        if !self.popup.open {
+            self.popup.focused = false;
+            return;
+        }
+        let w = self.prefs.int("scan.width") as f32;
+        let h = self.prefs.int("scan.height") as f32;
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title("dictz — tarama")
+            .with_inner_size([w, h])
+            .with_min_inner_size([240.0, 160.0])
+            .with_taskbar(false)
+            .with_icon(Arc::new(egui::IconData {
+                rgba: crate::icon::app_icon_rgba(64),
+                width: 64,
+                height: 64,
+            }));
+        if let Some(p) = self.popup.pos {
+            builder = builder.with_position(p);
+        }
+        if self.prefs.bool("scan.always_on_top") {
+            builder = builder.with_always_on_top();
+        }
+        let id = egui::ViewportId::from_hash_of("dictz-scan-popup");
+        let mut close = false;
+        let mut lookup: Option<String> = None;
+        let mut open_main: Option<String> = None;
+        let mut clicks: Vec<(String, Click)> = Vec::new();
+        ctx.show_viewport_immediate(id, builder, |ctx, _class| {
+            if ctx.input(|i| i.viewport().close_requested() || i.key_pressed(Key::Escape)) {
+                close = true;
+            }
+            self.popup.focused = ctx.input(|i| i.focused);
+            if let Some(r) = ctx.input(|i| i.viewport().inner_rect) {
+                self.popup.size = Some(r.size());
+            }
+            egui::TopBottomPanel::top("popup-bar").show(ctx, |ui| {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let edit = egui::TextEdit::singleline(&mut self.popup.edit)
+                        .hint_text("Kelime…")
+                        .desired_width((ui.available_width() - 130.0).max(80.0));
+                    let r = ui.add(edit);
+                    if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        lookup = Some(self.popup.edit.trim().to_string());
+                    }
+                    let pin = if self.popup.pinned {
+                        "📌 Sabit"
+                    } else {
+                        "📌"
+                    };
+                    if ui
+                        .selectable_label(self.popup.pinned, pin)
+                        .on_hover_text("Sabitle (fare çıkınca kapanmaz)")
+                        .clicked()
+                    {
+                        self.popup.pinned = !self.popup.pinned;
+                    }
+                    if ui.button("⤢").on_hover_text("Ana pencerede aç").clicked() {
+                        open_main = Some(self.popup.word.clone());
+                    }
+                    if ui.button("✕").on_hover_text("Kapat (Esc)").clicked() {
+                        close = true;
+                    }
+                });
+                if let Content::Articles(groups) = &self.popup.content {
+                    let n: usize = groups.iter().map(|g| g.articles.len()).sum();
+                    ui.weak(format!("{} madde · {} sözlük", n, groups.len()));
+                }
+                ui.add_space(2.0);
+            });
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let ready =
+                    ui.fonts(|f| f.families().contains(&FontFamily::Name(fonts::BOLD.into())));
+                if !ready {
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                let opts = self.article_opts(ui, false);
+                let size = opts.size;
+                let head_scale = self.prefs.float("article.headword_scale") as f32;
+                let accent = ui.visuals().hyperlink_color;
+                let mut find = render::Find::default();
+                egui::ScrollArea::vertical()
+                    .id_salt(("popup", self.popup.generation))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| match &self.popup.content {
+                        Content::Articles(groups) => {
+                            for g in groups {
+                                ui.add_space(4.0);
+                                ui.label(
+                                    RichText::new(&g.dict)
+                                        .size(size * 0.8)
+                                        .color(accent)
+                                        .strong(),
+                                );
+                                for a in &g.articles {
+                                    ui.label(
+                                        RichText::new(&a.headword)
+                                            .font(egui::FontId::new(
+                                                size * head_scale,
+                                                FontFamily::Name(fonts::BOLD.into()),
+                                            ))
+                                            .strong(),
+                                    );
+                                    let mut local = Vec::new();
+                                    let mut media = MediaCache {
+                                        qm: &self.qm,
+                                        dict: &g.dict,
+                                        cache: &mut self.media_cache,
+                                    };
+                                    render::lines(
+                                        ui, &a.lines, &opts, &g.dict, &mut media, &mut find,
+                                        &mut local,
+                                    );
+                                    clicks.extend(local.into_iter().map(|c| (g.dict.clone(), c)));
+                                    ui.add_space(size * 0.5);
+                                }
+                                ui.separator();
+                            }
+                        }
+                        Content::NotFound { query, suggestions } => {
+                            ui.add_space(12.0);
+                            ui.label(RichText::new("Sonuç yok").size(size * 1.2).strong());
+                            ui.label(format!("“{}” için eşleşme bulunamadı.", query));
+                            if !suggestions.is_empty() {
+                                ui.add_space(8.0);
+                                ui.strong("Bunu mu demek istediniz?");
+                                for (w, score) in suggestions {
+                                    ui.horizontal(|ui| {
+                                        if ui.link(w).clicked() {
+                                            lookup = Some(w.clone());
+                                        }
+                                        ui.weak(format!("%{:.0}", score));
+                                    });
+                                }
+                            }
+                        }
+                        Content::Welcome => {}
+                    });
+            });
+            // auto-hide after the pointer has been inside and left
+            let inside = ctx.input(|i| i.pointer.has_pointer());
+            if inside {
+                self.popup.entered = true;
+                self.popup.left_at = None;
+            } else if self.popup.entered && self.popup.left_at.is_none() {
+                self.popup.left_at = Some(Instant::now());
+            }
+            if let Some(t) = self.popup.left_at {
+                let delay =
+                    Duration::from_millis(self.prefs.int("scan.hide_delay_ms").max(0) as u64);
+                if self.prefs.bool("scan.auto_hide") && !self.popup.pinned && !self.popup.focused {
+                    if t.elapsed() >= delay {
+                        close = true;
+                    } else {
+                        ctx.request_repaint_after(delay - t.elapsed());
+                    }
+                }
+            }
+        });
+        for (d, c) in clicks {
+            match c {
+                Click::Link(href) => {
+                    if let Some(rest) = href
+                        .strip_prefix("bword:")
+                        .or_else(|| href.strip_prefix("dict:"))
+                    {
+                        lookup = Some(percent_decode(rest.trim_start_matches('/')));
+                    } else {
+                        self.handle_link(&d, &href);
+                    }
+                }
+                Click::Audio(name) => self.play_audio(&d, &name),
+            }
+        }
+        if let Some(w) = lookup.filter(|w| !w.is_empty()) {
+            self.popup_lookup(ctx, &w);
+        }
+        if let Some(w) = open_main {
+            close = true;
+            self.show_main(ctx);
+            if !w.is_empty() {
+                self.open_word(&w, None, false);
+            }
+        }
+        if close {
+            self.close_popup();
+        }
+    }
+
+    fn close_popup(&mut self) {
+        if !self.popup.open {
+            return;
+        }
+        self.popup.open = false;
+        self.popup.focused = false;
+        if let Some(s) = self.popup.size.take() {
+            let (w, h) = (s.x.round() as i64, s.y.round() as i64);
+            if w != self.prefs.int("scan.width") || h != self.prefs.int("scan.height") {
+                let _ = self.prefs.set("scan.width", Value::from(w));
+                let _ = self.prefs.set("scan.height", Value::from(h));
+                self.save_prefs();
+            }
+        }
+    }
+
+    /// Article drawing options from the preferences.
+    fn article_opts(&self, ui: &egui::Ui, with_find: bool) -> render::Opts {
+        let p = &self.prefs;
+        let size = p.int("article.font_size") as f32 * p.float("article.zoom") as f32;
+        let line_spacing = p.float("article.line_spacing") as f32;
+        let family = if self
+            .fonts_key
+            .as_ref()
+            .map(|k| k.1.trim().is_empty())
+            .unwrap_or(true)
+        {
+            FontFamily::Proportional
+        } else {
+            FontFamily::Name(fonts::ARTICLE.into())
+        };
+        let _ = ui;
+        render::Opts {
+            size,
+            row_gap: (size * (line_spacing - 1.0) * 0.6).max(0.0),
+            family,
+            show_images: p.bool("article.show_images"),
+            max_image_height: p.int("article.max_image_height") as f32,
+            find: if with_find && self.find_open {
+                render::lower_chars(self.find_text.trim())
+            } else {
+                Vec::new()
+            },
+            highlight: prefs_window::parse_hex(&p.str("article.highlight_color"))
+                .unwrap_or(Color32::YELLOW),
+        }
     }
 
     // ------------------------------------------------------------ prefs
@@ -390,6 +908,11 @@ impl DictzApp {
             egui::WindowLevel::Normal
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
+        self.services.configure(&self.prefs);
+        self.double_copy.interval_ms = self.prefs.int("scan.double_copy_ms") as f64;
+        for m in std::mem::take(&mut self.services.messages) {
+            self.set_status(m, 10);
+        }
     }
 
     fn save_prefs(&mut self) {
@@ -474,9 +997,13 @@ impl DictzApp {
         }
     }
 
-    fn loading_finished(&mut self, _ctx: &egui::Context) {
+    fn loading_finished(&mut self, ctx: &egui::Context) {
         self.qm.save_order();
         self.load_progress = None;
+        self.loader = None;
+        if let Some(w) = self.pending_popup.take() {
+            self.popup_lookup(ctx, &w);
+        }
         if !self.load_errors.is_empty() {
             let msg = format!(
                 "{} sözlük açılamadı: {}",
@@ -1110,7 +1637,10 @@ impl DictzApp {
             Action::OpenDataDir => {
                 let _ = system::open_external(&self.data_dir.to_string_lossy());
             }
-            Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Action::Quit => self.quit(ctx),
+            Action::SetScan(on) => self.set_scan(ctx, on),
+            Action::PopupLookup(w) => self.popup_lookup(ctx, &w),
+            Action::ToggleMain => self.toggle_main(ctx),
             Action::NewTab => {
                 self.tabs.push(Tab::welcome());
                 self.current = self.tabs.len() - 1;
@@ -1508,6 +2038,16 @@ impl DictzApp {
                 ) {
                     actions.push(Action::TogglePref("general.always_on_top"));
                 }
+                let scan = self.prefs.bool("scan.enabled");
+                if check(ui, scan, "Tarama", "") {
+                    actions.push(Action::SetScan(!scan));
+                }
+                if item(ui, "Panodaki kelimeyi tarama penceresinde ara", "") {
+                    actions.push(Action::PopupLookup(String::new()));
+                }
+                if self.services.has_tray() && item(ui, "Tepsiye gizle", "") {
+                    actions.push(Action::ToggleMain);
+                }
                 ui.separator();
                 if item(ui, "Büyüt", "Ctrl+=") {
                     actions.push(Action::Zoom(0.1));
@@ -1617,7 +2157,7 @@ impl DictzApp {
                     actions.push(Action::NavForward);
                 }
             }
-            let right_w = if show_buttons { 250.0 } else { 0.0 };
+            let right_w = if show_buttons { 320.0 } else { 0.0 };
             let id = egui::Id::new("search-box");
             let edit = egui::TextEdit::singleline(&mut self.search)
                 .hint_text("Bir kelime ara…   (Ctrl+F)")
@@ -1701,6 +2241,16 @@ impl DictzApp {
                     .clicked()
                 {
                     actions.push(Action::CycleTheme);
+                }
+                let scan = self.prefs.bool("scan.enabled");
+                if ui
+                    .selectable_label(scan, "Tarama")
+                    .on_hover_text(
+                        "Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir",
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::SetScan(!scan));
                 }
                 if ui.button("⚙").on_hover_text("Tercihler (Ctrl+,)").clicked() {
                     actions.push(Action::OpenPreferences);
@@ -2661,9 +3211,25 @@ fn load_job(
 
 impl eframe::App for DictzApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.frame_no += 1;
         self.poll_loader(ctx);
         self.poll_updates();
+        self.handle_services(ctx);
+        if self.frame_no == 3 && self.start_hidden && self.services.has_tray() {
+            self.win.hide(ctx);
+        }
         if ctx.input(|i| i.viewport().close_requested())
+            && !self.quitting
+            && self.prefs.bool("general.close_to_tray")
+            && self.services.has_tray()
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.win.hide(ctx);
+            if !self.tray_hint_shown {
+                self.tray_hint_shown = true;
+                self.set_status("dictz tepside çalışmaya devam ediyor", 5);
+            }
+        } else if ctx.input(|i| i.viewport().close_requested())
             && !self.allow_close
             && self.prefs.bool("general.confirm_quit")
         {
@@ -2738,6 +3304,7 @@ impl eframe::App for DictzApp {
             self.content(ui, &mut actions);
         });
         self.windows(ctx, &mut actions);
+        self.popup_viewport(ctx);
 
         for a in actions {
             self.apply(ctx, a);
@@ -2753,6 +3320,8 @@ impl eframe::App for DictzApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.close_popup();
+        self.services.stop();
         self.save_state();
         if self.prefs.bool("history.clear_on_exit") {
             if let Some(h) = &self.history {

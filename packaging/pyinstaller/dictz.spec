@@ -49,6 +49,9 @@ hidden_imports = [
 # Pull in PyGlossary's entire plugin tree at runtime
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 hidden_imports += collect_submodules("pyglossary.plugins")
+# global hotkeys on Linux (dictz.core.hotkeys imports Xlib lazily)
+if sys.platform.startswith("linux"):
+    hidden_imports += collect_submodules("Xlib")
 
 # PyGlossary discovers its format plugins by scanning the plugins directory on
 # disk (pkgutil.iter_modules), so the plugin .py sources must exist as real

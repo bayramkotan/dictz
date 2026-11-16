@@ -21,10 +21,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QSystemTrayIcon,
     QToolBar,
     QToolButton,
     QVBoxLayout,
@@ -32,6 +34,8 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__
+from ..core import instance as _instance
+from ..core.hotkeys import HotkeyListener, wayland_session
 from ..core.media import media_kind, parse_audio_url, rewrite_media_html
 from ..core.query_manager import QueryManager, Suggestion, is_dictionary_file, scan_folder
 from ..parsers.base import DictionaryEntry
@@ -41,8 +45,10 @@ from . import themes
 from .definition_tabs import DefinitionTabs
 from .definition_view import group_by_dictionary
 from .dictionary_manager import FILE_FILTER, DictionaryManagerDialog, info_html
-from .icons import icon
+from .icons import app_icon, icon
 from .preferences_dialog import PreferencesDialog
+from .scan_popup import ScanPopup
+from .scanner import ClipboardScanner
 from .sidebar import Sidebar
 
 
@@ -107,6 +113,9 @@ class UpdateChecker(QThread):
 
 
 class MainWindow(QMainWindow):
+    hotkey_pressed = Signal(str)
+    remote_request = Signal(dict)
+
     def __init__(self, query_manager: QueryManager, history_store: HistoryStore, preferences: Preferences,
                  startup_files: list[Path] | None = None):
         super().__init__()
@@ -125,6 +134,17 @@ class MainWindow(QMainWindow):
         self._update_checker: UpdateChecker | None = None
         self._load_errors: list[str] = []
         self._loaded_count = 0
+        self._loading_done = False
+        self._pending_popup: str | None = None
+        self._really_quit = False
+        self._tray_hint_shown = False
+        self.scan_popup: ScanPopup | None = None
+        self.tray: QSystemTrayIcon | None = None
+        self._hotkeys: HotkeyListener | None = None
+        self._hotkey_conf: tuple | None = None
+        self._server: _instance.Server | None = None
+        self._scan_on = bool(self.prefs["scan.enabled"])
+        self.setWindowIcon(app_icon())
 
         self._build_center()
         self._build_toolbar()
@@ -134,6 +154,10 @@ class MainWindow(QMainWindow):
         self._build_statusbar()
         self._build_menus()
         self._build_shortcuts()
+        self.scanner = ClipboardScanner(self.prefs, self)
+        self.scanner.word_found.connect(self.popup_lookup)
+        self.hotkey_pressed.connect(self._on_hotkey)
+        self.remote_request.connect(self._on_remote)
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -253,6 +277,9 @@ class MainWindow(QMainWindow):
         self.theme_action = self._act("Tema", self._cycle_theme, None, "theme", tip="Tema: Otomatik → Açık → Koyu")
         tb.addAction(self.theme_action)
         tb.addSeparator()
+        self.scan_action = self._act("Tarama", self.set_scan, None, "scan", checkable=True,
+                                     tip="Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir")
+        tb.addAction(self.scan_action)
         self.prefs_action = self._act("Tercihler", self._open_preferences, "Ctrl+,", "settings")
         tb.addAction(self.prefs_action)
 
@@ -343,7 +370,7 @@ class MainWindow(QMainWindow):
         m.addAction(self._act("Makaleyi HTML olarak &kaydet…", self._save_article, "Ctrl+S", "save"))
         m.addAction(self._act("Favorileri dışa aktar…", self._export_favorites))
         m.addSeparator()
-        m.addAction(self._act("Çı&kış", self.close, "Ctrl+Q"))
+        m.addAction(self._act("Çı&kış", self.quit_app, "Ctrl+Q"))
 
         e = mb.addMenu("&Düzen")
         e.addAction(self._act("Kelimeyi kopyala", self._copy_current_word, "Ctrl+Shift+C", "copy"))
@@ -379,6 +406,8 @@ class MainWindow(QMainWindow):
         self.ontop_action = self._act("Her zaman üstte", lambda on: self._toggle_pref("general.always_on_top", on),
                                       checkable=True)
         v.addAction(self.ontop_action)
+        v.addAction(self.scan_action)
+        v.addAction(self._act("Panodaki kelimeyi tarama penceresinde ara", lambda: self.popup_lookup("")))
         v.addSeparator()
         v.addAction(self.zoom_in_action)
         v.addAction(self.zoom_out_action)
@@ -473,7 +502,11 @@ class MainWindow(QMainWindow):
     def _loading_finished(self) -> None:
         self.query_manager._persist_order()
         self.progress.hide()
+        self._loading_done = True
         self._refresh_dictionaries()
+        if self._pending_popup is not None:
+            word, self._pending_popup = self._pending_popup, None
+            QTimer.singleShot(0, lambda: self.popup_lookup(word))
         if self._load_errors:
             self.statusBar().showMessage(f"{len(self._load_errors)} sözlük açılamadı: " + "; ".join(self._load_errors),
                                          12000)
@@ -524,11 +557,14 @@ class MainWindow(QMainWindow):
         self.ontop_action.blockSignals(False)
         on_top = bool(self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
         if on_top != bool(p["general.always_on_top"]):
+            visible = self.isVisible()
             self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, bool(p["general.always_on_top"]))
-            self.show()
+            if visible:
+                self.show()
         self.theme_actions.get(p["appearance.theme"], self.theme_actions["auto"]).setChecked(True)
         self._update_zoom_label()
         self._refresh_dictionaries()
+        self._apply_scan_prefs()
 
     def _toggle_pref(self, key: str, on: bool) -> None:
         self.prefs.set(key, on, save=True)
@@ -1138,6 +1174,15 @@ class MainWindow(QMainWindow):
 
     # ================================================================ close
     def closeEvent(self, event):  # noqa: N802
+        if (not self._really_quit and self.prefs["general.close_to_tray"]
+                and self.tray is not None and self.tray.isVisible()):
+            self.hide()
+            event.ignore()
+            if not self._tray_hint_shown:
+                self._tray_hint_shown = True
+                self.tray.showMessage("dictz", "dictz tepside çalışmaya devam ediyor.",
+                                      QSystemTrayIcon.MessageIcon.Information, 3000)
+            return
         if self.prefs["general.confirm_quit"] and QMessageBox.question(
                 self, "Çıkış", "dictz kapatılsın mı?") != QMessageBox.StandardButton.Yes:
             event.ignore()
@@ -1155,4 +1200,246 @@ class MainWindow(QMainWindow):
             self.history.clear_history()
         with contextlib.suppress(OSError):
             self.prefs.save()
+        self.stop_services()
         super().closeEvent(event)
+        app = QApplication.instance()
+        if app is not None:
+            QTimer.singleShot(0, app.quit)
+
+    # ================================================================ scan popup, tray, hotkeys
+    def starts_hidden(self) -> bool:
+        """``general.start_in_tray`` (only when a tray icon can be shown)."""
+        return bool(self.prefs["general.start_in_tray"]) and self.tray is not None and self.tray.isVisible()
+
+    def start_services(self, data_dir: Path) -> None:
+        """Instance server (for `dictz show/popup/watch` and single instance)."""
+        self._server = _instance.Server(data_dir, self._remote_handler, "python", __version__)
+        if not self._server.start():
+            self._server = None
+
+    def stop_services(self) -> None:
+        if self._hotkeys is not None:
+            self._hotkeys.stop()
+            self._hotkeys = None
+        if self._server is not None:
+            self._server.stop()
+            self._server = None
+        if self.tray is not None:
+            self.tray.hide()
+        if self.scan_popup is not None:
+            self.scan_popup.close()
+
+    def quit_app(self) -> None:
+        self._really_quit = True
+        if not self.isVisible():
+            self.show()
+        self.close()
+
+    def _apply_scan_prefs(self) -> None:
+        p = self.prefs
+        self._scan_on = bool(p["scan.enabled"])
+        self.scanner.set_enabled(self._scan_on)
+        self.scan_action.blockSignals(True)
+        self.scan_action.setChecked(self._scan_on)
+        self.scan_action.blockSignals(False)
+        # tray
+        if p["general.tray_icon"] and QSystemTrayIcon.isSystemTrayAvailable():
+            if self.tray is None:
+                self._build_tray()
+            self.tray.show()
+        elif self.tray is not None:
+            self.tray.hide()
+        if self.tray is not None:
+            self._tray_scan.blockSignals(True)
+            self._tray_scan.setChecked(self._scan_on)
+            self._tray_scan.blockSignals(False)
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(not (self.tray is not None and self.tray.isVisible()))
+        # hotkeys
+        conf = (bool(p["hotkeys.enabled"]), p["hotkeys.show_main"], p["hotkeys.toggle_scan"],
+                p["hotkeys.lookup_clipboard"])
+        if conf != self._hotkey_conf:
+            self._hotkey_conf = conf
+            if self._hotkeys is not None:
+                self._hotkeys.stop()
+                self._hotkeys = None
+            if conf[0]:
+                self._hotkeys = HotkeyListener(
+                    {"show_main": conf[1], "toggle_scan": conf[2], "lookup_clipboard": conf[3]},
+                    self.hotkey_pressed.emit)
+                self._hotkeys.start()
+                if self._hotkeys.errors:
+                    msg = "Genel kısayollar: " + "; ".join(self._hotkeys.errors)
+                    if wayland_session():
+                        msg += " — masaüstü ayarlarından `dictz show` / `dictz popup` komutuna kısayol atayın."
+                    self.statusBar().showMessage(msg, 10000)
+        if self.scan_popup is not None:
+            self.scan_popup.apply_prefs()
+
+    def _build_tray(self) -> None:
+        self.tray = QSystemTrayIcon(app_icon(), self)
+        self.tray.setToolTip(f"dictz {__version__}")
+        menu = QMenu(self)
+        menu.addAction("Göster / gizle", self.toggle_main)
+        self._tray_scan = menu.addAction("Tarama")
+        self._tray_scan.setCheckable(True)
+        self._tray_scan.toggled.connect(self.set_scan)
+        menu.addAction("Panodaki kelimeyi ara", lambda: self.popup_lookup(""))
+        menu.addSeparator()
+        menu.addAction("Tercihler…", lambda: (self.show_main(), self._open_preferences()))
+        menu.addAction("Çıkış", self.quit_app)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_tray_activated)
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.toggle_main()
+
+    def set_scan(self, on: bool) -> None:
+        on = bool(on)
+        self._scan_on = on
+        if bool(self.prefs["scan.enabled"]) != on:
+            self.prefs.set("scan.enabled", on, save=True)
+        self._apply_scan_prefs()
+        self.statusBar().showMessage("Tarama açık" if on else "Tarama kapalı", 3000)
+
+    def show_main(self) -> None:
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def toggle_main(self) -> None:
+        if self.isVisible() and not self.isMinimized():
+            if self.tray is not None and self.tray.isVisible():
+                self.hide()
+            else:
+                self.showMinimized()
+        else:
+            self.show_main()
+
+    def _ensure_popup(self) -> ScanPopup:
+        if self.scan_popup is None:
+            self.scan_popup = ScanPopup(self.prefs)
+            self.scan_popup.lookup_requested.connect(self.popup_lookup)
+            self.scan_popup.open_in_main.connect(self._open_in_main)
+            self.scan_popup.link_activated.connect(self._on_popup_link)
+        return self.scan_popup
+
+    def popup_lookup(self, word: str | None = "") -> None:
+        """Show ``word`` (empty = the clipboard text) in the scan popup."""
+        word = (word or "").strip()
+        if not word:
+            word = self.scanner.clipboard_word() or ""
+            if not word:
+                self.statusBar().showMessage("Panoda aranacak kelime yok.", 3000)
+                return
+        if not self._loading_done:
+            self._pending_popup = word
+            return
+        entries, fuzzy = self._search_with_fallback(word)
+        popup = self._ensure_popup()
+        popup.show_result(word, self._with_media(entries), fuzzy, bool(self.prefs["scan.near_cursor"]))
+        if entries:
+            if self.prefs["history.enabled"] and self.prefs["scan.record_history"]:
+                self.history.record(word)
+                self._refresh_history_pane()
+            if self.prefs["audio.auto_play"]:
+                self._auto_play(entries)
+
+    def _open_in_main(self, word: str) -> None:
+        if self.scan_popup is not None:
+            self.scan_popup.hide()
+        self.show_main()
+        if word:
+            self._open_word(word)
+
+    def _on_popup_link(self, url: str) -> None:
+        from urllib.parse import unquote
+
+        if url.startswith(("dict:", "bword:")):
+            self.popup_lookup(unquote(url.split(":", 1)[1].lstrip("/")))
+            return
+        if url.startswith("dictz-action:"):
+            _, action, idx = url.split(":", 2)
+            view = self.scan_popup.view if self.scan_popup else None
+            if view is None:
+                return
+            groups = group_by_dictionary(view.entries)
+            i = int(idx)
+            if i >= len(groups):
+                return
+            if action == "copy":
+                from ..core.htmltext import to_text
+
+                self.scanner.ignore_for(1.0)
+                QApplication.clipboard().setText(
+                    "\n\n".join(f"{e.headword}\n{to_text(e.definition)}" for e in groups[i][1]))
+            elif action == "only":
+                self._open_in_main("")
+                self._open_word(view.word, [groups[i][0]], new_tab=True)
+            return
+        audio = parse_audio_url(url)
+        if audio is not None:
+            self._play_audio(*audio)
+            return
+        if url.startswith(("http://", "https://", "mailto:")):
+            QDesktopServices.openUrl(QUrl(url))
+            return
+        view = self.scan_popup.view if self.scan_popup else None
+        if (url.startswith("sound://") or media_kind(url) == "audio") and view and view.entries:
+            self._play_audio(view.entries[0].dictionary_id, url.removeprefix("sound://"))
+
+    def _on_hotkey(self, name: str) -> None:
+        if name == "show_main":
+            self.toggle_main()
+        elif name == "toggle_scan":
+            self.set_scan(not self._scan_on)
+        elif name == "lookup_clipboard":
+            self.popup_lookup("")
+
+    # ---------------------------------------------------- `dictz show / popup / watch`
+    def _remote_handler(self, req: dict) -> dict:
+        """Runs in the instance-server thread; the work is done on the GUI thread."""
+        cmd = req.get("cmd")
+        if cmd == "ping":
+            return {"ok": True, "edition": "python", "version": __version__}
+        if cmd == "scan":
+            state = req.get("state", "status")
+            if state not in ("on", "off", "toggle", "status"):
+                return {"ok": False, "error": f"unknown state: {state}"}
+            new = {"on": True, "off": False, "toggle": not self._scan_on}.get(state, self._scan_on)
+            if state != "status":
+                self._scan_on = new
+                self.remote_request.emit({"cmd": "scan", "on": new})
+            return {"ok": True, "scan": new}
+        if cmd in ("show", "hide", "toggle", "lookup", "popup", "open", "quit"):
+            self.remote_request.emit(dict(req))
+            return {"ok": True}
+        return {"ok": False, "error": f"unknown command: {cmd}"}
+
+    def _on_remote(self, req: dict) -> None:
+        cmd = req.get("cmd")
+        if cmd == "show":
+            self.show_main()
+        elif cmd == "hide":
+            self.hide()
+        elif cmd == "toggle":
+            self.toggle_main()
+        elif cmd == "lookup":
+            self.show_main()
+            self._open_word(str(req.get("word", "")).strip())
+        elif cmd == "popup":
+            self.popup_lookup(str(req.get("word", "")))
+        elif cmd == "scan":
+            self.set_scan(bool(req.get("on")))
+        elif cmd == "open":
+            files = [Path(f) for f in req.get("files", []) if isinstance(f, str)]
+            self.show_main()
+            if files:
+                self.add_paths(files)
+        elif cmd == "quit":
+            self.quit_app()
