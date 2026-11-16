@@ -58,7 +58,7 @@ Rust code map (`dictz-rs/src/`):
 ## Current version
 
 **v0.0.7**: Python 3.14 Babylon fix and background loading; a full CLI with `dictz update`; 54 shared settings with a detailed Preferences window; a richer interface (dictionary bar, found-in panel, find in page…) — all in both editions.
-**Next suggested version:** v0.0.8, TTS + clipboard watching + global hotkey (**in both editions**).
+**Next suggested version:** v0.0.8, the scan popup (GoldenDict's main feature) with tray icon and global hotkeys (**in both editions**). The full GoldenDict comparison and the roadmap to v0.1.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-15)
 
@@ -300,11 +300,17 @@ Every feature lands in **both** editions in the same version:
 
 | Version | Both editions |
 |---|---|
-| v0.0.8 | TTS, clipboard watching, global hotkey |
-| v0.0.9 | Anki + OCR |
-| v0.0.10 | XDXF, Slob, DictD |
-| v0.0.11 | dictionary groups, full-text search inside definitions, morphology |
-| v0.1.0 | shortcut editor, signing, notarization, Intel macOS (universal2) |
+| v0.0.8 | scan popup: selection / clipboard / Ctrl+C+C, tray icon, global hotkeys, single instance |
+| v0.0.9 | dictionary groups, custom dictionary names, dictionary metadata file |
+| v0.0.10 | ignore punctuation / whitespace, Hunspell morphology + Turkish stemming, wildcard / regex, transliteration, phrases |
+| v0.0.11 | MDict, XDXF, DictD, Slob; StarDict `.syn` / `sametypesequence`; DSL abbreviations / `.spx` |
+| v0.0.12 | ZIM, LSA, SDict, Aard, GLS, sound folders / packs; lazy loading, > 4 GB |
+| v0.0.13 | full-text search inside definitions |
+| v0.0.14 | online sources: MediaWiki, websites, DICT servers, Forvo, external programs, proxy |
+| v0.0.15 | TTS (system voices + edge-tts) |
+| v0.0.16 | Anki, favorites folders, flashcards, word of the day |
+| v0.0.17 | article CSS, print, headwords window, shortcut editor, interface languages, portable mode |
+| v0.1.0 | signing, notarization, Intel macOS (universal2), first-run tour |
 
 Rust-only follow-ups: right-to-left shaping for Arabic/Persian (egui draws it left-to-right), and maybe an AppImage for the Rust binary.
 
