@@ -5,7 +5,9 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] — 2026-11-16
+
+The dictionary list moves to **`dictionaries.json`**, in **both editions**: dictionaries are no longer mixed up or lost.
 
 ### Fixed
 - **Dictionaries no longer get mixed up or lost** (both editions). The dictionary list — order, on/off and names — now lives in **`dictionaries.json`** in the data folder, written at once after every change and shared by both editions and the CLI.
