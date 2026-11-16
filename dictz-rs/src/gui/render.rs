@@ -1,5 +1,6 @@
 //! Drawing parsed article HTML with egui widgets.
 
+use crate::i18n::tr;
 use eframe::egui::{self, Align, Color32, CursorIcon, FontFamily, FontId, RichText, Sense};
 
 use crate::html::{Inline, Line, Rgb};
@@ -268,9 +269,9 @@ pub fn lines(
                                 )
                                 .on_hover_text(
                                     if opts.show_images {
-                                        "resim bulunamadı"
+                                        tr("resim bulunamadı")
                                     } else {
-                                        "resimler kapalı (Tercihler → Makale)"
+                                        tr("resimler kapalı (Tercihler → Makale)")
                                     },
                                 );
                             }
@@ -285,7 +286,7 @@ pub fn lines(
                         if ui
                             .push_id(id, |ui| ui.add(b))
                             .inner
-                            .on_hover_text("Sesi çal")
+                            .on_hover_text(tr("Sesi çal"))
                             .clicked()
                         {
                             clicks.push(Click::Audio(src.clone()));

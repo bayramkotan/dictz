@@ -31,6 +31,7 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 | Article CSS (global + per dictionary), print, headwords dialog + export | ✓ | — | v0.0.18 |
 | Shortcut editor, interface languages, portable mode | partial | listed only | v0.0.18 |
 | Fuzzy "did you mean" with scores | — | ✓ | ➕ dictz only |
+| Interface in 25 languages with a flag picker (RTL for ar/fa/ur) | yes, in Preferences only | ✓ | ➕ dictz only |
 | Dictionary icons (own file, BGL icon, generated monogram badge), language pair + format on every article card | file icons only | ✓ | ➕ dictz only |
 | Full command line (lookup, dump, config, doctor, update…), short name `dct` | a few switches | ✓ | ➕ dictz only |
 | Desktop / menu shortcut from the app or `dct shortcut` | installer only | ✓ (v0.0.9) | ➕ dictz only |

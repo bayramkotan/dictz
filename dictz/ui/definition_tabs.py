@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QTabWidget, QWidget
 
+from ..core.i18n import t
 from ..parsers.base import DictionaryEntry
 from ..storage.settings import Preferences
 from .definition_view import DefinitionView
@@ -51,10 +52,10 @@ class DefinitionTabs(QTabWidget):
 
     def _title(self, word: str, found: bool) -> str:
         if not word:
-            return NEW_TAB
+            return t(NEW_TAB)
         n = int(self.prefs["appearance.tab_title_length"])
-        t = word if len(word) <= n else word[:n] + "…"
-        return t if found else f"{t} ✗"
+        title = word if len(word) <= n else word[:n] + "…"
+        return title if found else f"{title} ✗"
 
     def new_tab(self, word: str = "") -> DefinitionView:
         view = DefinitionView(self.prefs, self)
@@ -99,7 +100,7 @@ class DefinitionTabs(QTabWidget):
             view = self.widget(index)
             if isinstance(view, DefinitionView):
                 view.show_welcome()
-            self.setTabText(index, NEW_TAB)
+            self.setTabText(index, t(NEW_TAB))
             self.current_word_changed.emit("")
             return
         widget = self.widget(index)

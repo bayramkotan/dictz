@@ -46,7 +46,7 @@ Rust code map (`dictz-rs/src/`):
 | `fuzzy.rs` | RapidFuzz `fuzz.ratio` (InDel/LCS), `extract`, `rank` | `dictz/core/fuzzy.py` |
 | `media.rs` | DSL/StarDict media lookup | `dictz/core/media.py` |
 | `html.rs` | article HTML → styled lines (egui) and → text (`to_text`, CLI / copy) | QtWebEngine, `dictz/core/htmltext.py` |
-| `settings.rs` | shared `settings.json`: schema (75 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
+| `settings.rs` | shared `settings.json`: schema (76 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
 | `instance.rs` | single instance + `dictz show/popup/watch` protocol (127.0.0.1 + token in `instance.json`) | `dictz/core/instance.py` |
 | `scantext.rs`, `hotkeys.rs`, `icon.rs` | scan text cleaning + Ctrl+C+C, hotkey parsing, the app icon pixels | `dictz/core/scantext.py`, `dictz/core/hotkeys.py`, `dictz/ui/icons.py` |
 | `gui/services.rs`, `gui/window.rs` | clipboard / selection watcher, global hotkeys, tray, instance server; hide-to-tray per platform | `dictz/ui/scanner.py`, `dictz/core/hotkeys.py`, `dictz/ui/main_window.py` |
@@ -317,6 +317,13 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 ---
 
 ## Done after v0.0.9 (unreleased, plain push)
+
+- **Interface languages (25)** in both editions, flag picker at the top right of the toolbar, setting `general.language` (`auto` = system language → else English).
+  - The UI is written in Turkish; `t("…")` (Python, `dictz/core/i18n.py`) and `tr("…")` / `tr_args("…", &[("n", &x)])` (Rust, `src/i18n.rs`) look the text up. Placeholders are named: `{n}`, `{name}`, `{word}`… — never positional. An `&` mnemonic is ignored for the lookup and put back.
+  - Catalogues: `dictz/resources/i18n/<code>.json` ({Turkish: translation}); Rust embeds `src/i18n/catalog.json`, written by `make_samples.py` (`write_i18n`) together with the flags (`dictz/resources/flags/*.png` → `dictz-rs/src/flags/`, from flag-icons, MIT).
+  - `tests/data/parity/i18n_keys.py` collects every key from both editions (t()/tr() calls, settings labels/help/choices, page titles, shortcuts); `tests/test_i18n.py` fails if any language misses a key or a placeholder. **A new UI text needs a translation in all 24 catalogues.**
+  - Python switches language by restarting itself (tabs restored); Rust switches live. Qt mirrors the layout for ar/fa/ur; egui cannot shape Arabic, so Rust's `tr()` returns shaped (ar-reshaper) and visually reordered (unicode-bidi) text for RTL languages. Hindi in the Rust edition shows without Devanagari shaping (egui limitation).
+  - Malay was derived from the Indonesian catalogue and adjusted; native speakers may want to review it.
 
 - Dictionary icons and article cards in both editions: `core/dictident.py` + `ui/dicticons.py` (Python), `src/dictident.rs` + `src/gui/dictbadge.rs` (Rust).
   - Icon order: same-name picture next to the file → Babylon info block 0x0B → generated monogram badge on a colour from FNV-1a of the name. A picture smaller than 8 px is ignored (placeholder).

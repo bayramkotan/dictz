@@ -44,6 +44,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **Interface:**
   - tabs, back/forward, random word, favorites and history (with filters)
   - dictionary bar (one-click on/off, right-click = only this one) and a "found in" panel
+  - 25 interface languages, picked from the flag at the top right (Arabic, Persian and Urdu are shaped and drawn right to left)
   - collapsible article cards per dictionary: its icon (or monogram badge in its own colour), language pair, format, copy / "only this dictionary" buttons
   - find in page with highlighting, save article as HTML / text
   - background loading with progress; dictionary folders scanned on start
@@ -90,7 +91,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-75 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+76 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 

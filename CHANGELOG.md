@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **25 interface languages** in **both editions**, chosen from the flag at the top right of the window (or Tercihler → Genel → Arayüz dili, `general.language`; `auto` follows the system language):
+  - Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski
+  - Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe
+  - 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी
+  - Every menu, button, message, settings label and help text is translated; Arabic, Persian and Urdu are laid out right to left (Python) or shaped and reordered (Rust).
+  - The catalogues are shared JSON files; a test fails if a text is missing in any language.
 - **Dictionary icons and article cards** in **both editions**. Every place that names a dictionary shows the same badge: article headers, the dictionary bar, "found in" and the sidebar list.
   - The badge is the dictionary's own icon when it has one: a picture next to it with the same name (`Oxford.ifo` → `Oxford.ico` / `.png` / `.bmp` / `.jpg` / `.gif`, as in GoldenDict), or the icon stored inside a Babylon `.bgl` file.
   - Otherwise it is a generated badge: the dictionary's monogram (`Adil Hindistan En2Tr` → **AH**) on its own colour, which stays the same everywhere and between runs.

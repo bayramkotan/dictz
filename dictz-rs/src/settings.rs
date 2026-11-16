@@ -112,6 +112,16 @@ pub const SECTIONS: &[(&str, &str)] = &[
 /// Every setting (same order as the Python edition).
 pub static SCHEMA: &[Setting] = &[
     Setting {
+        key: "general.language",
+        kind: Kind::Choice,
+        default: Def::Str("auto"),
+        label: "Arayüz dili",
+        help: "Pencerenin sağ üstündeki bayraktan da değiştirilir. Otomatik = sistemin dili.",
+        min: None,
+        max: None,
+        choices: &[("auto", "Otomatik (sistem)"), ("tr", "Türkçe"), ("en", "English"), ("az", "Azərbaycan türkcəsi"), ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"), ("it", "Italiano"), ("pt", "Português"), ("nl", "Nederlands"), ("pl", "Polski"), ("ru", "Русский"), ("uk", "Українська"), ("ar", "العربية"), ("fa", "فارسی"), ("ur", "اردو"), ("kk", "Қазақша"), ("ky", "Кыргызча"), ("uz", "Oʻzbekcha"), ("tk", "Türkmençe"), ("zh", "中文"), ("ja", "日本語"), ("ko", "한국어"), ("id", "Bahasa Indonesia"), ("ms", "Bahasa Melayu"), ("hi", "हिन्दी")],
+    },
+    Setting {
         key: "general.restore_tabs",
         kind: Kind::Bool,
         default: Def::Bool(true),

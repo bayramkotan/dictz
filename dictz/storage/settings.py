@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..core.i18n import LANGUAGES
+
 SETTINGS_FILE = "settings.json"
 
 
@@ -46,6 +48,9 @@ SECTIONS: list[tuple[str, str]] = [
 
 SCHEMA: list[Setting] = [
     # ------------------------------------------------------------- general
+    Setting("general.language", "choice", "auto", "Arayüz dili",
+            "Pencerenin sağ üstündeki bayraktan da değiştirilir. Otomatik = sistemin dili.",
+            choices=(("auto", "Otomatik (sistem)"),) + tuple((c, n) for c, n, _e, _r in LANGUAGES)),
     Setting("general.restore_tabs", "bool", True, "Açık sekmeleri geri yükle",
             "Kapatırken açık olan sekmeler bir sonraki açılışta yeniden açılır."),
     Setting("general.restore_last_search", "bool", True, "Son aramayı geri yükle",

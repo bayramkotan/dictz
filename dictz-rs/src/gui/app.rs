@@ -1,6 +1,7 @@
 //! Main window — the same layout, menus, shortcuts and features as the
 //! Python edition's Qt window.
 
+use crate::i18n::{self, tr, tr_args};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -65,7 +66,7 @@ impl Tab {
     }
     fn title(&self, max: usize) -> String {
         if self.word.is_empty() {
-            NEW_TAB.to_string()
+            tr(NEW_TAB)
         } else if matches!(self.content, Content::NotFound { .. }) {
             format!("{} ✗", truncate(&self.word, max))
         } else {
@@ -112,6 +113,7 @@ enum Action {
     ZoomReset,
     SetTheme(&'static str),
     CycleTheme,
+    SetLanguage(String),
     AddDictionaryDialog,
     AddFolderDialog,
     AddPaths(Vec<PathBuf>),
@@ -279,6 +281,7 @@ pub struct DictzApp {
     fonts_key: Option<(String, String)>,
     media_cache: HashMap<(String, String), Option<Arc<[u8]>>>,
     dict_looks: super::dictbadge::DictLooks,
+    flags: super::langflags::Flags,
 
     win: MainWindow,
     services: Services,
@@ -311,7 +314,11 @@ impl DictzApp {
         let index = match IndexStore::open(&data_dir.join(INDEX_DB)) {
             Ok(i) => Some(i),
             Err(e) => {
-                status = Some((format!("İndeks açılamadı: {}", e), Instant::now(), 8));
+                status = Some((
+                    format!("{} {}", tr("İndeks açılamadı:"), e),
+                    Instant::now(),
+                    8,
+                ));
                 None
             }
         };
@@ -377,6 +384,7 @@ impl DictzApp {
             fonts_key: None,
             media_cache: HashMap::new(),
             dict_looks: Default::default(),
+            flags: Default::default(),
             win,
             services,
             popup: Popup::default(),
@@ -408,9 +416,9 @@ impl DictzApp {
         self.apply_prefs(ctx);
         self.set_status(
             if on {
-                "Tarama açık"
+                tr("Tarama açık")
             } else {
-                "Tarama kapalı"
+                tr("Tarama kapalı")
             },
             3,
         );
@@ -449,7 +457,7 @@ impl DictzApp {
             match Services::clipboard_text().and_then(|t| clean_scan_text(&t, max)) {
                 Some(w) => word = w,
                 None => {
-                    self.set_status("Panoda aranacak kelime yok.", 3);
+                    self.set_status(tr("Panoda aranacak kelime yok."), 3);
                     return;
                 }
             }
@@ -620,7 +628,7 @@ impl DictzApp {
         let w = self.prefs.int("scan.width") as f32;
         let h = self.prefs.int("scan.height") as f32;
         let mut builder = egui::ViewportBuilder::default()
-            .with_title("dictz — tarama")
+            .with_title(tr("dictz — tarama"))
             .with_inner_size([w, h])
             .with_min_inner_size([240.0, 160.0])
             .with_taskbar(false)
@@ -652,34 +660,41 @@ impl DictzApp {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let edit = egui::TextEdit::singleline(&mut self.popup.edit)
-                        .hint_text("Kelime…")
+                        .hint_text(tr("Kelime…"))
                         .desired_width((ui.available_width() - 130.0).max(80.0));
                     let r = ui.add(edit);
                     if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                         lookup = Some(self.popup.edit.trim().to_string());
                     }
                     let pin = if self.popup.pinned {
-                        "📌 Sabit"
+                        format!("📌 {}", tr("Sabit"))
                     } else {
-                        "📌"
+                        "📌".to_string()
                     };
                     if ui
                         .selectable_label(self.popup.pinned, pin)
-                        .on_hover_text("Sabitle (fare çıkınca kapanmaz)")
+                        .on_hover_text(tr("Sabitle (fare çıkınca kapanmaz)"))
                         .clicked()
                     {
                         self.popup.pinned = !self.popup.pinned;
                     }
-                    if ui.button("⤢").on_hover_text("Ana pencerede aç").clicked() {
+                    if ui
+                        .button("⤢")
+                        .on_hover_text(tr("Ana pencerede aç"))
+                        .clicked()
+                    {
                         open_main = Some(self.popup.word.clone());
                     }
-                    if ui.button("✕").on_hover_text("Kapat (Esc)").clicked() {
+                    if ui.button("✕").on_hover_text(tr("Kapat (Esc)")).clicked() {
                         close = true;
                     }
                 });
                 if let Content::Articles(groups) = &self.popup.content {
                     let n: usize = groups.iter().map(|g| g.articles.len()).sum();
-                    ui.weak(format!("{} madde · {} sözlük", n, groups.len()));
+                    ui.weak(tr_args(
+                        "{n} madde · {m} sözlük",
+                        &[("n", &n), ("m", &groups.len())],
+                    ));
                 }
                 ui.add_space(2.0);
             });
@@ -735,11 +750,14 @@ impl DictzApp {
                         }
                         Content::NotFound { query, suggestions } => {
                             ui.add_space(12.0);
-                            ui.label(RichText::new("Sonuç yok").size(size * 1.2).strong());
-                            ui.label(format!("“{}” için eşleşme bulunamadı.", query));
+                            ui.label(RichText::new(tr("Sonuç yok")).size(size * 1.2).strong());
+                            ui.label(tr_args(
+                                "“{word}” için hiçbir sözlükte eşleşme bulunamadı.",
+                                &[("word", query)],
+                            ));
                             if !suggestions.is_empty() {
                                 ui.add_space(8.0);
-                                ui.strong("Bunu mu demek istediniz?");
+                                ui.strong(tr("Bunu mu demek istediniz?"));
                                 for (w, score) in suggestions {
                                     ui.horizontal(|ui| {
                                         if ui.link(w).clicked() {
@@ -859,6 +877,7 @@ impl DictzApp {
     }
 
     fn apply_prefs(&mut self, ctx: &egui::Context) {
+        i18n::set_language(&self.prefs.str("general.language"));
         let p = &self.prefs;
         ctx.set_theme(match p.str("appearance.theme").as_str() {
             "light" => egui::ThemePreference::Light,
@@ -1009,13 +1028,13 @@ impl DictzApp {
         }
         if !self.load_errors.is_empty() {
             let msg = format!(
-                "{} sözlük açılamadı: {}",
-                self.load_errors.len(),
+                "{} {}",
+                tr_args("{n} sözlük açılamadı:", &[("n", &self.load_errors.len())]),
                 self.load_errors.join("; ")
             );
             self.set_status(msg, 12);
         } else if self.loaded_count > 0 {
-            let msg = format!("{} sözlük yüklendi", self.loaded_count);
+            let msg = tr_args("{n} sözlük yüklendi", &[("n", &self.loaded_count)]);
             self.set_status(msg, 4);
         }
         if self.prefs.bool("general.restore_tabs") {
@@ -1063,14 +1082,14 @@ impl DictzApp {
             });
             self.update_rx = Some(rx);
             if !silent {
-                self.set_status("Güncellemeler denetleniyor…", 6);
+                self.set_status(tr("Güncellemeler denetleniyor…"), 6);
             }
         }
         #[cfg(not(feature = "update"))]
         {
             let _ = ctx;
             if !silent {
-                self.update_msg = Some("Bu derleme `update` özelliği olmadan yapılmış.\nGüncellemek için: cargo install dictz --locked --force".into());
+                self.update_msg = Some(tr("Bu derleme `update` özelliği olmadan yapılmış.\nGüncellemek için: cargo install dictz --locked --force"));
             }
         }
     }
@@ -1087,15 +1106,25 @@ impl DictzApp {
                 let newer = false;
                 if newer {
                     let msg = format!(
-                        "Yeni sürüm var: dictz {} (kullandığınız {}).\nGüncellemek için terminalde: dictz update",
-                        latest, VERSION
+                        "{}\n{} dictz update",
+                        tr_args(
+                            "Yeni sürüm var: {latest} (kurulu: {v}).",
+                            &[("latest", &latest), ("v", &VERSION)]
+                        ),
+                        tr("Güncellemek için terminalde:")
                     );
-                    self.set_status(format!("Yeni sürüm: {} — dictz update", latest), 15);
+                    self.set_status(
+                        tr_args(
+                            "Yeni sürüm: dictz {latest} — terminalde `dictz update`",
+                            &[("latest", &latest)],
+                        ),
+                        15,
+                    );
                     if !self.update_silent {
                         self.update_msg = Some(msg);
                     }
                 } else if !self.update_silent {
-                    self.update_msg = Some(format!("dictz {} güncel.", VERSION));
+                    self.update_msg = Some(tr_args("dictz {v} güncel.", &[("v", &VERSION)]));
                 }
             }
             Err(e) => {
@@ -1258,7 +1287,11 @@ impl DictzApp {
             .map(|t| t.groups())
             .unwrap_or(&[]);
         let n: usize = groups.iter().map(|g| g.articles.len()).sum();
-        self.timing = format!("{} madde · {} sözlük · {:.0} ms", n, groups.len(), ms);
+        self.timing = format!(
+            "{} · {:.0} ms",
+            tr_args("{n} madde · {m} sözlük", &[("n", &n), ("m", &groups.len())]),
+            ms
+        );
         r
     }
 
@@ -1373,15 +1406,21 @@ impl DictzApp {
                         .dictionary(&name)
                         .map(|d| d.metadata().word_count)
                         .unwrap_or(0);
-                    self.set_status(format!("Yüklendi: {} ({} kelime)", name, group(n)), 4);
+                    self.set_status(
+                        tr_args(
+                            "Yüklendi: {name} ({n} kelime)",
+                            &[("name", &name), ("n", &group(n))],
+                        ),
+                        4,
+                    );
                 }
                 Err(e) => {
-                    self.error = Some(("Yüklenemedi".into(), format!("{}\n\n{}", p.display(), e)))
+                    self.error = Some((tr("Yüklenemedi"), format!("{}\n\n{}", p.display(), e)))
                 }
             }
         }
         if added > 1 {
-            self.set_status(format!("{} sözlük eklendi", added), 4);
+            self.set_status(tr_args("{n} sözlük eklendi", &[("n", &added)]), 4);
         }
         self.media_cache.clear();
     }
@@ -1397,10 +1436,13 @@ impl DictzApp {
 
     fn play_audio(&mut self, dict: &str, name: &str) {
         let Some(bytes) = self.qm.media(dict).and_then(|m| m.read(name)) else {
-            self.set_status(format!("Ses dosyası bulunamadı: {}", name), 4);
+            self.set_status(
+                tr_args("Ses dosyası bulunamadı: {name}", &[("name", &name)]),
+                4,
+            );
             return;
         };
-        self.set_status(format!("Çalınıyor: {}", name), 3);
+        self.set_status(tr_args("Çalınıyor: {name}", &[("name", &name)]), 3);
         let vol = self.prefs.int("audio.volume") as f32 / 100.0;
         audio::play(
             bytes,
@@ -1425,7 +1467,7 @@ impl DictzApp {
             || href.starts_with("mailto:")
         {
             if let Err(e) = system::open_external(href) {
-                self.set_status(format!("Bağlantı açılamadı: {}", e), 5);
+                self.set_status(format!("{} {}", tr("Bağlantı açılamadı:"), e), 5);
             }
         } else if media_kind(href) == MediaKind::Audio {
             self.play_audio(dict, href);
@@ -1501,29 +1543,28 @@ impl DictzApp {
             .media(name)
             .map(|m| m.search_locations())
             .unwrap_or_default();
-        let rows: Vec<(&str, String)> = vec![
-            ("Ad", m.name.clone()),
-            ("Biçim", m.format.clone()),
-            ("Kelime", group(m.word_count)),
-            ("Kaynak dil", or_dash(&m.source_language)),
-            ("Hedef dil", or_dash(&m.target_language)),
-            ("Yazar", or_dash(&m.author)),
-            ("Dosya", p.display().to_string()),
+        let rows: Vec<(String, String)> = vec![
+            (tr("Ad"), m.name.clone()),
+            (tr("Biçim"), m.format.clone()),
+            (tr("Kelime"), group(m.word_count)),
+            (tr("Kaynak dil"), or_dash(&m.source_language)),
+            (tr("Hedef dil"), or_dash(&m.target_language)),
+            (tr("Yazar"), or_dash(&m.author)),
+            (tr("Dosya"), p.display().to_string()),
             (
-                "Boyut",
+                tr("Boyut"),
                 format!("{} KB", group((size as f64 / 1024.0).round() as usize)),
             ),
             (
-                "Etkin",
+                tr("Etkin"),
                 if self.qm.is_enabled(name) {
-                    "evet"
+                    tr("evet")
                 } else {
-                    "hayır"
-                }
-                .into(),
+                    tr("hayır")
+                },
             ),
             (
-                "Medya klasörleri",
+                tr("Medya klasörleri"),
                 media
                     .iter()
                     .map(|x| x.display().to_string())
@@ -1563,7 +1604,7 @@ impl DictzApp {
             }
             Action::Random => match self.qm.random_entry(None) {
                 Some(e) => self.open_word(&e.headword, None, false),
-                None => self.set_status("Önce bir sözlük ekleyin.", 3),
+                None => self.set_status(tr("Önce bir sözlük ekleyin."), 3),
             },
             Action::ToggleFavorite => {
                 let w = Some(self.current_word())
@@ -1591,16 +1632,24 @@ impl DictzApp {
                 let i = order.iter().position(|t| *t == cur).unwrap_or(0);
                 let next = order[(i + 1) % order.len()];
                 self.apply(ctx, Action::SetTheme(next));
-                self.set_status(format!("Tema: {}", theme_label(next)), 3);
+                self.set_status(format!("{}: {}", tr("Tema"), theme_label(next)), 3);
+            }
+            Action::SetLanguage(code) => {
+                let _ = self
+                    .prefs
+                    .set("general.language", serde_json::Value::String(code));
+                let _ = self.prefs.save();
+                self.apply_prefs(ctx);
+                self.dict_looks = Default::default();
             }
             Action::AddDictionaryDialog => {
                 let picked = rfd::FileDialog::new()
-                    .set_title("Sözlük dosyası seçin")
-                    .add_filter("Tüm sözlükler", &["ifo", "dsl", "dz", "bgl"])
+                    .set_title(tr("Sözlük dosyası seçin"))
+                    .add_filter(tr("Tüm sözlükler"), &["ifo", "dsl", "dz", "bgl"])
                     .add_filter("StarDict", &["ifo"])
-                    .add_filter("DSL / Lingvo", &["dsl", "dz"])
-                    .add_filter("Babylon", &["bgl"])
-                    .add_filter("Tüm dosyalar", &["*"])
+                    .add_filter(tr("DSL / Lingvo"), &["dsl", "dz"])
+                    .add_filter(tr("Babylon"), &["bgl"])
+                    .add_filter(tr("Tüm dosyalar"), &["*"])
                     .pick_files();
                 if let Some(p) = picked {
                     self.add_paths(p);
@@ -1608,14 +1657,14 @@ impl DictzApp {
             }
             Action::AddFolderDialog => {
                 if let Some(d) = rfd::FileDialog::new()
-                    .set_title("Sözlük klasörü seçin")
+                    .set_title(tr("Sözlük klasörü seçin"))
                     .pick_folder()
                 {
                     let files = scan_folder(&d, self.prefs.bool("dictionaries.recursive"));
                     if files.is_empty() {
                         self.error = Some((
-                            "Klasör ekle".into(),
-                            "Bu klasörde sözlük dosyası bulunamadı.".into(),
+                            tr("Klasör ekle"),
+                            tr("Bu klasörde sözlük dosyası bulunamadı."),
                         ));
                     } else {
                         let known = self.known_paths();
@@ -1647,19 +1696,19 @@ impl DictzApp {
                         let list: Vec<String> =
                             paths.iter().map(|p| p.display().to_string()).collect();
                         self.error = Some((
-                            "Kısayol".into(),
-                            format!("Oluşturuldu:\n{}", list.join("\n")),
+                            tr("Kısayol"),
+                            format!("{}\n{}", tr("Oluşturuldu:"), list.join("\n")),
                         ));
                     }
                     Ok(_) => {
-                        self.error = Some((
-                            "Kısayol".into(),
-                            "Masaüstü veya menü klasörü bulunamadı.".into(),
-                        ))
+                        self.error =
+                            Some((tr("Kısayol"), tr("Masaüstü veya menü klasörü bulunamadı.")))
                     }
                     Err(e) => {
-                        self.error =
-                            Some(("Kısayol".into(), format!("Kısayol oluşturulamadı:\n{}", e)))
+                        self.error = Some((
+                            tr("Kısayol"),
+                            format!("{}\n{}", tr("Kısayol oluşturulamadı:"), e),
+                        ))
                     }
                 }
             }
@@ -1707,14 +1756,14 @@ impl DictzApp {
                 let w = self.current_word();
                 if !w.is_empty() {
                     ctx.copy_text(w.clone());
-                    self.set_status(format!("Kopyalandı: {}", w), 3);
+                    self.set_status(tr_args("Kopyalandı: {word}", &[("word", &w)]), 3);
                 }
             }
             Action::CopyArticle(only) => {
                 let t = self.article_text(only);
                 if !t.trim().is_empty() {
                     ctx.copy_text(t);
-                    self.set_status("Makale panoya kopyalandı", 3);
+                    self.set_status(tr("Makale panoya kopyalandı"), 3);
                 }
             }
             Action::SaveArticle => {
@@ -1728,10 +1777,10 @@ impl DictzApp {
                     return;
                 }
                 if let Some(path) = rfd::FileDialog::new()
-                    .set_title("Makaleyi kaydet")
+                    .set_title(tr("Makaleyi kaydet"))
                     .set_file_name(format!("{}.html", word))
                     .add_filter("HTML", &["html", "htm"])
-                    .add_filter("Metin", &["txt"])
+                    .add_filter(tr("Metin"), &["txt"])
                     .save_file()
                 {
                     let txt = path
@@ -1745,15 +1794,15 @@ impl DictzApp {
                     };
                     match std::fs::write(&path, data) {
                         Ok(()) => self.set_status(format!("Kaydedildi: {}", path.display()), 4),
-                        Err(e) => self.error = Some(("Kaydedilemedi".into(), e.to_string())),
+                        Err(e) => self.error = Some((tr("Kaydedilemedi"), e.to_string())),
                     }
                 }
             }
             Action::ExportFavorites => {
                 if let Some(path) = rfd::FileDialog::new()
-                    .set_title("Favorileri dışa aktar")
+                    .set_title(tr("Favorileri dışa aktar"))
                     .set_file_name("dictz-favoriler.txt")
-                    .add_filter("Metin", &["txt"])
+                    .add_filter(tr("Metin"), &["txt"])
                     .save_file()
                 {
                     let all = self
@@ -1763,7 +1812,7 @@ impl DictzApp {
                         .unwrap_or_default();
                     match std::fs::write(&path, all.join("\n") + "\n") {
                         Ok(()) => self.set_status(format!("{} favori kaydedildi", all.len()), 4),
-                        Err(e) => self.error = Some(("Kaydedilemedi".into(), e.to_string())),
+                        Err(e) => self.error = Some((tr("Kaydedilemedi"), e.to_string())),
                     }
                 }
             }
@@ -1792,7 +1841,13 @@ impl DictzApp {
                 for n in self.qm.loaded_names() {
                     self.qm.set_enabled(&n, n == name);
                 }
-                self.set_status(format!("Yalnızca etkin: {}", name), 3);
+                self.set_status(
+                    tr_args(
+                        "Yalnızca “{name}” etkin — Sözlükler → Tümünü etkinleştir ile geri alın",
+                        &[("name", &name)],
+                    ),
+                    5,
+                );
             }
             Action::EnableAll(on) => {
                 for n in self.qm.loaded_names() {
@@ -1806,7 +1861,7 @@ impl DictzApp {
             }
             Action::RemoveDict(name) => {
                 if let Err(e) = self.qm.remove_dictionary(&name) {
-                    self.error = Some(("Kaldırılamadı".into(), e.to_string()));
+                    self.error = Some((tr("Kaldırılamadı"), e.to_string()));
                 }
                 if self.manager_selected.as_deref() == Some(name.as_str()) {
                     self.manager_selected = None;
@@ -1828,9 +1883,9 @@ impl DictzApp {
                 }
                 self.qm.index = index;
                 if errors.is_empty() {
-                    self.set_status(format!("{} sözlük yeniden indekslendi", n), 4);
+                    self.set_status(tr_args("{n} sözlük yeniden indekslendi.", &[("n", &n)]), 4);
                 } else {
-                    self.error = Some(("İndeks".into(), errors.join("\n")));
+                    self.error = Some((tr("İndeks"), errors.join("\n")));
                 }
             }
             Action::Info(name) => self.info = Some(name),
@@ -1872,8 +1927,9 @@ impl DictzApp {
                         .unwrap_or_else(|| self.prefs.export());
                     let text = serde_json::to_string_pretty(&data).unwrap_or_default() + "\n";
                     match std::fs::write(&path, text) {
-                        Ok(()) => self.set_status(format!("Dışa aktarıldı: {}", path.display()), 4),
-                        Err(e) => self.error = Some(("Dışa aktarılamadı".into(), e.to_string())),
+                        Ok(()) => self
+                            .set_status(format!("{} {}", tr("Dışa aktarıldı:"), path.display()), 4),
+                        Err(e) => self.error = Some((tr("Dışa aktarılamadı"), e.to_string())),
                     }
                 }
             }
@@ -1891,11 +1947,11 @@ impl DictzApp {
                                 let errors = w.draft.import(&v);
                                 if !errors.is_empty() {
                                     self.error =
-                                        Some(("İçe aktarma uyarıları".into(), errors.join("\n")));
+                                        Some((tr("İçe aktarma uyarıları"), errors.join("\n")));
                                 }
                             }
                         }
-                        Err(e) => self.error = Some(("İçe aktarılamadı".into(), e)),
+                        Err(e) => self.error = Some((tr("İçe aktarılamadı"), e)),
                     }
                 }
             }
@@ -1979,116 +2035,120 @@ impl DictzApp {
             clicked
         };
         egui::menu::bar(ui, |ui| {
-            ui.menu_button("Dosya", |ui| {
-                if item(ui, "Sözlük Ekle…", "Ctrl+O") {
+            ui.menu_button(tr("Dosya"), |ui| {
+                if item(ui, &tr("Sözlük Ekle…"), "Ctrl+O") {
                     actions.push(Action::AddDictionaryDialog);
                 }
-                if item(ui, "Klasör Ekle…", "Ctrl+Shift+O") {
+                if item(ui, &tr("Klasör Ekle…"), "Ctrl+Shift+O") {
                     actions.push(Action::AddFolderDialog);
                 }
-                if item(ui, "Sözlük Yöneticisi…", "Ctrl+M") {
+                if item(ui, &tr("Sözlük Yöneticisi…"), "Ctrl+M") {
                     actions.push(Action::OpenManager);
                 }
                 ui.separator();
-                if item(ui, "Makaleyi HTML olarak kaydet…", "Ctrl+S") {
+                if item(ui, &tr("Makaleyi HTML olarak kaydet…"), "Ctrl+S") {
                     actions.push(Action::SaveArticle);
                 }
-                if item(ui, "Favorileri dışa aktar…", "") {
+                if item(ui, &tr("Favorileri dışa aktar…"), "") {
                     actions.push(Action::ExportFavorites);
                 }
                 ui.separator();
-                if item(ui, "Masaüstü kısayolu oluştur", "") {
+                if item(ui, &tr("Masaüstü kısayolu oluştur"), "") {
                     actions.push(Action::CreateShortcuts);
                 }
-                if item(ui, "Çıkış", "Ctrl+Q") {
+                if item(ui, &tr("Çıkış"), "Ctrl+Q") {
                     actions.push(Action::Quit);
                 }
             });
-            ui.menu_button("Düzen", |ui| {
-                if item(ui, "Kelimeyi kopyala", "Ctrl+Shift+C") {
+            ui.menu_button(tr("Düzen"), |ui| {
+                if item(ui, &tr("Kelimeyi kopyala"), "Ctrl+Shift+C") {
                     actions.push(Action::CopyWord);
                 }
-                if item(ui, "Makaleyi metin olarak kopyala", "Ctrl+Shift+A") {
+                if item(ui, &tr("Makaleyi metin olarak kopyala"), "Ctrl+Shift+A") {
                     actions.push(Action::CopyArticle(None));
                 }
                 ui.separator();
-                if item(ui, "Arama kutusuna odaklan", "Ctrl+F") {
+                if item(ui, &tr("Arama kutusuna odaklan"), "Ctrl+F") {
                     actions.push(Action::FocusSearch);
                 }
-                if item(ui, "Sayfada bul…", "Ctrl+Shift+F") {
+                if item(ui, &tr("Sayfada bul…"), "Ctrl+Shift+F") {
                     actions.push(Action::OpenFind);
                 }
-                if item(ui, "Sonraki eşleşme", "F3") {
+                if item(ui, &tr("Sonraki eşleşme"), "F3") {
                     actions.push(Action::FindStep(1));
                 }
-                if item(ui, "Önceki eşleşme", "Shift+F3") {
+                if item(ui, &tr("Önceki eşleşme"), "Shift+F3") {
                     actions.push(Action::FindStep(-1));
                 }
                 ui.separator();
-                if item(ui, "Tercihler…", "Ctrl+,") {
+                if item(ui, &tr("Tercihler…"), "Ctrl+,") {
                     actions.push(Action::OpenPreferences);
                 }
             });
-            ui.menu_button("Görünüm", |ui| {
-                if item(ui, "Yeni sekme", "Ctrl+T") {
+            ui.menu_button(tr("Görünüm"), |ui| {
+                if item(ui, &tr("Yeni sekme"), "Ctrl+T") {
                     actions.push(Action::NewTab);
                 }
-                if item(ui, "Sekmeyi kapat", "Ctrl+W") {
+                if item(ui, &tr("Sekmeyi kapat"), "Ctrl+W") {
                     actions.push(Action::CloseTab(self.current));
                 }
-                if item(ui, "Tüm makaleleri aç", "") {
+                if item(ui, &tr("Tüm makaleleri aç"), "") {
                     actions.push(Action::ExpandAll(true));
                 }
-                if item(ui, "Tüm makaleleri kapat", "") {
+                if item(ui, &tr("Tüm makaleleri kapat"), "") {
                     actions.push(Action::ExpandAll(false));
                 }
                 ui.separator();
                 for (key, label, sc) in [
-                    ("appearance.show_toolbar", "Araç çubuğu", ""),
-                    ("appearance.show_dictionary_bar", "Sözlük çubuğu", ""),
-                    ("appearance.show_sidebar", "Yan panel", "Ctrl+B"),
-                    ("appearance.show_found_in", "Bulunduğu sözlükler", ""),
-                    ("appearance.show_statusbar", "Durum çubuğu", ""),
+                    ("appearance.show_toolbar", tr("Araç çubuğu"), ""),
+                    ("appearance.show_dictionary_bar", tr("Sözlük çubuğu"), ""),
+                    ("appearance.show_sidebar", tr("Yan panel"), "Ctrl+B"),
+                    ("appearance.show_found_in", tr("Bulunduğu sözlükler"), ""),
+                    ("appearance.show_statusbar", tr("Durum çubuğu"), ""),
                 ] {
-                    if check(ui, self.prefs.bool(key), label, sc) {
+                    if check(ui, self.prefs.bool(key), &label, sc) {
                         actions.push(Action::TogglePref(key));
                     }
                 }
                 ui.separator();
-                if check(ui, self.fullscreen, "Tam ekran", "F11") {
+                if check(ui, self.fullscreen, &tr("Tam ekran"), "F11") {
                     actions.push(Action::Fullscreen);
                 }
                 if check(
                     ui,
                     self.prefs.bool("general.always_on_top"),
-                    "Her zaman üstte",
+                    &tr("Her zaman üstte"),
                     "",
                 ) {
                     actions.push(Action::TogglePref("general.always_on_top"));
                 }
                 let scan = self.prefs.bool("scan.enabled");
-                if check(ui, scan, "Tarama", "") {
+                if check(ui, scan, &tr("Tarama"), "") {
                     actions.push(Action::SetScan(!scan));
                 }
-                if item(ui, "Panodaki kelimeyi tarama penceresinde ara", "") {
+                if item(ui, &tr("Panodaki kelimeyi tarama penceresinde ara"), "") {
                     actions.push(Action::PopupLookup(String::new()));
                 }
-                if self.services.has_tray() && item(ui, "Tepsiye gizle", "") {
+                if self.services.has_tray() && item(ui, &tr("Tepsiye gizle"), "") {
                     actions.push(Action::ToggleMain);
                 }
                 ui.separator();
-                if item(ui, "Büyüt", "Ctrl+=") {
+                if item(ui, &tr("Büyüt"), "Ctrl+=") {
                     actions.push(Action::Zoom(0.1));
                 }
-                if item(ui, "Küçült", "Ctrl+-") {
+                if item(ui, &tr("Küçült"), "Ctrl+-") {
                     actions.push(Action::Zoom(-0.1));
                 }
-                if item(ui, "Yakınlaştırmayı sıfırla", "Ctrl+0") {
+                if item(ui, &tr("Yakınlaştırmayı sıfırla"), "Ctrl+0") {
                     actions.push(Action::ZoomReset);
                 }
-                ui.menu_button("Tema", |ui| {
+                ui.menu_button(tr("Tema"), |ui| {
                     let cur = self.prefs.str("appearance.theme");
-                    for (v, l) in [("auto", "Otomatik"), ("light", "Açık"), ("dark", "Koyu")] {
+                    for (v, l) in [
+                        ("auto", tr("Otomatik")),
+                        ("light", tr("Açık")),
+                        ("dark", tr("Koyu")),
+                    ] {
                         if ui.radio(cur == v, l).clicked() {
                             actions.push(Action::SetTheme(v));
                             ui.close_menu();
@@ -2096,28 +2156,28 @@ impl DictzApp {
                     }
                 });
             });
-            ui.menu_button("Git", |ui| {
-                if item(ui, "Geri", "Alt+←") {
+            ui.menu_button(tr("Git"), |ui| {
+                if item(ui, &tr("Geri"), "Alt+←") {
                     actions.push(Action::NavBack);
                 }
-                if item(ui, "İleri", "Alt+→") {
+                if item(ui, &tr("İleri"), "Alt+→") {
                     actions.push(Action::NavForward);
                 }
-                if item(ui, "Rastgele kelime", "Ctrl+R") {
+                if item(ui, &tr("Rastgele kelime"), "Ctrl+R") {
                     actions.push(Action::Random);
                 }
                 ui.separator();
-                if item(ui, "Sonraki sekme", "Ctrl+Tab") {
+                if item(ui, &tr("Sonraki sekme"), "Ctrl+Tab") {
                     actions.push(Action::CycleTab(1));
                 }
-                if item(ui, "Önceki sekme", "Ctrl+Shift+Tab") {
+                if item(ui, &tr("Önceki sekme"), "Ctrl+Shift+Tab") {
                     actions.push(Action::CycleTab(-1));
                 }
             });
-            ui.menu_button("Sözlükler", |ui| {
+            ui.menu_button(tr("Sözlükler"), |ui| {
                 let names = self.qm.loaded_names();
                 if names.is_empty() {
-                    ui.weak("Sözlük yok");
+                    ui.weak(tr("Sözlük yok"));
                 }
                 for n in names {
                     let on = self.qm.is_enabled(&n);
@@ -2126,38 +2186,38 @@ impl DictzApp {
                     }
                 }
                 ui.separator();
-                if item(ui, "Tümünü etkinleştir", "") {
+                if item(ui, &tr("Tümünü etkinleştir"), "") {
                     actions.push(Action::EnableAll(true));
                 }
-                if item(ui, "Tümünü devre dışı bırak", "") {
+                if item(ui, &tr("Tümünü devre dışı bırak"), "") {
                     actions.push(Action::EnableAll(false));
                 }
                 ui.separator();
-                if item(ui, "Sözlük yöneticisi…", "Ctrl+M") {
+                if item(ui, &tr("Sözlük yöneticisi…"), "Ctrl+M") {
                     actions.push(Action::OpenManager);
                 }
-                if item(ui, "Sözlük ekle…", "Ctrl+O") {
+                if item(ui, &tr("Sözlük ekle…"), "Ctrl+O") {
                     actions.push(Action::AddDictionaryDialog);
                 }
-                if item(ui, "Klasör ekle…", "Ctrl+Shift+O") {
+                if item(ui, &tr("Klasör ekle…"), "Ctrl+Shift+O") {
                     actions.push(Action::AddFolderDialog);
                 }
             });
-            ui.menu_button("Yardım", |ui| {
-                if item(ui, "Kısayollar", "F1") {
+            ui.menu_button(tr("Yardım"), |ui| {
+                if item(ui, &tr("Kısayollar"), "F1") {
                     actions.push(Action::Shortcuts);
                 }
-                if item(ui, "Komut satırı (CLI)", "") {
+                if item(ui, &tr("Komut satırı (CLI)"), "") {
                     actions.push(Action::CliHelp);
                 }
-                if item(ui, "Güncellemeleri denetle…", "") {
+                if item(ui, &tr("Güncellemeleri denetle…"), "") {
                     actions.push(Action::CheckUpdates);
                 }
-                if item(ui, "Veri klasörünü aç", "") {
+                if item(ui, &tr("Veri klasörünü aç"), "") {
                     actions.push(Action::OpenDataDir);
                 }
                 ui.separator();
-                if item(ui, "Hakkında", "") {
+                if item(ui, &tr("Hakkında"), "") {
                     actions.push(Action::About);
                 }
             });
@@ -2172,23 +2232,24 @@ impl DictzApp {
                 let can_fwd = self.nav_cursor + 1 < self.nav.len() as isize;
                 if ui
                     .add_enabled(can_back, egui::Button::new("◀"))
-                    .on_hover_text("Geri (Alt+←)")
+                    .on_hover_text(tr("Geri (Alt+←)"))
                     .clicked()
                 {
                     actions.push(Action::NavBack);
                 }
                 if ui
                     .add_enabled(can_fwd, egui::Button::new("▶"))
-                    .on_hover_text("İleri (Alt+→)")
+                    .on_hover_text(tr("İleri (Alt+→)"))
                     .clicked()
                 {
                     actions.push(Action::NavForward);
                 }
             }
-            let right_w = if show_buttons { 320.0 } else { 0.0 };
+            // room for the buttons on the right (translated labels are longer than Turkish ones)
+            let right_w = if show_buttons { 470.0 } else { 90.0 };
             let id = egui::Id::new("search-box");
             let edit = egui::TextEdit::singleline(&mut self.search)
-                .hint_text("Bir kelime ara…   (Ctrl+F)")
+                .hint_text(tr("Bir kelime ara…   (Ctrl+F)"))
                 .desired_width((ui.available_width() - right_w).max(160.0))
                 .id(id);
             let mut out = edit.show(ui);
@@ -2238,20 +2299,28 @@ impl DictzApp {
             }
             if show_buttons {
                 if ui
-                    .button("Rastgele")
-                    .on_hover_text("Rastgele kelime (Ctrl+R)")
+                    .button(tr("Rastgele"))
+                    .on_hover_text(tr("Rastgele kelime (Ctrl+R)"))
                     .clicked()
                 {
                     actions.push(Action::Random);
                 }
                 let star = if self.is_favorite { "★" } else { "☆" };
-                if ui.button(star).on_hover_text("Favori (Ctrl+D)").clicked() {
+                if ui
+                    .button(star)
+                    .on_hover_text(tr("Favori (Ctrl+D)"))
+                    .clicked()
+                {
                     actions.push(Action::ToggleFavorite);
                 }
-                if ui.button("−").on_hover_text("Küçült (Ctrl+-)").clicked() {
+                if ui
+                    .button("−")
+                    .on_hover_text(tr("Küçült (Ctrl+-)"))
+                    .clicked()
+                {
                     actions.push(Action::Zoom(-0.1));
                 }
-                if ui.button("+").on_hover_text("Büyüt (Ctrl+=)").clicked() {
+                if ui.button("+").on_hover_text(tr("Büyüt (Ctrl+=)")).clicked() {
                     actions.push(Action::Zoom(0.1));
                 }
                 let theme = self.prefs.str("appearance.theme");
@@ -2263,7 +2332,8 @@ impl DictzApp {
                 if ui
                     .button(icon)
                     .on_hover_text(format!(
-                        "Tema: {} (Otomatik → Açık → Koyu)",
+                        "{} · {}",
+                        tr("Tema: Otomatik → Açık → Koyu"),
                         theme_label(&theme)
                     ))
                     .clicked()
@@ -2272,18 +2342,24 @@ impl DictzApp {
                 }
                 let scan = self.prefs.bool("scan.enabled");
                 if ui
-                    .selectable_label(scan, "Tarama")
-                    .on_hover_text(
+                    .selectable_label(scan, tr("Tarama"))
+                    .on_hover_text(tr(
                         "Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir",
-                    )
+                    ))
                     .clicked()
                 {
                     actions.push(Action::SetScan(!scan));
                 }
-                if ui.button("⚙").on_hover_text("Tercihler (Ctrl+,)").clicked() {
+                if ui
+                    .button("⚙")
+                    .on_hover_text(tr("Tercihler (Ctrl+,)"))
+                    .clicked()
+                {
                     actions.push(Action::OpenPreferences);
                 }
+                ui.separator();
             }
+            self.language_button(ui, actions);
         });
         if self.show_suggestions && !self.suggestions.is_empty() {
             ui.add_space(2.0);
@@ -2309,7 +2385,7 @@ impl DictzApp {
                                 r.scroll_to_me(None);
                             }
                             let r = if s.fuzzy {
-                                r.on_hover_text("Benzer kelime (bulanık eşleşme)")
+                                r.on_hover_text(tr("Benzer kelime (bulanık eşleşme)"))
                             } else {
                                 r
                             };
@@ -2329,8 +2405,8 @@ impl DictzApp {
                 ui.horizontal(|ui| {
                     let names = self.qm.loaded_names();
                     if ui
-                        .small_button("Tümü")
-                        .on_hover_text("Tüm sözlükleri etkinleştir")
+                        .small_button(tr("Tümü"))
+                        .on_hover_text(tr("Tüm sözlükleri etkinleştir"))
                         .clicked()
                     {
                         actions.push(Action::EnableAll(true));
@@ -2338,9 +2414,9 @@ impl DictzApp {
                     ui.separator();
                     if names.is_empty() {
                         ui.weak(if self.loader.is_some() {
-                            "Sözlükler yükleniyor…"
+                            tr("Sözlükler yükleniyor…")
                         } else {
-                            "Sözlük yok — Ctrl+O ile ekleyin"
+                            tr("Sözlük yok — Ctrl+O ile ekleyin")
                         });
                     }
                     for n in names {
@@ -2371,8 +2447,9 @@ impl DictzApp {
                             })
                             .inner
                             .on_hover_text(format!(
-                                "{}\n\nTık: aç/kapat · Sağ tık: yalnızca bu",
-                                look.tooltip()
+                                "{}\n\n{}",
+                                look.tooltip(),
+                                tr("Tıkla: aç/kapat · Sağ tık: yalnızca bu")
                             ));
                         if r.clicked() {
                             actions.push(Action::SetEnabled(n.clone(), !on));
@@ -2390,10 +2467,18 @@ impl DictzApp {
             ui.selectable_value(
                 &mut self.sidebar_tab,
                 SidebarTab::Dictionaries,
-                "📚 Sözlükler",
+                format!("📚 {}", tr("Sözlükler")),
             );
-            ui.selectable_value(&mut self.sidebar_tab, SidebarTab::Favorites, "★ Favoriler");
-            ui.selectable_value(&mut self.sidebar_tab, SidebarTab::History, "🕘 Geçmiş");
+            ui.selectable_value(
+                &mut self.sidebar_tab,
+                SidebarTab::Favorites,
+                format!("★ {}", tr("Favoriler")),
+            );
+            ui.selectable_value(
+                &mut self.sidebar_tab,
+                SidebarTab::History,
+                format!("🕘 {}", tr("Geçmiş")),
+            );
         });
         ui.separator();
         let slot = match self.sidebar_tab {
@@ -2403,7 +2488,7 @@ impl DictzApp {
         };
         ui.add(
             egui::TextEdit::singleline(&mut self.side_filter[slot])
-                .hint_text("Süz…")
+                .hint_text(tr("Süz…"))
                 .desired_width(f32::INFINITY),
         );
         let filter = self.side_filter[slot].to_lowercase();
@@ -2413,16 +2498,16 @@ impl DictzApp {
                 let names = self.qm.loaded_names();
                 let enabled = names.iter().filter(|n| self.qm.is_enabled(n)).count();
                 ui.horizontal(|ui| {
-                    ui.strong(format!("Sözlükler ({}/{})", enabled, names.len()));
+                    ui.strong(format!("{} ({}/{})", tr("Sözlükler"), enabled, names.len()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Yönet…").clicked() {
+                        if ui.small_button(tr("Yönet…")).clicked() {
                             actions.push(Action::OpenManager);
                         }
                     });
                 });
                 egui::ScrollArea::vertical().id_salt("side-dicts").show(ui, |ui| {
                     if names.is_empty() {
-                        ui.weak("Henüz sözlük yok.\nDosya → Sözlük Ekle (Ctrl+O)\nveya dosyayı pencereye sürükleyin.");
+                        ui.weak(tr("Henüz sözlük yok.\nDosya → Sözlük Ekle (Ctrl+O)\nveya dosyayı pencereye sürükleyin."));
                     }
                     for name in names.into_iter().filter(|n| keep(n)) {
                         let mut on = self.qm.is_enabled(&name);
@@ -2436,24 +2521,24 @@ impl DictzApp {
                             super::dictbadge::badge(ui, &look, 18.0);
                             let r = ui
                                 .add(egui::Label::new(&name).sense(egui::Sense::click()).truncate())
-                                .on_hover_text(format!("{}\n\nÇift tık: bilgi", look.tooltip()));
+                                .on_hover_text(format!("{}\n\n{}", look.tooltip(), tr("Çift tık: bilgiler")));
                             if r.double_clicked() {
                                 actions.push(Action::Info(name.clone()));
                             }
                             r.context_menu(|ui| {
-                                if ui.button("Bilgi").clicked() {
+                                if ui.button(tr("Bilgi")).clicked() {
                                     actions.push(Action::Info(name.clone()));
                                     ui.close_menu();
                                 }
-                                if ui.button("Yalnızca bunu etkinleştir").clicked() {
+                                if ui.button(tr("Yalnızca bunu etkinleştir")).clicked() {
                                     actions.push(Action::Solo(name.clone()));
                                     ui.close_menu();
                                 }
-                                if ui.button("Yeniden indeksle").clicked() {
+                                if ui.button(tr("Yeniden indeksle")).clicked() {
                                     actions.push(Action::Reindex(vec![name.clone()]));
                                     ui.close_menu();
                                 }
-                                if ui.button("Kaldır…").clicked() {
+                                if ui.button(tr("Kaldır…")).clicked() {
                                     actions.push(Action::Ask(Confirm::RemoveDict(name.clone())));
                                     ui.close_menu();
                                 }
@@ -2466,7 +2551,7 @@ impl DictzApp {
                 ui.horizontal(|ui| {
                     ui.strong(format!("Favoriler ({})", self.favorites.len()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Dışa aktar…").clicked() {
+                        if ui.small_button(tr("Dışa aktar…")).clicked() {
                             actions.push(Action::ExportFavorites);
                         }
                     });
@@ -2475,7 +2560,7 @@ impl DictzApp {
                     .id_salt("side-favs")
                     .show(ui, |ui| {
                         if self.favorites.is_empty() {
-                            ui.weak("Favori yok. Bir kelimeyi Ctrl+D ile ekleyin.");
+                            ui.weak(tr("Favori yok. Bir kelimeyi Ctrl+D ile ekleyin."));
                         }
                         for w in self.favorites.iter().filter(|w| keep(w)) {
                             let r = ui.selectable_label(false, w);
@@ -2483,14 +2568,14 @@ impl DictzApp {
                                 actions.push(Action::OpenWord(w.clone()));
                             }
                             r.context_menu(|ui| {
-                                if ui.button("Yeni sekmede aç").clicked() {
+                                if ui.button(tr("Yeni sekmede aç")).clicked() {
                                     actions.push(Action::OpenWordIn {
                                         word: w.clone(),
                                         dicts: self.qm.loaded_names(),
                                     });
                                     ui.close_menu();
                                 }
-                                if ui.button("Favorilerden çıkar").clicked() {
+                                if ui.button(tr("Favorilerden çıkar")).clicked() {
                                     actions.push(Action::RemoveFavorite(w.clone()));
                                     ui.close_menu();
                                 }
@@ -2500,9 +2585,9 @@ impl DictzApp {
             }
             SidebarTab::History => {
                 ui.horizontal(|ui| {
-                    ui.strong(format!("Geçmiş ({})", self.recent.len()));
+                    ui.strong(format!("{} ({})", tr("Geçmiş"), self.recent.len()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Temizle").clicked() {
+                        if ui.small_button(tr("Temizle")).clicked() {
                             actions.push(Action::Ask(Confirm::ClearHistory));
                         }
                     });
@@ -2511,7 +2596,7 @@ impl DictzApp {
                     .id_salt("side-hist")
                     .show(ui, |ui| {
                         if !self.prefs.bool("history.enabled") {
-                            ui.weak("Geçmiş kaydı kapalı (Tercihler → Geçmiş).");
+                            ui.weak(tr("Geçmiş kaydı kapalı (Tercihler → Geçmiş)."));
                         }
                         for w in self.recent.iter().filter(|w| keep(w)) {
                             let r = ui.selectable_label(false, w);
@@ -2519,7 +2604,7 @@ impl DictzApp {
                                 actions.push(Action::OpenWord(w.clone()));
                             }
                             r.context_menu(|ui| {
-                                if ui.button("Geçmişten sil").clicked() {
+                                if ui.button(tr("Geçmişten sil")).clicked() {
                                     actions.push(Action::RemoveHistory(w.clone()));
                                     ui.close_menu();
                                 }
@@ -2530,8 +2615,72 @@ impl DictzApp {
         }
     }
 
+    fn language_button(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let cur = i18n::current();
+        let setting = self.prefs.str("general.language");
+        let flag_size = egui::vec2(24.0, 18.0);
+        let button = match self.flags.get(ui.ctx(), &cur) {
+            Some(tex) => egui::Button::image_and_text(
+                egui::Image::new(&tex).fit_to_exact_size(flag_size),
+                cur.to_uppercase(),
+            ),
+            None => egui::Button::new(cur.to_uppercase()),
+        };
+        let mut textures = Vec::new();
+        for (code, ..) in i18n::LANGUAGES {
+            textures.push(self.flags.get(ui.ctx(), code));
+        }
+        let r = egui::menu::menu_custom_button(ui, button, |ui| {
+            ui.set_min_width(250.0);
+            let auto = format!(
+                "{} — {}",
+                tr("Otomatik (sistem)"),
+                i18n::native_name(&i18n::system_language())
+            );
+            if ui.selectable_label(setting == "auto", auto).clicked() {
+                actions.push(Action::SetLanguage("auto".into()));
+                ui.close_menu();
+            }
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .max_height(480.0)
+                .show(ui, |ui| {
+                    for (i, (code, native, english, _)) in i18n::LANGUAGES.iter().enumerate() {
+                        let text = format!("{}   ({})", native, english);
+                        let text = if i18n::is_rtl(code) {
+                            format!("{}   ({})", i18n::visual(native), english)
+                        } else {
+                            text
+                        };
+                        let clicked = match &textures[i] {
+                            Some(tex) => ui
+                                .add(
+                                    egui::Button::image_and_text(
+                                        egui::Image::new(tex).fit_to_exact_size(flag_size),
+                                        text,
+                                    )
+                                    .selected(setting == *code)
+                                    .frame(false),
+                                )
+                                .clicked(),
+                            None => ui.selectable_label(setting == *code, text).clicked(),
+                        };
+                        if clicked {
+                            actions.push(Action::SetLanguage(code.to_string()));
+                            ui.close_menu();
+                        }
+                    }
+                });
+        });
+        r.response.on_hover_text(format!(
+            "{}: {}",
+            tr("Arayüz dili"),
+            i18n::native_name(&cur)
+        ));
+    }
+
     fn found_in(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        ui.strong("Bulunduğu sözlükler");
+        ui.strong(tr("Bulunduğu sözlükler"));
         ui.separator();
         let Some(tab) = self.tabs.get(self.current) else {
             return;
@@ -2559,7 +2708,11 @@ impl DictzApp {
                             ui.add(egui::Button::new(label).frame(false).truncate())
                         })
                         .inner
-                        .on_hover_text(format!("{}\n\nTıkla: makaleye git", looks[i].tooltip()));
+                        .on_hover_text(format!(
+                            "{}\n\n{}",
+                            looks[i].tooltip(),
+                            tr("Tıkla: makaleye git")
+                        ));
                     if r.clicked() {
                         actions.push(Action::ScrollToDict(i));
                     }
@@ -2596,7 +2749,7 @@ impl DictzApp {
                                     }
                                     if ui
                                         .small_button("×")
-                                        .on_hover_text("Sekmeyi kapat (Ctrl+W)")
+                                        .on_hover_text(tr("Sekmeyi kapat (Ctrl+W)"))
                                         .clicked()
                                     {
                                         actions.push(Action::CloseTab(i));
@@ -2606,7 +2759,7 @@ impl DictzApp {
                     }
                     if ui
                         .button("+")
-                        .on_hover_text("Yeni sekme (Ctrl+T)")
+                        .on_hover_text(tr("Yeni sekme (Ctrl+T)"))
                         .clicked()
                     {
                         actions.push(Action::NewTab);
@@ -2618,7 +2771,7 @@ impl DictzApp {
 
     fn find_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.horizontal(|ui| {
-            ui.label("Bul:");
+            ui.label(tr("Sayfada bul:"));
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.find_text)
                     .desired_width(220.0)
@@ -2640,14 +2793,18 @@ impl DictzApp {
             if self.find_text.is_empty() {
                 ui.weak("");
             } else if self.find_count == 0 {
-                ui.colored_label(ui.visuals().error_fg_color, "bulunamadı");
+                ui.colored_label(ui.visuals().error_fg_color, tr("bulunamadı"));
             } else {
                 ui.label(format!("{}/{}", self.find_current + 1, self.find_count));
             }
-            if ui.button("▲").on_hover_text("Önceki (Shift+F3)").clicked() {
+            if ui
+                .button("▲")
+                .on_hover_text(tr("Önceki (Shift+F3)"))
+                .clicked()
+            {
                 actions.push(Action::FindStep(-1));
             }
-            if ui.button("▼").on_hover_text("Sonraki (F3)").clicked() {
+            if ui.button("▼").on_hover_text(tr("Sonraki (F3)")).clicked() {
                 actions.push(Action::FindStep(1));
             }
             if ui.button("✕").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
@@ -2737,27 +2894,27 @@ impl DictzApp {
                                 ui.vertical_centered(|ui| {
                                     ui.add_space(80.0);
                                     ui.label(RichText::new("dictz").size(size * 2.3).strong());
-                                    ui.label(RichText::new("çok formatlı çevrimdışı sözlük").size(size).weak());
+                                    ui.label(RichText::new(tr("çok formatlı çevrimdışı sözlük")).size(size).weak());
                                     ui.add_space(24.0);
                                     let msg = if self.loader.is_some() {
-                                        "Sözlükler yükleniyor…".to_string()
+                                        tr("Sözlükler yükleniyor…").to_string()
                                     } else if self.qm.loaded_names().is_empty() {
-                                        "Başlamak için Dosya → Sözlük Ekle menüsünden bir StarDict (.ifo),\nDSL (.dsl) veya Babylon (.bgl) dosyası yükleyin ya da dosyayı pencereye sürükleyin.".to_string()
+                                        tr("Başlamak için Dosya → Sözlük Ekle menüsünden bir StarDict (.ifo),\nDSL (.dsl) veya Babylon (.bgl) dosyası yükleyin ya da dosyayı pencereye sürükleyin.").to_string()
                                     } else {
-                                        format!("{} sözlük hazır. Aramak için yazmaya başlayın.", self.qm.loaded_names().len())
+                                        tr_args("{n} sözlük hazır. Aramak için yazmaya başlayın.", &[("n", &self.qm.loaded_names().len())])
                                     };
                                     ui.label(RichText::new(msg).size(size * 0.9).weak());
                                     ui.add_space(36.0);
-                                    ui.label(RichText::new("Ctrl+F ara · Ctrl+T yeni sekme · Ctrl+R rastgele · Ctrl+D favori · F1 kısayollar").size(size * 0.8).weak());
+                                    ui.label(RichText::new(tr("Ctrl+F ara · Ctrl+T yeni sekme · Ctrl+R rastgele · Ctrl+D favori · F1 kısayollar")).size(size * 0.8).weak());
                                 });
                             }
                             Content::NotFound { query, suggestions } => {
                                 ui.add_space(24.0);
-                                ui.label(RichText::new("Sonuç yok").size(size * 1.5).strong());
-                                ui.label(RichText::new(format!("“{}” için hiçbir sözlükte eşleşme bulunamadı.", query)).size(size));
+                                ui.label(RichText::new(tr("Sonuç yok")).size(size * 1.5).strong());
+                                ui.label(RichText::new(tr_args("“{word}” için hiçbir sözlükte eşleşme bulunamadı.", &[("word", query)])).size(size));
                                 if !suggestions.is_empty() {
                                     ui.add_space(16.0);
-                                    ui.label(RichText::new("Bunu mu demek istediniz?").size(size * 1.1).strong());
+                                    ui.label(RichText::new(tr("Bunu mu demek istediniz?")).size(size * 1.1).strong());
                                     ui.add_space(4.0);
                                     for (w, score) in suggestions {
                                         ui.horizontal(|ui| {
@@ -2838,10 +2995,10 @@ impl DictzApp {
                                                             }
                                                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                                                 state.show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
-                                                                if ui.small_button("◎ yalnızca bu").on_hover_text("Bu sözlükte yeni sekmede ara").clicked() {
+                                                                if ui.small_button(format!("◎ {}", tr("yalnızca bu"))).on_hover_text(tr("Bu sözlükte yeni sekmede ara")).clicked() {
                                                                     actions.push(Action::OpenWordIn { word: tab.word.clone(), dicts: vec![g.dict.clone()] });
                                                                 }
-                                                                if ui.small_button("📋 kopyala").on_hover_text("Bu makaleyi metin olarak kopyala").clicked() {
+                                                                if ui.small_button(format!("📋 {}", tr("kopyala"))).on_hover_text(tr("Bu makaleyi metin olarak kopyala")).clicked() {
                                                                     actions.push(Action::CopyArticle(Some(gi)));
                                                                 }
                                                             });
@@ -2892,7 +3049,10 @@ impl DictzApp {
                         .desired_width(140.0)
                         .show_percentage(),
                 );
-                ui.label(format!("Sözlükler yükleniyor ({}/{}): {}", i, n, name));
+                ui.label(tr_args(
+                    "Sözlükler yükleniyor ({i}/{n}): {name}",
+                    &[("i", i), ("n", n), ("name", name)],
+                ));
             } else if let Some((msg, at, secs)) = &self.status {
                 if at.elapsed() < Duration::from_secs(*secs) {
                     ui.label(msg);
@@ -2911,12 +3071,11 @@ impl DictzApp {
                     .filter(|n| self.qm.is_enabled(n))
                     .collect();
                 if names.is_empty() {
-                    ui.label("0 sözlük etkin");
+                    ui.label(tr("0 sözlük etkin"));
                 } else {
-                    ui.label(format!(
-                        "{} sözlük · {} kelime",
-                        names.len(),
-                        group(self.qm.word_count())
+                    ui.label(tr_args(
+                        "{n} sözlük · {w} kelime",
+                        &[("n", &names.len()), ("w", &group(self.qm.word_count()))],
                     ));
                 }
                 if !self.timing.is_empty() {
@@ -2931,49 +3090,49 @@ impl DictzApp {
 
     fn manager(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let mut open = self.show_manager;
-        egui::Window::new("Sözlük yöneticisi")
+        egui::Window::new(tr("Sözlük yöneticisi"))
             .open(&mut open)
             .default_size([820.0, 440.0])
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("Dosya ekle…").clicked() {
+                    if ui.button(tr("Dosya ekle…")).clicked() {
                         actions.push(Action::AddDictionaryDialog);
                     }
-                    if ui.button("Klasör ekle…").clicked() {
+                    if ui.button(tr("Klasör ekle…")).clicked() {
                         actions.push(Action::AddFolderDialog);
                     }
                     ui.separator();
                     let sel = self.manager_selected.clone();
                     let en = sel.is_some();
                     let s = sel.clone().unwrap_or_default();
-                    if ui.add_enabled(en, egui::Button::new("En üst")).on_hover_text("En üste taşı").clicked() {
+                    if ui.add_enabled(en, egui::Button::new(tr("En üst"))).on_hover_text(tr("En üste taşı")).clicked() {
                         actions.push(Action::MoveDictTo(s.clone(), true));
                     }
-                    if ui.add_enabled(en, egui::Button::new("↑")).on_hover_text("Yukarı").clicked() {
+                    if ui.add_enabled(en, egui::Button::new("↑")).on_hover_text(tr("Yukarı")).clicked() {
                         actions.push(Action::MoveDict(s.clone(), -1));
                     }
-                    if ui.add_enabled(en, egui::Button::new("↓")).on_hover_text("Aşağı").clicked() {
+                    if ui.add_enabled(en, egui::Button::new("↓")).on_hover_text(tr("Aşağı")).clicked() {
                         actions.push(Action::MoveDict(s.clone(), 1));
                     }
-                    if ui.add_enabled(en, egui::Button::new("En alt")).on_hover_text("En alta taşı").clicked() {
+                    if ui.add_enabled(en, egui::Button::new(tr("En alt"))).on_hover_text(tr("En alta taşı")).clicked() {
                         actions.push(Action::MoveDictTo(s.clone(), false));
                     }
                     ui.separator();
-                    if ui.add_enabled(en, egui::Button::new("Bilgi")).clicked() {
+                    if ui.add_enabled(en, egui::Button::new(tr("Bilgi"))).clicked() {
                         actions.push(Action::Info(s.clone()));
                     }
-                    if ui.add_enabled(en, egui::Button::new("Yeniden indeksle")).clicked() {
+                    if ui.add_enabled(en, egui::Button::new(tr("Yeniden indeksle"))).clicked() {
                         actions.push(Action::Reindex(vec![s.clone()]));
                     }
-                    if ui.add_enabled(en, egui::Button::new("Kaldır…")).clicked() {
+                    if ui.add_enabled(en, egui::Button::new(tr("Kaldır…"))).clicked() {
                         actions.push(Action::Ask(Confirm::RemoveDict(s.clone())));
                     }
                 });
                 ui.separator();
                 egui::ScrollArea::both().id_salt("mgr-list").auto_shrink([false, false]).max_height(330.0).show(ui, |ui| {
                     egui::Grid::new("mgr-grid").striped(true).num_columns(6).spacing([14.0, 6.0]).show(ui, |ui| {
-                        for h in ["✓", "Ad", "Biçim", "Kelime", "Diller", "Dosya"] {
+                        for h in ["✓", &tr("Ad"), &tr("Biçim"), &tr("Kelime"), &tr("Diller"), &tr("Dosya")] {
                             ui.strong(h);
                         }
                         ui.end_row();
@@ -3007,7 +3166,7 @@ impl DictzApp {
                     });
                 });
                 ui.separator();
-                ui.weak("Sıra arama sonuçlarındaki sözlük sırasıdır. Dosyalar silinmez; yalnızca dictz listesinden çıkarılır.");
+                ui.weak(tr("Sıra arama sonuçlarındaki sözlük sırasıdır. Dosyalar silinmez; yalnızca dictz listesinden çıkarılır."));
             });
         self.show_manager = open;
     }
@@ -3065,29 +3224,31 @@ impl DictzApp {
         if self.show_about {
             let mut open = true;
             let data_dir = self.data_dir.display().to_string();
-            simple(ctx, "dictz hakkında", &mut open, &mut |ui| {
+            simple(ctx, &tr("dictz hakkında"), &mut open, &mut |ui| {
                 ui.heading(format!("dictz {}", VERSION));
-                ui.label("Çok formatlı çevrimdışı sözlük — Rust sürümü.");
-                ui.label("Python sürümüyle aynı özellikler, aynı ayar ve indeks dosyaları.");
+                ui.label(tr("Çok formatlı çevrimdışı sözlük — Rust sürümü."));
+                ui.label(tr(
+                    "Python sürümüyle aynı özellikler, aynı ayar ve indeks dosyaları.",
+                ));
                 ui.label("© 2026 Bayram Kotan · GPL-3.0+");
                 if ui.link("github.com/bayramkotan/dictz").clicked() {
                     let _ = system::open_external("https://github.com/bayramkotan/dictz");
                 }
-                ui.weak(format!("Veri klasörü: {}", data_dir));
+                ui.weak(format!("{} {}", tr("Veri klasörü:"), data_dir));
             });
             self.show_about = open;
         }
 
         if self.show_shortcuts {
             let mut open = true;
-            simple(ctx, "Kısayollar", &mut open, &mut |ui| {
+            simple(ctx, &tr("Kısayollar"), &mut open, &mut |ui| {
                 egui::Grid::new("sc-help")
                     .striped(true)
                     .spacing([24.0, 6.0])
                     .show(ui, |ui| {
                         for (k, d) in SHORTCUTS {
                             ui.monospace(*k);
-                            ui.label(*d);
+                            ui.label(tr(d));
                             ui.end_row();
                         }
                     });
@@ -3097,8 +3258,8 @@ impl DictzApp {
 
         if self.show_cli {
             let mut open = true;
-            simple(ctx, "Komut satırı", &mut open, &mut |ui| {
-                ui.label("dictz komut satırından da tam olarak kullanılabilir (Python sürümünde aynı komutlar):");
+            simple(ctx, &tr("Komut satırı"), &mut open, &mut |ui| {
+                ui.label(tr("dictz komut satırından da tam olarak kullanılabilir (Python sürümünde aynı komutlar):"));
                 ui.add_space(4.0);
                 #[cfg(feature = "cli")]
                 egui::Grid::new("cli-help")
@@ -3112,7 +3273,7 @@ impl DictzApp {
                         }
                     });
                 ui.add_space(4.0);
-                ui.label("Ayrıntı: dictz help, dictz <komut> --help");
+                ui.label(tr("Ayrıntı: dictz help, dictz <komut> --help"));
             });
             self.show_cli = open;
         }
@@ -3122,7 +3283,7 @@ impl DictzApp {
             let text = self.info_text(&name);
             simple(
                 ctx,
-                &format!("Sözlük bilgisi — {}", name),
+                &format!("{} — {}", tr("Sözlük bilgisi"), name),
                 &mut open,
                 &mut |ui| {
                     let mut parts = text.splitn(2, "\n\n");
@@ -3160,12 +3321,12 @@ impl DictzApp {
 
         if let Some(msg) = self.update_msg.clone() {
             let mut close = false;
-            egui::Window::new("Güncelleme")
+            egui::Window::new(tr("Güncelleme"))
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| {
                     ui.label(msg);
-                    if ui.button("Tamam").clicked() {
+                    if ui.button(tr("Tamam")).clicked() {
                         close = true;
                     }
                 });
@@ -3176,18 +3337,18 @@ impl DictzApp {
 
         if let Some(c) = self.confirm.clone() {
             let (title, text) = match &c {
-                Confirm::ClearHistory => ("Geçmişi temizle", "Tüm arama geçmişi silinsin mi?".to_string()),
-                Confirm::ClearFavorites => ("Favorileri temizle", "Tüm favoriler silinsin mi?".to_string()),
-                Confirm::RemoveDict(n) => ("Sözlüğü kaldır", format!("“{}” dictz listesinden çıkarılsın mı?\n(Dosya silinmez.)", n)),
+                Confirm::ClearHistory => (tr("Geçmişi temizle"), tr("Tüm arama geçmişi silinsin mi?").to_string()),
+                Confirm::ClearFavorites => (tr("Favorileri temizle"), tr("Tüm favoriler silinsin mi?").to_string()),
+                Confirm::RemoveDict(n) => (tr("Sözlüğü kaldır"), tr_args("“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)", &[("name", n)])),
                 Confirm::AddFolder(new, total) => (
-                    "Klasör ekle",
+                    tr("Klasör ekle"),
                     format!(
-                        "{} sözlük bulundu, {} tanesi yeni.\nYeni olanlar eklensin mi?\n\nİpucu: Tercihler → Sözlükler'e klasör ekleyince her açılışta otomatik taranır.",
-                        total,
-                        new.len()
+                        "{}\n\n{}",
+                        tr_args("{n} sözlük bulundu, {m} tanesi yeni.\nYeni olanlar eklensin mi?", &[("n", total), ("m", &new.len())]),
+                        tr("İpucu: Tercihler → Sözlükler'e klasör ekleyince her açılışta otomatik taranır.")
                     ),
                 ),
-                Confirm::Quit => ("Çıkış", "dictz kapatılsın mı?".to_string()),
+                Confirm::Quit => (tr("Çıkış"), tr("dictz kapatılsın mı?").to_string()),
             };
             let mut answer = None;
             egui::Window::new(title)
@@ -3198,10 +3359,10 @@ impl DictzApp {
                     ui.label(text);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Evet").clicked() {
+                        if ui.button(tr("Evet")).clicked() {
                             answer = Some(true);
                         }
-                        if ui.button("Hayır").clicked() {
+                        if ui.button(tr("Hayır")).clicked() {
                             answer = Some(false);
                         }
                     });
@@ -3239,7 +3400,7 @@ impl DictzApp {
                 .resizable(false)
                 .show(ctx, |ui| {
                     ui.label(msg);
-                    if ui.button("Tamam").clicked() {
+                    if ui.button(tr("Tamam")).clicked() {
                         self.error = None;
                     }
                 });
@@ -3330,7 +3491,7 @@ impl eframe::App for DictzApp {
             self.win.hide(ctx);
             if !self.tray_hint_shown {
                 self.tray_hint_shown = true;
-                self.set_status("dictz tepside çalışmaya devam ediyor", 5);
+                self.set_status(tr("dictz tepside çalışmaya devam ediyor"), 5);
             }
         } else if ctx.input(|i| i.viewport().close_requested())
             && !self.allow_close
@@ -3439,11 +3600,11 @@ fn lighten(c: Color32) -> Color32 {
     Color32::from_rgb(m(c.r()), m(c.g()), m(c.b()))
 }
 
-fn theme_label(theme: &str) -> &'static str {
+fn theme_label(theme: &str) -> String {
     match theme {
-        "light" => "Açık",
-        "dark" => "Koyu",
-        _ => "Otomatik",
+        "light" => tr("Açık"),
+        "dark" => tr("Koyu"),
+        _ => tr("Otomatik"),
     }
 }
 

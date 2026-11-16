@@ -49,6 +49,7 @@ pub mod fuzzy;
 pub mod history;
 pub mod hotkeys;
 pub mod html;
+pub mod i18n;
 pub mod icon;
 pub mod index;
 pub mod instance;

@@ -349,7 +349,25 @@ def write_dictident_golden() -> None:
                                                 encoding="utf-8")
 
 
+def write_i18n() -> None:
+    """Rust copy of the interface catalogues and flags (embedded with include_str!/include_bytes!)."""
+    import shutil
+
+    root = HERE.parents[2]
+    src = root / "dictz" / "resources" / "i18n"
+    catalog = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in sorted(src.glob("*.json"))}
+    out = root / "dictz-rs" / "src" / "i18n" / "catalog.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(catalog, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+                   encoding="utf-8")
+    flags = root / "dictz-rs" / "src" / "flags"
+    flags.mkdir(parents=True, exist_ok=True)
+    for f in (root / "dictz" / "resources" / "flags").iterdir():
+        shutil.copyfile(f, flags / f.name)
+
+
 if __name__ == "__main__":
+    write_i18n()
     write_dsl()
     write_bgl()
     write_golden()
