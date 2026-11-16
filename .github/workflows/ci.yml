@@ -16,6 +16,19 @@ name: CI
 #   CARGO_REGISTRY_TOKEN  crates.io API token
 # A tag release fails within seconds with a clear message if either is missing.
 
+# Every run in the Actions list starts with the version: "v0.0.8: <commit title>".
+# A release commit's title already starts with "vX.Y.Z:"; if a tag lands on any
+# other commit, the tag is put in front so the list still reads version-first
+# (and the preflight below fails that run).
+run-name: >-
+  ${{ github.event_name == 'push'
+      && (startsWith(github.event.head_commit.message, format('{0}:', github.ref_name))
+          && github.event.head_commit.message
+          || format('{0}: {1}', github.ref_name, github.event.head_commit.message))
+      || (github.event_name == 'pull_request'
+          && format('PR #{0}: {1}', github.event.number, github.event.pull_request.title)
+          || format('manual run on {0}', github.ref_name)) }}
+
 on:
   push:
     tags: ['v*']
@@ -74,6 +87,15 @@ jobs:
             echo "::error::Tag v$tag does not match pyproject ($py), dictz/__init__.py ($init) and dictz-rs/Cargo.toml ($rs)."
             exit 1
           fi
+      - name: Check the tagged commit is the release commit
+        run: |
+          title=$(git log -1 --format=%s)
+          echo "commit title: $title"
+          case "$title" in
+            "${GITHUB_REF_NAME}: "*) ;;
+            *) echo "::error::The tag ${GITHUB_REF_NAME} is on a commit whose title does not start with '${GITHUB_REF_NAME}: ' — it was put on the wrong commit. Delete it (git tag -d ${GITHUB_REF_NAME}; git push origin :refs/tags/${GITHUB_REF_NAME}), commit the release as '${GITHUB_REF_NAME}: ...' and tag again."
+               exit 1 ;;
+          esac
 
   # ===================================================================
   # 1) Lint
