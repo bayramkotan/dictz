@@ -60,7 +60,22 @@ def _attach_console() -> None:
         pass
 
 
-def run_gui(files: list[str] | None = None) -> int:
+def _hand_over(data_dir: Path, files: list[str], popup: str | None) -> bool:
+    """Single instance: pass the request to the running dictz. True = done."""
+    from .core.instance import send
+
+    if send(data_dir, {"cmd": "ping"}, timeout=1.0) is None:
+        return False
+    if files:
+        send(data_dir, {"cmd": "open", "files": [str(Path(f).absolute()) for f in files]})
+    if popup is not None:
+        send(data_dir, {"cmd": "popup", "word": popup})
+    else:
+        send(data_dir, {"cmd": "show"})
+    return True
+
+
+def run_gui(files: list[str] | None = None, popup: str | None = None) -> int:
     from PySide6.QtWidgets import QApplication
 
     from .core.query_manager import QueryManager
@@ -74,9 +89,15 @@ def run_gui(files: list[str] | None = None) -> int:
     app.setApplicationVersion(__version__)
     app.setOrganizationName("Bayram Kotan")
     app.setOrganizationDomain("bayramkotan.com")
+    from .ui.icons import app_icon
+
+    app.setWindowIcon(app_icon())
 
     data_dir = user_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
+    if Preferences.load(data_dir / SETTINGS_FILE)["general.single_instance"] and _hand_over(
+            data_dir, files or [], popup):
+        return 0
 
     index_store = IndexStore(data_dir / "dictz_index.db")
     index_store.open()
@@ -90,8 +111,12 @@ def run_gui(files: list[str] | None = None) -> int:
     # The window opens at once; dictionaries load in the background.
     window = MainWindow(query_manager, history_store, prefs,
                         startup_files=[Path(f) for f in (files or [])])
-    window.show()
+    window.start_services(data_dir)
+    if not window.starts_hidden():
+        window.show()
     window.start_loading()
+    if popup is not None:
+        window.popup_lookup(popup)
     return app.exec()
 
 

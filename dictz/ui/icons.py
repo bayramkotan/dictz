@@ -26,6 +26,7 @@ _ICON_MAP = {
     "down": QStyle.StandardPixmap.SP_ArrowDown,
     "history": QStyle.StandardPixmap.SP_FileDialogListView,
     "theme": QStyle.StandardPixmap.SP_DesktopIcon,
+    "scan": QStyle.StandardPixmap.SP_FileDialogContentsView,
 }
 
 
@@ -38,3 +39,13 @@ def icon(name: str) -> QIcon:
     if pixmap_enum is None:
         return QIcon()
     return style.standardIcon(pixmap_enum)
+
+
+def app_icon() -> QIcon:
+    from PySide6.QtGui import QImage, QPixmap
+
+    from ..core.icon import app_icon_rgba
+
+    data = app_icon_rgba(64)
+    img = QImage(data, 64, 64, 64 * 4, QImage.Format.Format_RGBA8888).copy()
+    return QIcon(QPixmap.fromImage(img))

@@ -193,6 +193,63 @@ TEXT_SNIPPETS = [
 ]
 
 
+def _icon_rgba() -> bytes:
+    from dictz.core.icon import app_icon_rgba
+
+    return app_icon_rgba(64)
+
+
+def _fnv1a64(data: bytes) -> str:
+    h = 0xcbf29ce484222325
+    for b in data:
+        h ^= b
+        h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return f"{h:016x}"
+
+
+def _rs(s: str) -> str:
+    return json.dumps(s, ensure_ascii=False)
+
+
+def _num(x) -> str:
+    return "None" if x is None else f"Some({float(x)!r})"
+
+
+def write_rust_schema() -> None:
+    """Regenerate the schema block of dictz-rs/src/settings.rs from the Python schema."""
+    from dictz.storage.settings import SCHEMA, SECTIONS
+
+    kinds = {"bool": "Bool", "int": "Int", "float": "Float", "str": "Str", "choice": "Choice",
+             "color": "Color", "list": "List"}
+    out = ["// BEGIN GENERATED SCHEMA — written by tests/data/parity/make_samples.py from dictz/storage/settings.py",
+           "/// Preference sections: (id, title).",
+           "pub const SECTIONS: &[(&str, &str)] = &["]
+    out += [f"    ({_rs(a)}, {_rs(b)})," for a, b in SECTIONS]
+    out += ["];", "", "/// Every setting (same order as the Python edition).", "pub static SCHEMA: &[Setting] = &["]
+    for st in SCHEMA:
+        if st.kind == "bool":
+            d = f"Def::Bool({'true' if st.default else 'false'})"
+        elif st.kind == "int":
+            d = f"Def::Int({int(st.default)})"
+        elif st.kind == "float":
+            d = f"Def::Float({float(st.default)!r})"
+        elif st.kind == "list":
+            d = "Def::List"
+        else:
+            d = f"Def::Str({_rs(st.default)})"
+        choices = "&[" + ", ".join(f"({_rs(a)}, {_rs(b)})" for a, b in st.choices) + "]"
+        out += ["    Setting {", f"        key: {_rs(st.key)},", f"        kind: Kind::{kinds[st.kind]},",
+                f"        default: {d},", f"        label: {_rs(st.label)},", f"        help: {_rs(st.help)},",
+                f"        min: {_num(st.min)},", f"        max: {_num(st.max)},", f"        choices: {choices},",
+                "    },"]
+    out += ["];", "// END GENERATED SCHEMA"]
+    rs = ROOT / "dictz-rs" / "src" / "settings.rs"
+    text = rs.read_text(encoding="utf-8")
+    a = text.index("// BEGIN GENERATED SCHEMA")
+    b = text.index("// END GENERATED SCHEMA") + len("// END GENERATED SCHEMA")
+    rs.write_text(text[:a] + "\n".join(out) + text[b:], encoding="utf-8")
+
+
 def write_golden() -> None:
     from rapidfuzz import fuzz
 
@@ -229,6 +286,33 @@ def write_golden() -> None:
 
     (HERE / "shortcuts.json").write_text(json.dumps(SHORTCUTS, ensure_ascii=False, indent=1) + "\n",
                                          encoding="utf-8")
+    from dictz.core.hotkeys import parse_hotkey
+    from dictz.core.scantext import DoubleCopy, clean_scan_text
+
+    scan_cases = ["  Hello, ", '"apple."', "two  words", "a\nb", "123", "", "(kitap)…", "x" * 90,
+                  "İstanbul’da", "«merhaba»", "  — dash —  ", "e-mail", "C++", "naïve café", "tab\tsep",
+                  "x" * 80, "x" * 81, "¿qué?", "日本語", "...", "'quoted'"]
+    double_seq = [["a", 0], ["a", 300], ["a", 400], ["a", 1000], ["a", 1600], ["b", 1700], ["a", 1800],
+                  ["a", 2400], ["a", 2401]]
+    d = DoubleCopy(500)
+    hotkey_cases = ["Ctrl+F11", "ctrl+alt+d", "Shift+Super+Space", "F5", "Ctrl+PgUp", "Alt+Enter",
+                    "a", "Ctrl+", "Hyper+A", "Ctrl+F25", "Win+1", "Cmd+Shift+K"]
+
+    def hk(text):
+        try:
+            h = parse_hotkey(text)
+            return {"ok": True, "mods": sorted(h.mods), "key": h.key, "text": str(h)}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    scan = {
+        "clean": [[t, clean_scan_text(t, 80)] for t in scan_cases],
+        "double_copy_500": [[t, ms, d.feed(t, ms)] for t, ms in double_seq],
+        "hotkeys": [[t, hk(t)] for t in hotkey_cases],
+        "icon_fnv1a64": _fnv1a64(_icon_rgba()),
+    }
+    (HERE / "scan_golden.json").write_text(json.dumps(scan, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    write_rust_schema()
     fz = [[a, b, fuzz.ratio(a.lower(), b.lower())] for a, b in FUZZY_PAIRS]
     (HERE / "fuzzy_golden.json").write_text(json.dumps(fz, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 

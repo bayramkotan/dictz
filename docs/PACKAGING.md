@@ -60,6 +60,18 @@ dictz doctor          # install kind, paths, index, history + selftest
 
 `--selftest` loads a generated StarDict and DSL dictionary, checks the DSL and Babylon plugins, and creates an SQLite FTS5 index — without opening a window. CI runs it against every frozen binary, the AppImage, and the pip-installed console script. On Windows both `dictz.exe` builds are windowed programs; for CLI commands they attach to the console they were started from (Python: `AttachConsole` + `CONOUT$`, Rust: `windows-sys`), so `dictz lookup …` prints in cmd / PowerShell. For CI, `DICTZ_SELFTEST_REPORT=path\to\report.txt` still writes the selftest report to a file.
 
+## Scan popup, tray and hotkeys — platform notes
+
+| | Python edition | Rust edition |
+|---|---|---|
+| Clipboard / Ctrl+C+C | Qt clipboard signals | Windows: clipboard format listener · macOS: pasteboard change count · Linux X11: XFixes (x11rb) · otherwise polling |
+| Selection scan (Linux) | Qt selection signal | primary selection polled (arboard) |
+| Tray | QSystemTrayIcon | Linux: StatusNotifierItem over D-Bus (ksni) · Windows/macOS: tray-icon |
+| Global hotkeys | Windows: RegisterHotKey (ctypes) · X11: XGrabKey (python-xlib) · macOS: pynput (`dictz[hotkeys]`) | global-hotkey (Windows, macOS, X11) |
+| Wayland | no global hotkeys or "near the mouse"; bind desktop shortcuts to `dictz popup` / `show` / `watch toggle` | same; hide-to-tray minimizes |
+
+No new system packages are needed to build either edition. A Linux tray needs a StatusNotifierItem host at runtime (KDE Plasma, GNOME with the AppIndicator extension, Xfce, …); without one dictz runs without the tray icon.
+
 ## Updating an installed copy
 
 `dictz update` (both editions) detects how it was installed and updates it in place — nothing is moved:

@@ -189,3 +189,53 @@ fn shortcuts_match_python_edition() {
         .collect();
     assert_eq!(theirs, dictz::shortcuts::SHORTCUTS.to_vec());
 }
+
+#[test]
+fn scan_text_and_hotkeys_match_python_edition() {
+    let g: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(parity_dir().join("scan_golden.json")).unwrap(),
+    )
+    .unwrap();
+    for case in g["clean"].as_array().unwrap() {
+        let text = case[0].as_str().unwrap();
+        let want = case[1].as_str();
+        assert_eq!(
+            dictz::scantext::clean_scan_text(text, 80).as_deref(),
+            want,
+            "{:?}",
+            text
+        );
+    }
+    let mut d = dictz::scantext::DoubleCopy::new(500.0);
+    for case in g["double_copy_500"].as_array().unwrap() {
+        let got = d.feed(case[0].as_str().unwrap(), case[1].as_f64().unwrap());
+        assert_eq!(got, case[2].as_bool().unwrap(), "{:?}", case);
+    }
+    for case in g["hotkeys"].as_array().unwrap() {
+        let text = case[0].as_str().unwrap();
+        let want = &case[1];
+        match dictz::hotkeys::parse_hotkey(text) {
+            Ok(h) => {
+                assert_eq!(want["ok"], true, "{}", text);
+                let mods: Vec<&str> = want["mods"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|m| m.as_str().unwrap())
+                    .collect();
+                assert_eq!(h.mods, mods, "{}", text);
+                assert_eq!(h.key, want["key"].as_str().unwrap(), "{}", text);
+                assert_eq!(h.to_string(), want["text"].as_str().unwrap(), "{}", text);
+            }
+            Err(e) => {
+                assert_eq!(want["ok"], false, "{}", text);
+                assert_eq!(e, want["error"].as_str().unwrap(), "{}", text);
+            }
+        }
+    }
+    let icon = dictz::icon::app_icon_rgba(64);
+    assert_eq!(
+        format!("{:016x}", dictz::icon::fnv1a64(&icon)),
+        g["icon_fnv1a64"].as_str().unwrap()
+    );
+}

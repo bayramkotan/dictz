@@ -100,6 +100,18 @@
   "interactive lookup prompt"
  ],
  [
+  "show",
+  "bring the running window to the front (starts dictz if needed)"
+ ],
+ [
+  "popup",
+  "look a word up in the running dictz's scan popup"
+ ],
+ [
+  "watch",
+  "turn clipboard / selection scanning on or off"
+ ],
+ [
   "help",
   "show help"
  ]

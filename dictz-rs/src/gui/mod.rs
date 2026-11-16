@@ -11,18 +11,52 @@ mod audio;
 mod fonts;
 mod prefs_window;
 mod render;
+mod services;
 pub mod system;
+mod window;
 
 use std::path::PathBuf;
 
 use crate::paths::PREFS_FILE;
 use crate::settings::{Preferences, SETTINGS_FILE};
 
-/// Start the GUI, adding `files` (dictionaries) first. Blocks until the
-/// window is closed.
-pub fn run(data_dir: PathBuf, files: Vec<PathBuf>) -> Result<(), String> {
+/// Single instance: pass the request to the running dictz. `true` = done.
+fn hand_over(data_dir: &std::path::Path, files: &[PathBuf], popup: &Option<String>) -> bool {
+    use crate::instance::send;
+    use serde_json::json;
+    use std::time::Duration;
+    let t = Duration::from_secs(2);
+    if send(data_dir, &json!({"cmd": "ping"}), Duration::from_secs(1)).is_none() {
+        return false;
+    }
+    if !files.is_empty() {
+        let files: Vec<String> = files
+            .iter()
+            .map(|f| {
+                std::path::absolute(f)
+                    .unwrap_or_else(|_| f.clone())
+                    .display()
+                    .to_string()
+            })
+            .collect();
+        send(data_dir, &json!({"cmd": "open", "files": files}), t);
+    }
+    match popup {
+        Some(w) => send(data_dir, &json!({"cmd": "popup", "word": w}), t),
+        None => send(data_dir, &json!({"cmd": "show"}), t),
+    };
+    true
+}
+
+/// Start the GUI, adding `files` (dictionaries) first; `popup` opens the
+/// scan popup with that word (empty = clipboard). Blocks until the window is
+/// closed.
+pub fn run(data_dir: PathBuf, files: Vec<PathBuf>, popup: Option<String>) -> Result<(), String> {
     let _ = std::fs::create_dir_all(&data_dir);
     let mut prefs = Preferences::load(&data_dir.join(SETTINGS_FILE));
+    if prefs.bool("general.single_instance") && hand_over(&data_dir, &files, &popup) {
+        return Ok(());
+    }
     prefs.migrate_from_ini(&data_dir.join(PREFS_FILE));
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("dictz")
@@ -42,51 +76,20 @@ pub fn run(data_dir: PathBuf, files: Vec<PathBuf>) -> Result<(), String> {
     eframe::run_native(
         "dictz",
         options,
-        Box::new(move |cc| Ok(Box::new(app::DictzApp::new(cc, data_dir, prefs, files)))),
+        Box::new(move |cc| {
+            Ok(Box::new(app::DictzApp::new(
+                cc, data_dir, prefs, files, popup,
+            )))
+        }),
     )
     .map_err(|e| e.to_string())
 }
 
-/// 64×64 window icon drawn in code: a blue rounded square with an open book.
+/// 64×64 window icon (the same pixels as the Python edition's).
 fn app_icon() -> eframe::egui::IconData {
-    const N: usize = 64;
-    let mut rgba = vec![0u8; N * N * 4];
-    let inside_rounded = |x: f32, y: f32| {
-        let r = 12.0;
-        let cx = x.clamp(r, N as f32 - r);
-        let cy = y.clamp(r, N as f32 - r);
-        (x - cx).powi(2) + (y - cy).powi(2) <= r * r
-    };
-    for y in 0..N {
-        for x in 0..N {
-            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-            let i = (y * N + x) * 4;
-            if !inside_rounded(fx, fy) {
-                continue;
-            }
-            let mut c = [0x25u8, 0x63, 0xEB, 0xFF];
-            // two pages of an open book
-            let page = (14..=30).contains(&x) || (33..=49).contains(&x);
-            let top = 18
-                + if x < 32 {
-                    (30 - x.min(30)) / 6
-                } else {
-                    (x.max(33) - 33) / 6
-                };
-            if page && (top..=46).contains(&y) {
-                c = [0xFF, 0xFF, 0xFF, 0xFF];
-                let line_row = y > top + 4 && (y - top) % 6 == 0 && y < 44;
-                let line_col = (17..=27).contains(&x) || (36..=46).contains(&x);
-                if line_row && line_col {
-                    c = [0x93, 0xB4, 0xF5, 0xFF];
-                }
-            }
-            rgba[i..i + 4].copy_from_slice(&c);
-        }
-    }
     eframe::egui::IconData {
-        rgba,
-        width: N as u32,
-        height: N as u32,
+        rgba: crate::icon::app_icon_rgba(64),
+        width: 64,
+        height: 64,
     }
 }

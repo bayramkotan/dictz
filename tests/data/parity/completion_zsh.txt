@@ -2,7 +2,7 @@
 # dictz zsh completion — add to ~/.zshrc:  eval "$(dictz completion zsh)"
 _dictz() {
     if (( CURRENT == 2 )); then
-        compadd -- add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths random reindex remove rm s scan selftest shell suggest update upgrade version
+        compadd -- add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths popup random reindex remove rm s scan selftest shell show suggest update upgrade version watch
         return
     fi
     case "${words[2]}" in
@@ -10,6 +10,7 @@ _dictz() {
         config) compadd -- list get set reset path export import ;;
         favorites|fav) compadd -- list add remove clear ;;
         completion) compadd -- bash zsh fish powershell ;;
+        watch) compadd -- on off toggle status ;;
         *) _files ;;
     esac
 }

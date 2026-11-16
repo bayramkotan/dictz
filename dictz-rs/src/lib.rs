@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.0.7", default-features = false }
+//! dictz = { version = "0.0.8", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -31,7 +31,7 @@
 //! }
 //! ```
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::fmt;
@@ -43,11 +43,15 @@ pub mod cli;
 pub mod dsl;
 pub mod fuzzy;
 pub mod history;
+pub mod hotkeys;
 pub mod html;
+pub mod icon;
 pub mod index;
+pub mod instance;
 pub mod media;
 pub mod paths;
 pub mod query;
+pub mod scantext;
 pub mod selftest;
 pub mod settings;
 pub mod shortcuts;

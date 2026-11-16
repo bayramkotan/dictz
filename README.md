@@ -51,7 +51,8 @@ Check any install with `dictz doctor` or `dictz selftest` (exit code 0 = diction
 - **Pictures and sounds** — DSL `[s]` media from `*.dsl.files/` or `*.dsl.files.zip`: pictures inline, sounds with one click
 - **Offline** — no network calls, no telemetry
 - **Modern UI** — tabbed definitions, dictionary bar, "found in" panel, collapsible articles, find in page, sidebar (dictionaries / favorites / history), back/forward, light + dark themes, accent color, fonts, zoom
-- **Detailed settings** — 54 settings in 7 pages with search and per-setting reset, shared by both editions in one `settings.json`
+- **Scan popup** — copy a word in any program (Ctrl+C+C, every copy, or just select it on Linux) and its articles pop up next to the mouse; tray icon, global hotkeys, single instance
+- **Detailed settings** — 75 settings in 9 pages with search and per-setting reset, shared by both editions in one `settings.json`
 - **Full command line** — `dictz lookup`, `dicts`, `add`, `config`, `doctor`, **`dictz update`**, shell completion… the same in both editions
 - **Two editions** — Python and Rust, same features, same release, shared data
 - **Portable** — every release ships standalone binaries of both editions for Windows, Linux and macOS (Apple Silicon), each self-tested in CI before publishing
@@ -99,6 +100,9 @@ dictz config get | reset | path | export FILE | import FILE
 dictz paths                   # data folder, settings, databases
 dictz doctor                  # install kind, paths, index, history, selftest
 dictz update [--check] [--yes]           # updates this copy where it is installed
+dictz show                    # bring the running window to the front (starts it if needed)
+dictz popup [WORD]            # scan popup in the running dictz (no WORD = clipboard)
+dictz watch on|off|toggle|status         # clipboard / selection scanning
 eval "$(dictz completion bash)"          # also zsh, fish, powershell
 ```
 
@@ -106,16 +110,30 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 `dictz update` knows how it was installed: pip / pipx / venv / `--user` / system / editable / AppImage / portable (Python), `cargo install` / portable binary (Rust).
 
+### Scan popup (like GoldenDict)
+
+Turn on **Tarama** in the toolbar (or `dictz watch on`, or Ctrl+F12). Then in any program:
+
+- select a word and press **Ctrl+C twice** quickly (Ctrl+C+C), or
+- with "Her kopyalamada ara" on: copy it once, or
+- on Linux with "Seçilen metni ara" on: just select it with the mouse.
+
+A small window with the articles opens next to the mouse: 📌 keeps it open, ⤢ opens the word in the main window, Esc or moving the mouse away closes it. dictz keeps running in the **tray** when "Kapatınca tepsiye gizle" is on.
+
+Global hotkeys: Ctrl+F11 shows/hides the window, Ctrl+F12 turns scanning on/off, Ctrl+Shift+F11 looks the clipboard up (changeable in Tercihler → Genel kısayollar). They work on Windows, macOS and Linux X11. Wayland does not let programs grab keys: bind a desktop shortcut to `dictz popup`, `dictz show` or `dictz watch toggle` instead. Either edition's CLI talks to either edition's window.
+
 ## Settings
 
-**Düzen → Tercihler** (Ctrl+,) or `dictz config`. 54 settings, stored in `settings.json` in the data folder and shared by both editions:
+**Düzen → Tercihler** (Ctrl+,) or `dictz config`. 75 settings, stored in `settings.json` in the data folder and shared by both editions:
 
 | Page | Examples |
 |---|---|
-| Genel | restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background |
+| Genel | restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, single instance |
 | Görünüm | theme, accent color, UI font and size, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
 | Makale | font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, picture height, find highlight color |
 | Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
+| Tarama penceresi | scanning on/off, Ctrl+C+C, every copy, selection (Linux), Ctrl+C+C interval, max text length, open near the mouse, always on top, hide when the mouse leaves + delay, size, record in history |
+| Genel kısayollar | on/off, show/hide main window (Ctrl+F11), scanning on/off (Ctrl+F12), look up the clipboard (Ctrl+Shift+F11) |
 | Sözlükler | dictionary folders scanned on start, recursive, reindex changed files |
 | Ses | auto-play, volume, system player |
 | Geçmiş ve Favoriler | history on/off, sidebar counts, database limit, clear on exit |
@@ -238,7 +256,8 @@ Veya PyPI: `pip install dictz` (veya `pipx install dictz`).
 - **Resim ve ses** — DSL `[s]` dosyaları (`*.dsl.files/` veya `*.dsl.files.zip`)
 - **Çevrimdışı** — ağ yok, telemetri yok
 - **Modern arayüz** — sekmeler, sözlük çubuğu, "bulunduğu sözlükler" paneli, katlanır makaleler, sayfada bul, favoriler, geçmiş, koyu/açık tema, vurgu rengi
-- **Ayrıntılı ayarlar** — 7 sayfada 54 ayar; arama kutusu, ayar başına sıfırlama; iki sürüm aynı `settings.json` dosyasını kullanır
+- **Tarama penceresi** — herhangi bir programda kelimeyi kopyalayın (Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek) ve makale imlecin yanında açılsın; tepsi simgesi, genel kısayollar, tek kopya
+- **Ayrıntılı ayarlar** — 9 sayfada 75 ayar; arama kutusu, ayar başına sıfırlama; iki sürüm aynı `settings.json` dosyasını kullanır
 - **Tam komut satırı** — `dictz lookup`, `dicts`, `add`, `config`, `doctor`, **`dictz update`**, kabuk tamamlama… iki sürümde aynı (`dictz help`)
 - **İki sürüm** — Python ve Rust, aynı özellikler, aynı sürüm numarası
 - **Portable** — Windows/Linux/macOS için iki sürümün de binary'leri her release'te

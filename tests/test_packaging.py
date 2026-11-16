@@ -224,7 +224,7 @@ def test_rust_crate_is_a_full_application() -> None:
     """crates.io ships the Rust edition app (binary `dictz`), not a stub."""
     cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
     assert '[[bin]]\nname = "dictz"' in cargo
-    assert 'default = ["cli", "gui", "audio", "update"]' in cargo
+    assert 'default = ["cli", "gui", "audio", "update", "scan"]' in cargo
     assert '"src/completion/*.txt"' in cargo, "completion scripts are include_str!-ed"
     assert '"Cargo.lock"' in cargo, "Cargo.lock must be published (binary crate)"
     assert (ROOT / "dictz-rs" / "Cargo.lock").is_file()
@@ -232,6 +232,7 @@ def test_rust_crate_is_a_full_application() -> None:
     for module in ("stardict.rs", "dsl.rs", "babylon.rs", "index.rs", "history.rs",
                    "fuzzy.rs", "media.rs", "query.rs", "selftest.rs", "main.rs",
                    "cli.rs", "updater.rs", "settings.rs", "shortcuts.rs", "html.rs",
+                   "instance.rs", "scantext.rs", "hotkeys.rs", "icon.rs", "gui/services.rs", "gui/window.rs",
                    "gui/app.rs", "gui/prefs_window.rs", "gui/render.rs"):
         assert (src / module).is_file(), f"dictz-rs/src/{module} missing"
 
@@ -334,3 +335,14 @@ def test_python_version_floor_matches_pyproject() -> None:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     requires = data["project"]["requires-python"]
     assert requires.startswith(">="), f"unexpected requires-python: {requires}"
+
+
+def test_scan_popup_modules_in_both_editions() -> None:
+    """v0.0.8: scan popup, instance protocol, hotkeys — Python and Rust."""
+    for f in ("dictz/core/instance.py", "dictz/core/scantext.py", "dictz/core/hotkeys.py",
+              "dictz/ui/scan_popup.py", "dictz/ui/scanner.py"):
+        assert (ROOT / f).is_file(), f
+    py = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "python-xlib" in py, "Linux global hotkeys (XGrabKey) need python-xlib"
+    spec = (ROOT / "packaging" / "pyinstaller" / "dictz.spec").read_text(encoding="utf-8")
+    assert 'collect_submodules("Xlib")' in spec

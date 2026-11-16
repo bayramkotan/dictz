@@ -25,9 +25,13 @@ complete -c dictz -n '__fish_use_subcommand' -a update -d 'update this copy of d
 complete -c dictz -n '__fish_use_subcommand' -a version -d 'print the version'
 complete -c dictz -n '__fish_use_subcommand' -a completion -d 'shell completion script'
 complete -c dictz -n '__fish_use_subcommand' -a shell -d 'interactive lookup prompt'
+complete -c dictz -n '__fish_use_subcommand' -a show -d 'bring the running window to the front (starts dictz if needed)'
+complete -c dictz -n '__fish_use_subcommand' -a popup -d 'look a word up in the running dictzs scan popup'
+complete -c dictz -n '__fish_use_subcommand' -a watch -d 'turn clipboard / selection scanning on or off'
 complete -c dictz -n '__fish_use_subcommand' -a help -d 'show help'
 complete -c dictz -n '__fish_seen_subcommand_from lookup l remove rm enable disable move info reindex dump random' -a '(dictz dicts --names 2>/dev/null)'
 complete -c dictz -n '__fish_seen_subcommand_from config' -a 'list get set reset path export import'
 complete -c dictz -n '__fish_seen_subcommand_from favorites fav' -a 'list add remove clear'
 complete -c dictz -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
+complete -c dictz -n '__fish_seen_subcommand_from watch' -a 'on off toggle status'
 complete -c dictz -n '__fish_seen_subcommand_from add scan' -F

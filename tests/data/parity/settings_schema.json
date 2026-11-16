@@ -49,6 +49,34 @@
   "help": "Pencere hemen açılır; sözlükler yüklendikçe kullanılabilir olur."
  },
  {
+  "key": "general.tray_icon",
+  "kind": "bool",
+  "default": true,
+  "label": "Sistem tepsisinde simge göster",
+  "help": "Tıklayınca pencere açılır/gizlenir; sağ tık menüsünden tarama açılıp kapatılır."
+ },
+ {
+  "key": "general.close_to_tray",
+  "kind": "bool",
+  "default": false,
+  "label": "Kapatınca tepsiye gizle",
+  "help": "Pencere kapatılınca dictz tepside çalışmaya devam eder (tarama ve kısayollar çalışır)."
+ },
+ {
+  "key": "general.start_in_tray",
+  "kind": "bool",
+  "default": false,
+  "label": "Tepside başlat",
+  "help": "dictz açılışta pencere göstermeden tepside başlar."
+ },
+ {
+  "key": "general.single_instance",
+  "kind": "bool",
+  "default": true,
+  "label": "Tek kopya çalıştır",
+  "help": "dictz ikinci kez açılınca çalışan pencere öne gelir; `dictz popup` / `dictz show` bu kopyaya gider."
+ },
+ {
   "key": "appearance.theme",
   "kind": "choice",
   "default": "auto",
@@ -346,6 +374,135 @@
   "default": true,
   "label": "Büyük/küçük harf duyarsız eşleşme",
   "help": "Tam eşleşme yoksa büyük/küçük harf farkını yok sayarak arar."
+ },
+ {
+  "key": "scan.enabled",
+  "kind": "bool",
+  "default": false,
+  "label": "Taramayı aç",
+  "help": "Başka bir uygulamada kopyalanan / seçilen kelime açılır pencerede çevrilir."
+ },
+ {
+  "key": "scan.ctrl_c_c",
+  "kind": "bool",
+  "default": true,
+  "label": "Ctrl+C+C ile ara",
+  "help": "Kelimeyi seçip Ctrl+C'ye kısa aralıkla iki kez basın."
+ },
+ {
+  "key": "scan.clipboard",
+  "kind": "bool",
+  "default": false,
+  "label": "Her kopyalamada ara",
+  "help": "Tek bir Ctrl+C yeter (kopyaladığınız her metin aranır)."
+ },
+ {
+  "key": "scan.selection",
+  "kind": "bool",
+  "default": false,
+  "label": "Seçilen metni ara",
+  "help": "Yalnızca Linux: fareyle seçmek yeter (X11; Wayland'da masaüstüne bağlı)."
+ },
+ {
+  "key": "scan.double_copy_ms",
+  "kind": "int",
+  "default": 500,
+  "label": "Ctrl+C+C aralığı",
+  "help": "milisaniye",
+  "min": 150,
+  "max": 2000
+ },
+ {
+  "key": "scan.max_length",
+  "kind": "int",
+  "default": 80,
+  "label": "En uzun metin",
+  "help": "karakter; daha uzunu yok sayılır",
+  "min": 1,
+  "max": 1000
+ },
+ {
+  "key": "scan.near_cursor",
+  "kind": "bool",
+  "default": true,
+  "label": "Pencereyi imlecin yanında aç",
+  "help": ""
+ },
+ {
+  "key": "scan.always_on_top",
+  "kind": "bool",
+  "default": true,
+  "label": "Tarama penceresi her zaman üstte",
+  "help": ""
+ },
+ {
+  "key": "scan.auto_hide",
+  "kind": "bool",
+  "default": true,
+  "label": "Fare çıkınca gizle",
+  "help": "Sabitlenmemiş pencere, fare üzerinden ayrılınca kapanır."
+ },
+ {
+  "key": "scan.hide_delay_ms",
+  "kind": "int",
+  "default": 800,
+  "label": "Gizleme gecikmesi",
+  "help": "milisaniye",
+  "min": 0,
+  "max": 10000
+ },
+ {
+  "key": "scan.width",
+  "kind": "int",
+  "default": 520,
+  "label": "Tarama penceresi genişliği",
+  "help": "piksel",
+  "min": 280,
+  "max": 1600
+ },
+ {
+  "key": "scan.height",
+  "kind": "int",
+  "default": 420,
+  "label": "Tarama penceresi yüksekliği",
+  "help": "piksel",
+  "min": 200,
+  "max": 1200
+ },
+ {
+  "key": "scan.record_history",
+  "kind": "bool",
+  "default": true,
+  "label": "Taramaları geçmişe kaydet",
+  "help": ""
+ },
+ {
+  "key": "hotkeys.enabled",
+  "kind": "bool",
+  "default": true,
+  "label": "Genel kısayolları kullan",
+  "help": "Pencere odakta değilken de çalışır. Wayland'da çoğu masaüstü izin vermez: masaüstü ayarlarında `dictz show` / `dictz popup` komutuna kısayol atayın."
+ },
+ {
+  "key": "hotkeys.show_main",
+  "kind": "str",
+  "default": "Ctrl+F11",
+  "label": "Ana pencereyi göster/gizle",
+  "help": "Örnek: Ctrl+F11, Ctrl+Alt+D. Boş = kapalı."
+ },
+ {
+  "key": "hotkeys.toggle_scan",
+  "kind": "str",
+  "default": "Ctrl+F12",
+  "label": "Taramayı aç/kapat",
+  "help": ""
+ },
+ {
+  "key": "hotkeys.lookup_clipboard",
+  "kind": "str",
+  "default": "Ctrl+Shift+F11",
+  "label": "Panodaki kelimeyi tarama penceresinde ara",
+  "help": ""
  },
  {
   "key": "dictionaries.folders",
