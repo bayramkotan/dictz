@@ -6,7 +6,7 @@
 
 Cross-platform, multi-format **offline dictionary** — a GoldenDict-style desktop app and library written in Rust.
 
-This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder, so dictionaries, history and favorites added in one edition show up in the other.
+This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder (`dictionaries.json`, `settings.json`, `dictz_index.db`, `dictz_history.db`), so dictionaries, history and favorites added in one edition show up in the other.
 
 <p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, dark theme: five dictionaries answer “apple”, each article a card with the dictionary's icon, language pair and format" width="100%"></p>
 
@@ -131,6 +131,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `stardict`, `dsl`, `babylon` | format parsers (all implement `Dictionary`) |
 | `query` | lookups across dictionaries, suggestions, fuzzy matching, ordering |
 | `index` / `history` | SQLite FTS5 index; history and favorites (same schema as the Python edition) |
+| `registry` | the shared `dictionaries.json` dictionary list (order, on/off, unique names, path identity) |
 | `media` | finds pictures and sounds of an article |
 | `html` | converts article HTML into styled lines (GUI) or text (CLI) |
 | `settings` | the shared `settings.json` schema and `Preferences` |

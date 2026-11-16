@@ -366,10 +366,9 @@ def cmd_add(ctx: Ctx, args) -> int:
     if not files:
         print("No dictionary files found.", file=sys.stderr)
         return 1
-    # keep the existing order: attach rows first without loading
+    # dictionaries.json keeps the order: a new file goes to the end, a known one keeps its place
     rc = 0
     for f in files:
-        flags = {r["name"]: r["enabled"] for r in ctx.rows()}
         try:
             d = qm.add_dictionary(f, reindex=args.reindex)
         except Exception as exc:  # noqa: BLE001
@@ -377,12 +376,6 @@ def cmd_add(ctx: Ctx, args) -> int:
             rc = 1
             continue
         name = d.metadata.name
-        # add_dictionary appends; restore true positions/flags of the others
-        order = [r["name"] for r in ctx.rows() if r["name"] != name] + [name]
-        for i, n in enumerate(order):
-            ctx.index.set_sort_order(n, i)
-            if n != name and n in flags:
-                ctx.index.set_enabled(n, bool(flags[n]))
         if args.disabled:
             ctx.index.set_enabled(name, False)
         print(f"added: {name} ({d.metadata.format}, {_group(d.metadata.word_count)} words)")
@@ -393,13 +386,7 @@ def cmd_remove(ctx: Ctx, args) -> int:
     for n in ctx.resolve_names(args.names):
         ctx.index.remove_dictionary(n)
         print(f"removed: {n}")
-    _renumber(ctx)
     return 0
-
-
-def _renumber(ctx: Ctx) -> None:
-    for i, r in enumerate(ctx.rows()):
-        ctx.index.set_sort_order(r["name"], i)
 
 
 def cmd_enable(ctx: Ctx, args, on: bool = True) -> int:
@@ -429,8 +416,7 @@ def cmd_move(ctx: Ctx, args) -> int:
             raise SystemExit("error: position must be up, down, top, bottom or a number") from None
     j = max(0, min(len(names) - 1, j))
     names.insert(j, names.pop(i))
-    for k, n in enumerate(names):
-        ctx.index.set_sort_order(n, k)
+    ctx.index.set_order(names)
     print(f"{name}: position {j + 1}")
     return 0
 
@@ -483,13 +469,15 @@ def cmd_reindex(ctx: Ctx, args) -> int:
 
 
 def cmd_scan(ctx: Ctx, args) -> int:
+    from .storage.registry import norm_path
+
     files = _expand_paths(args.folders, not args.no_recursive)
-    known = {str(Path(r["path"]).resolve()) for r in ctx.rows()}
+    known = {norm_path(r["path"]) for r in ctx.rows()}
     for f in files:
-        mark = "added" if str(f.resolve()) in known else "new"
+        mark = "added" if norm_path(f) in known else "new"
         print(f"{mark:6} {f}")
     if args.add:
-        new = [f for f in files if str(f.resolve()) not in known]
+        new = [f for f in files if norm_path(f) not in known]
         if new:
             ns = argparse.Namespace(paths=[str(f) for f in new], recursive=False, reindex=False, disabled=False)
             return cmd_add(ctx, ns)

@@ -186,6 +186,10 @@ impl Dictionary for StarDictDictionary {
         &self.meta
     }
 
+    fn metadata_mut(&mut self) -> &mut DictionaryMetadata {
+        &mut self.meta
+    }
+
     fn words(&self) -> &WordTable {
         &self.words
     }

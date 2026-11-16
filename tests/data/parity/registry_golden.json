@@ -1,0 +1,62 @@
+{
+ "file": "{\n \"version\": 1,\n \"dictionaries\": [\n  {\n   \"id\": \"0a1c61994596d564\",\n   \"name\": \"İngilizce–Türkçe Cep Sözlüğü\",\n   \"path\": \"/dicts/a/pocket.ifo\",\n   \"format\": \"stardict\",\n   \"enabled\": true,\n   \"word_count\": 6,\n   \"source_lang\": \"English\",\n   \"target_lang\": \"Turkish\",\n   \"description\": \"cep\",\n   \"mtime\": 1700000000.5,\n   \"indexed\": true\n  },\n  {\n   \"id\": \"78f1e161ed95c99f\",\n   \"name\": \"İngilizce–Türkçe Cep Sözlüğü (2)\",\n   \"path\": \"/dicts/b/pocket.ifo\",\n   \"format\": \"stardict\",\n   \"enabled\": false,\n   \"word_count\": 6,\n   \"source_lang\": \"\",\n   \"target_lang\": \"\",\n   \"description\": \"\",\n   \"mtime\": 0.0,\n   \"indexed\": false\n  },\n  {\n   \"id\": \"4167fbfd03c9f8a2\",\n   \"name\": \"Universal\",\n   \"path\": \"/dicts/universal-en-ru.dsl\",\n   \"format\": \"dsl\",\n   \"enabled\": true,\n   \"word_count\": 0,\n   \"source_lang\": \"\",\n   \"target_lang\": \"\",\n   \"description\": \"\",\n   \"mtime\": 0.0,\n   \"indexed\": false\n  }\n ]\n}\n",
+ "unique": [
+  [
+   "A",
+   [],
+   "A"
+  ],
+  [
+   "A",
+   [
+    "A"
+   ],
+   "A (2)"
+  ],
+  [
+   "A",
+   [
+    "A",
+    "A (2)"
+   ],
+   "A (3)"
+  ],
+  [
+   "  B ",
+   [
+    "B"
+   ],
+   "B (2)"
+  ],
+  [
+   "",
+   [],
+   "?"
+  ],
+  [
+   "A",
+   [
+    "A (2)"
+   ],
+   "A"
+  ]
+ ],
+ "fnv1a64": [
+  [
+   "",
+   "cbf29ce484222325"
+  ],
+  [
+   "a",
+   "af63dc4c8601ec8c"
+  ],
+  [
+   "/dicts/a/pocket.ifo",
+   "0a1c61994596d564"
+  ],
+  [
+   "C:\\Sözlük\\x.ifo",
+   "45865bc24a77d280"
+  ]
+ ]
+}

@@ -5,6 +5,16 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Dictionaries no longer get mixed up or lost** (both editions). The dictionary list — order, on/off and names — now lives in **`dictionaries.json`** in the data folder, written at once after every change and shared by both editions and the CLI.
+  - A dictionary is recognised by its **file path**, not its name. Two different files with the same name both stay in the list; the second one is shown as **`Name (2)`** (then `(3)`…), everywhere: list, article headers, search results.
+  - A dictionary whose file is missing or fails to load keeps its place in the list; it is no longer moved or dropped when the others are saved.
+  - New dictionaries are added at the end and never take another one's place.
+  - The old list in `dictz_index.db` is moved to `dictionaries.json` once, on the first start (order and on/off kept, duplicate files dropped). The headword index stays in `dictz_index.db`.
+- New parity golden `registry_golden.json`: both editions write `dictionaries.json` byte for byte the same.
+
 ## [0.1.0] — 2026-11-16
 
 The **interface in 25 languages**, **dictionary icons and article cards**, and READMEs with screenshots — in **both editions** (Python and Rust). After 0.0.9 the version moves to 0.1.0, not 0.0.10.

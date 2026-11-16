@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterator
 
 from ..parsers.base import Dictionary
+from .registry import REGISTRY_FILE, Registry, norm_path, unique_name
 
 
 def file_mtime(path: Path | str) -> float:
@@ -39,10 +40,13 @@ class IndexStore:
     CREATE INDEX IF NOT EXISTS idx_dict_name ON dictionaries(name);
     """
 
-    def __init__(self, db_path: Path | str):
+    def __init__(self, db_path: Path | str, registry_path: Path | str | None = None):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
+        # the dictionary list lives in dictionaries.json next to the database
+        self.registry = Registry(registry_path if registry_path is not None
+                                 else self.db_path.parent / REGISTRY_FILE)
 
     def open(self) -> None:
         if self._conn is not None:
@@ -55,6 +59,30 @@ class IndexStore:
         with suppress(sqlite3.OperationalError):
             self._conn.execute("ALTER TABLE dictionaries ADD COLUMN mtime REAL DEFAULT 0")
         self._conn.commit()
+        self._migrate_to_registry()
+
+    def _migrate_to_registry(self) -> None:
+        """First start after 0.1.0: copy the old SQLite list into dictionaries.json (order kept)."""
+        if self.registry.exists() or self.registry.path is None:
+            return
+        assert self._conn is not None
+        rows = self._conn.execute("SELECT * FROM dictionaries ORDER BY sort_order, id").fetchall()
+        indexed = {r[0] for r in self._conn.execute("SELECT DISTINCT dictionary FROM entries")}
+        seen: set[str] = set()
+        for r in rows:
+            if norm_path(r["path"]) in seen:
+                continue
+            seen.add(norm_path(r["path"]))
+            keys = r.keys()
+            self.registry.items.append(Registry._clean({
+                "path": norm_path(r["path"]), "name": r["name"], "format": r["format"],
+                "enabled": bool(r["enabled"]), "word_count": r["word_count"] or 0,
+                "source_lang": r["source_lang"] or "", "target_lang": r["target_lang"] or "",
+                "description": r["description"] or "",
+                "mtime": (r["mtime"] or 0.0) if "mtime" in keys else 0.0,
+                "indexed": r["name"] in indexed,
+            }))
+        self.registry.save()
 
     def close(self) -> None:
         if self._conn is not None:
@@ -76,35 +104,31 @@ class IndexStore:
         finally:
             cur.close()
 
-    def register_dictionary(self, dictionary: Dictionary) -> int:
-        """Insert or update the row of ``dictionary``.
+    def register_dictionary(self, dictionary: Dictionary) -> str:
+        """Add or update ``dictionary`` in the list; returns its unique name.
 
-        An existing row keeps its ``enabled`` flag and ``sort_order``.
+        The dictionary is renamed (``Name (2)``) when another file already uses
+        its name. An existing entry keeps its name, place and enabled flag.
         """
+        if self._conn is None:
+            self.open()
         meta = dictionary.metadata
-        with self._cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO dictionaries
-                    (name, path, format, word_count, source_lang, target_lang, description,
-                     enabled, mtime)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-                ON CONFLICT(name) DO UPDATE SET
-                    path = excluded.path, format = excluded.format,
-                    word_count = excluded.word_count, source_lang = excluded.source_lang,
-                    target_lang = excluded.target_lang, description = excluded.description,
-                    mtime = excluded.mtime
-                """,
-                (meta.name, str(meta.file_path), meta.format, meta.word_count,
-                 meta.source_language, meta.target_language, meta.description,
-                 file_mtime(meta.file_path)),
-            )
-            return cur.lastrowid or 0
+        name = self.registry.register(
+            meta.name, meta.file_path, format=meta.format, word_count=meta.word_count,
+            source_lang=meta.source_language, target_lang=meta.target_language,
+            description=meta.description, mtime=file_mtime(meta.file_path))
+        meta.name = name
+        return name
 
-    def get_dictionary(self, name: str) -> sqlite3.Row | None:
-        with self._cursor() as cur:
-            cur.execute("SELECT * FROM dictionaries WHERE name = ?", (name,))
-            return cur.fetchone()
+    def unique_name_for(self, name: str, path: Path | str) -> str:
+        """The name ``path`` has (or would get) in the list."""
+        hit = self.registry.by_path(path)
+        if hit is not None:
+            return hit["name"]
+        return unique_name(name, {d["name"] for d in self.registry.items})
+
+    def get_dictionary(self, name: str) -> dict | None:
+        return self.registry.get(name)
 
     def headwords(self, dictionaries: list[str]) -> list[str]:
         """Headwords of ``dictionaries`` in that order (each in index order =
@@ -122,32 +146,29 @@ class IndexStore:
 
     def stats(self) -> dict[str, int]:
         with self._cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM dictionaries")
-            d = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM entries")
             e = cur.fetchone()[0]
-        return {"dictionaries": d, "entries": e}
+        return {"dictionaries": len(self.registry.rows()), "entries": e}
 
-    def list_dictionaries(self, enabled_only: bool = True) -> list[sqlite3.Row]:
-        with self._cursor() as cur:
-            if enabled_only:
-                cur.execute("SELECT * FROM dictionaries WHERE enabled = 1 ORDER BY sort_order, name")
-            else:
-                cur.execute("SELECT * FROM dictionaries ORDER BY sort_order, name")
-            return cur.fetchall()
+    def list_dictionaries(self, enabled_only: bool = True) -> list[dict]:
+        if self._conn is None:
+            self.open()
+        return self.registry.rows(enabled_only=enabled_only)
 
     def set_enabled(self, name: str, enabled: bool) -> None:
-        with self._cursor() as cur:
-            cur.execute("UPDATE dictionaries SET enabled = ? WHERE name = ?", (1 if enabled else 0, name))
+        self.registry.set_enabled(name, enabled)
 
     def set_sort_order(self, name: str, order: int) -> None:
-        with self._cursor() as cur:
-            cur.execute("UPDATE dictionaries SET sort_order = ? WHERE name = ?", (order, name))
+        """Move ``name`` to position ``order`` of the list."""
+        self.registry.move_to(name, order)
+
+    def set_order(self, names: list[str]) -> None:
+        self.registry.set_order(names)
 
     def remove_dictionary(self, name: str) -> None:
         with self._cursor() as cur:
             cur.execute("DELETE FROM entries WHERE dictionary = ?", (name,))
-            cur.execute("DELETE FROM dictionaries WHERE name = ?", (name,))
+        self.registry.remove(name)
 
     def index_dictionary(self, dictionary: Dictionary) -> int:
         if not dictionary.loaded:
@@ -168,6 +189,7 @@ class IndexStore:
             if batch:
                 cur.executemany("INSERT INTO entries (headword, dictionary) VALUES (?, ?)", batch)
                 count += len(batch)
+        self.registry.set_indexed(dictionary.metadata.name, True)
         return count
 
     def search_headword(
@@ -194,6 +216,5 @@ class IndexStore:
         return [(r["headword"], r["dictionary"]) for r in rows]
 
     def is_indexed(self, name: str) -> bool:
-        with self._cursor() as cur:
-            cur.execute("SELECT 1 FROM dictionaries WHERE name = ?", (name,))
-            return cur.fetchone() is not None
+        row = self.registry.get(name)
+        return bool(row and row["indexed"])

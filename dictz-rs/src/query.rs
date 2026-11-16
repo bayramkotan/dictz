@@ -144,14 +144,32 @@ impl QueryManager {
         let path = path.as_ref();
         let mut dict = open_dictionary(path)?;
         dict.load()?;
-        let name = dict.metadata().name.clone();
+        // the list gives every file a unique name ("Name (2)")
+        let name = match self.index.as_mut() {
+            Some(index) => {
+                let name = index.register_dictionary(dict.as_ref())?;
+                dict.metadata_mut().name = name.clone();
+                if reindex || !index.is_indexed(&name)? {
+                    index.index_dictionary(dict.as_ref())?;
+                }
+                name
+            }
+            None => {
+                let base = dict.metadata().name.clone();
+                let me = crate::registry::norm_path(path);
+                let taken: std::collections::HashSet<String> = self
+                    .dicts
+                    .iter()
+                    .filter(|d| crate::registry::norm_path(&d.dict.metadata().file_path) != me)
+                    .map(|d| d.dict.metadata().name.clone())
+                    .collect();
+                let name = crate::registry::unique_name(&base, &taken);
+                dict.metadata_mut().name = name.clone();
+                name
+            }
+        };
         if let Some(i) = self.position(&name) {
             self.dicts.remove(i);
-        }
-        if let Some(index) = self.index.as_mut() {
-            if reindex || !index.is_indexed(&name)? {
-                index.index_dictionary(dict.as_ref())?;
-            }
         }
         let media = MediaResolver::for_dictionary(path);
         self.dicts.push(Loaded {
@@ -199,7 +217,8 @@ impl QueryManager {
         for (i, row) in rows.into_iter().enumerate() {
             progress(i, total, &row.name);
             match Self::open_file(&row.path) {
-                Ok(dict) => {
+                Ok(mut dict) => {
+                    dict.metadata_mut().name = row.name.clone();
                     if opts.reindex_changed && row.changed() {
                         if let Some(index) = self.index.as_mut() {
                             let _ = index.index_dictionary(dict.as_ref());
@@ -285,13 +304,39 @@ impl QueryManager {
         }
     }
 
+    /// Write the loaded order into the list; dictionaries that are in the
+    /// list but not loaded (missing file, failed) keep their place.
     fn persist_order(&self) {
-        if let Some(index) = self.index.as_ref() {
-            for (i, d) in self.dicts.iter().enumerate() {
-                let m = d.dict.metadata();
-                let _ = index.set_sort_order(&m.name, i as i64);
-                let _ = index.set_enabled(&m.name, d.enabled);
-            }
+        let Some(index) = self.index.as_ref() else {
+            return;
+        };
+        let all: Vec<String> = index
+            .list_dictionaries(false)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| r.name)
+            .collect();
+        let order: Vec<String> = self
+            .dicts
+            .iter()
+            .map(|d| d.dict.metadata().name.clone())
+            .collect();
+        let loaded: std::collections::HashSet<&String> = order.iter().collect();
+        let known: std::collections::HashSet<&String> = all.iter().collect();
+        let mut it = order.iter().filter(|n| known.contains(n));
+        let mut merged: Vec<String> = all
+            .iter()
+            .map(|n| {
+                if loaded.contains(n) {
+                    it.next().cloned().unwrap_or_else(|| n.clone())
+                } else {
+                    n.clone()
+                }
+            })
+            .collect();
+        merged.extend(order.iter().filter(|n| !known.contains(n)).cloned());
+        if merged != all {
+            let _ = index.set_order(&merged);
         }
     }
 

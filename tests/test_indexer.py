@@ -60,14 +60,83 @@ def test_index_and_search(tmp_path: Path) -> None:
     store.close()
 
 
-def test_sort_order(tmp_path: Path) -> None:
+def test_list_lives_in_json_and_keeps_order(tmp_path: Path) -> None:
+    import json
+
     store = IndexStore(tmp_path / "index.db")
     store.open()
-    with store._cursor() as cur:
-        cur.execute("INSERT INTO dictionaries (name, path, format) VALUES ('a', 'x', 'stardict')")
-        cur.execute("INSERT INTO dictionaries (name, path, format) VALUES ('b', 'y', 'stardict')")
-    store.set_sort_order("b", -1)
-    store.set_sort_order("a", 1)
-    names = [r["name"] for r in store.list_dictionaries()]
-    assert names == ["b", "a"]
+    for n in ("a", "b", "c"):
+        store.registry.register(n, tmp_path / f"{n}.ifo", format="stardict")
+    store.set_order(["c", "a"])
+    assert [r["name"] for r in store.list_dictionaries()] == ["c", "a", "b"]
+    store.set_enabled("a", False)
+    store.close()
+    data = json.loads((tmp_path / "dictionaries.json").read_text(encoding="utf-8"))
+    assert [d["name"] for d in data["dictionaries"]] == ["c", "a", "b"]
+    assert [d["enabled"] for d in data["dictionaries"]] == [True, False, True]
+    again = IndexStore(tmp_path / "index.db")
+    again.open()
+    assert [r["name"] for r in again.list_dictionaries(enabled_only=True)] == ["c", "b"]
+    again.close()
+
+
+def test_same_name_twice_is_kept_apart(tmp_path: Path) -> None:
+    store = IndexStore(tmp_path / "index.db")
+    store.open()
+    one = tmp_path / "one"
+    two = tmp_path / "two"
+    one.mkdir()
+    two.mkdir()
+    d1 = StarDictDictionary(_build_tiny_stardict(one))
+    d1.load()
+    d2 = StarDictDictionary(_build_tiny_stardict(two))
+    d2.load()
+    store.index_dictionary(d1)
+    store.index_dictionary(d2)
+    assert d1.metadata.name == "tiny-book" and d2.metadata.name == "tiny-book (2)"
+    rows = store.list_dictionaries()
+    assert [r["name"] for r in rows] == ["tiny-book", "tiny-book (2)"]
+    assert {r["path"] for r in rows} == {str(d1.metadata.file_path.absolute()), str(d2.metadata.file_path.absolute())}
+    # registering the same file again keeps its name and place
+    d1b = StarDictDictionary(_build_tiny_stardict(one))
+    d1b.load()
+    assert store.register_dictionary(d1b) == "tiny-book"
+    assert {r[1] for r in store.search_headword("app")} == {"tiny-book", "tiny-book (2)"}
+    store.close()
+
+
+def test_migrates_the_old_sqlite_list(tmp_path: Path) -> None:
+    import sqlite3
+
+    db = tmp_path / "index.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(IndexStore.SCHEMA)
+    conn.execute("ALTER TABLE dictionaries ADD COLUMN mtime REAL DEFAULT 0")
+    conn.execute("INSERT INTO dictionaries (name, path, format, enabled, sort_order) VALUES ('z', '/d/z.ifo', 'stardict', 1, 0)")
+    conn.execute("INSERT INTO dictionaries (name, path, format, enabled, sort_order) VALUES ('a', '/d/a.dsl', 'dsl', 0, 1)")
+    conn.execute("INSERT INTO entries (headword, dictionary) VALUES ('w', 'z')")
+    conn.commit()
+    conn.close()
+    store = IndexStore(db)
+    store.open()
+    rows = store.list_dictionaries(enabled_only=False)
+    assert [(r["name"], r["enabled"], r["indexed"]) for r in rows] == [("z", True, True), ("a", False, False)]
+    assert (tmp_path / "dictionaries.json").is_file()
+    store.close()
+
+
+def test_failed_dictionaries_keep_their_place(tmp_path: Path) -> None:
+    from dictz.core.query_manager import QueryManager
+
+    store = IndexStore(tmp_path / "index.db")
+    store.open()
+    real = StarDictDictionary(_build_tiny_stardict(tmp_path))
+    real.load()
+    store.registry.register("gone", tmp_path / "missing.ifo", format="stardict", indexed=True)
+    store.index_dictionary(real)
+    qm = QueryManager(index_store=store)
+    loaded, errors = qm.restore_from_index()
+    assert loaded == ["tiny-book"] and errors
+    qm._persist_order()
+    assert [r["name"] for r in store.list_dictionaries(enabled_only=False)] == ["gone", "tiny-book"]
     store.close()

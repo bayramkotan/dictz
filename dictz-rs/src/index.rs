@@ -1,10 +1,18 @@
 //! SQLite FTS5 headword index — same schema and file as the Python edition
 //! (`dictz/storage/indexer.py`).
 
+//!
+//! The dictionary list itself (order, enabled flags, unique names) lives in
+//! `dictionaries.json` next to the database ([`crate::registry`]); the old
+//! SQLite `dictionaries` table is only read once to migrate it.
+
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{params, params_from_iter, Connection};
 
+use crate::registry::{norm_path, unique_name, Entry, Registry, REGISTRY_FILE};
 use crate::{Dictionary, DictzError};
 
 const SCHEMA: &str = "
@@ -28,9 +36,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries USING fts5(
 CREATE INDEX IF NOT EXISTS idx_dict_name ON dictionaries(name);
 ";
 
-/// One row of the `dictionaries` table.
+/// One dictionary of the list (`dictionaries.json`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DictionaryRow {
+    /// FNV-1a 64 of the absolute path, hex.
+    pub id: String,
     /// Dictionary name (unique).
     pub name: String,
     /// File the dictionary was loaded from.
@@ -49,6 +59,29 @@ pub struct DictionaryRow {
     pub source_language: String,
     /// Target language.
     pub target_language: String,
+    /// Description.
+    pub description: String,
+    /// Headwords are in the index.
+    pub indexed: bool,
+}
+
+impl DictionaryRow {
+    fn from_entry(i: usize, e: Entry) -> Self {
+        Self {
+            id: e.id,
+            name: e.name,
+            path: PathBuf::from(e.path),
+            format: e.format,
+            word_count: e.word_count,
+            enabled: e.enabled,
+            sort_order: i as i64,
+            mtime: e.mtime,
+            source_language: e.source_lang,
+            target_language: e.target_lang,
+            description: e.description,
+            indexed: e.indexed,
+        }
+    }
 }
 
 impl DictionaryRow {
@@ -71,6 +104,7 @@ pub fn file_mtime(path: &Path) -> f64 {
 /// The index database.
 pub struct IndexStore {
     conn: Connection,
+    registry: RefCell<Registry>,
 }
 
 impl IndexStore {
@@ -79,15 +113,24 @@ impl IndexStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        Self::with_connection(Connection::open(path)?)
+        let reg = path.parent().map(|p| p.join(REGISTRY_FILE));
+        Self::with_connection(Connection::open(path)?, reg)
+    }
+
+    /// Open the database at `db` with the list at `registry`.
+    pub fn open_with_registry(db: &Path, registry: &Path) -> Result<Self, DictzError> {
+        if let Some(parent) = db.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        Self::with_connection(Connection::open(db)?, Some(registry.to_path_buf()))
     }
 
     /// In-memory database (tests, `--selftest`).
     pub fn open_in_memory() -> Result<Self, DictzError> {
-        Self::with_connection(Connection::open_in_memory()?)
+        Self::with_connection(Connection::open_in_memory()?, None)
     }
 
-    fn with_connection(conn: Connection) -> Result<Self, DictzError> {
+    fn with_connection(conn: Connection, reg: Option<PathBuf>) -> Result<Self, DictzError> {
         conn.execute_batch(SCHEMA)?;
         let _ = conn.execute(
             "ALTER TABLE dictionaries ADD COLUMN sort_order INTEGER DEFAULT 0",
@@ -97,33 +140,95 @@ impl IndexStore {
             "ALTER TABLE dictionaries ADD COLUMN mtime REAL DEFAULT 0",
             [],
         );
-        Ok(Self { conn })
+        let store = Self {
+            conn,
+            registry: RefCell::new(Registry::new(reg)),
+        };
+        store.migrate_to_registry()?;
+        Ok(store)
     }
 
-    /// Insert or update the row of `dict`. An existing row keeps its
-    /// `enabled` flag and `sort_order`.
-    pub fn register_dictionary(&self, dict: &dyn Dictionary) -> Result<(), DictzError> {
-        let m = dict.metadata();
-        self.conn.execute(
-            "INSERT INTO dictionaries
-                (name, path, format, word_count, source_lang, target_lang, description, enabled, mtime)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)
-             ON CONFLICT(name) DO UPDATE SET
-                path = excluded.path, format = excluded.format, word_count = excluded.word_count,
-                source_lang = excluded.source_lang, target_lang = excluded.target_lang,
-                description = excluded.description, mtime = excluded.mtime",
-            params![
-                m.name,
-                m.file_path.to_string_lossy(),
-                m.format,
-                m.word_count as i64,
-                m.source_language,
-                m.target_language,
-                m.description,
-                file_mtime(&m.file_path)
-            ],
+    /// First start after 0.1.0: copy the old SQLite list into
+    /// `dictionaries.json` (order kept, duplicate paths dropped).
+    fn migrate_to_registry(&self) -> Result<(), DictzError> {
+        let mut reg = self.registry.borrow_mut();
+        if reg.path.is_none() || reg.exists() {
+            return Ok(());
+        }
+        let indexed: HashSet<String> = {
+            let mut st = self
+                .conn
+                .prepare("SELECT DISTINCT dictionary FROM entries")?;
+            let r = st.query_map([], |r| r.get::<_, String>(0))?;
+            r.collect::<Result<_, _>>()?
+        };
+        let mut st = self.conn.prepare(
+            "SELECT name, path, format, word_count, enabled, mtime, source_lang, target_lang, description \
+             FROM dictionaries ORDER BY sort_order, id",
         )?;
+        let rows = st.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                r.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                r.get::<_, Option<i64>>(4)?.unwrap_or(1) != 0,
+                r.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
+                r.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                r.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                r.get::<_, Option<String>>(8)?.unwrap_or_default(),
+            ))
+        })?;
+        let mut seen = HashSet::new();
+        for row in rows {
+            let (name, path, format, wc, enabled, mtime, sl, tl, desc) = row?;
+            let p = norm_path(Path::new(&path));
+            if !seen.insert(p) {
+                continue;
+            }
+            let mut e = Entry::new(&name, Path::new(&path));
+            e.format = format;
+            e.word_count = wc;
+            e.enabled = enabled;
+            e.mtime = mtime;
+            e.source_lang = sl;
+            e.target_lang = tl;
+            e.description = desc;
+            e.indexed = indexed.contains(&name);
+            reg.items.push(e);
+        }
+        reg.save()?;
         Ok(())
+    }
+
+    /// Add or update `dict` in the list; returns its unique name — the
+    /// caller renames the dictionary to it (`Name (2)` when another file
+    /// already uses the name). An existing entry keeps its name, place and
+    /// enabled flag.
+    pub fn register_dictionary(&self, dict: &dyn Dictionary) -> Result<String, DictzError> {
+        let m = dict.metadata();
+        let mtime = file_mtime(&m.file_path);
+        Ok(self
+            .registry
+            .borrow_mut()
+            .register(&m.name, &m.file_path, |e| {
+                e.format = m.format.clone();
+                e.word_count = m.word_count as i64;
+                e.source_lang = m.source_language.clone();
+                e.target_lang = m.target_language.clone();
+                e.description = m.description.clone();
+                e.mtime = mtime;
+            }))
+    }
+
+    /// The name `path` has (or would get) in the list.
+    pub fn unique_name_for(&self, name: &str, path: &Path) -> String {
+        let reg = self.registry.borrow();
+        if let Some(e) = reg.by_path(path) {
+            return e.name.clone();
+        }
+        let taken: HashSet<String> = reg.items.iter().map(|e| e.name.clone()).collect();
+        unique_name(name, &taken)
     }
 
     /// One row by name.
@@ -156,54 +261,41 @@ impl IndexStore {
 
     /// (dictionaries, indexed headwords).
     pub fn stats(&self) -> Result<(i64, i64), DictzError> {
-        let d: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM dictionaries", [], |r| r.get(0))?;
+        let d = self.registry.borrow_mut().rows(false).len() as i64;
         let e: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?;
         Ok((d, e))
     }
 
-    /// Rows ordered by `sort_order, name`.
+    /// The list in order.
     pub fn list_dictionaries(&self, enabled_only: bool) -> Result<Vec<DictionaryRow>, DictzError> {
-        let sql = if enabled_only {
-            "SELECT name, path, format, word_count, enabled, sort_order, mtime, source_lang, target_lang FROM dictionaries WHERE enabled = 1 ORDER BY sort_order, name"
-        } else {
-            "SELECT name, path, format, word_count, enabled, sort_order, mtime, source_lang, target_lang FROM dictionaries ORDER BY sort_order, name"
-        };
-        let mut st = self.conn.prepare(sql)?;
-        let rows = st.query_map([], |r| {
-            Ok(DictionaryRow {
-                name: r.get(0)?,
-                path: PathBuf::from(r.get::<_, String>(1)?),
-                format: r.get(2)?,
-                word_count: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
-                enabled: r.get::<_, Option<i64>>(4)?.unwrap_or(1) != 0,
-                sort_order: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                mtime: r.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
-                source_language: r.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                target_language: r.get::<_, Option<String>>(8)?.unwrap_or_default(),
-            })
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        Ok(self
+            .registry
+            .borrow_mut()
+            .rows(enabled_only)
+            .into_iter()
+            .map(|(i, e)| DictionaryRow::from_entry(i, e))
+            .collect())
     }
 
     /// Enable / disable a dictionary.
     pub fn set_enabled(&self, name: &str, enabled: bool) -> Result<(), DictzError> {
-        self.conn.execute(
-            "UPDATE dictionaries SET enabled = ?1 WHERE name = ?2",
-            params![enabled as i64, name],
-        )?;
+        self.registry.borrow_mut().set_enabled(name, enabled);
         Ok(())
     }
 
-    /// Set the list position of a dictionary.
+    /// Move `name` to position `order` of the list.
     pub fn set_sort_order(&self, name: &str, order: i64) -> Result<(), DictzError> {
-        self.conn.execute(
-            "UPDATE dictionaries SET sort_order = ?1 WHERE name = ?2",
-            params![order, name],
-        )?;
+        self.registry
+            .borrow_mut()
+            .move_to(name, order.max(0) as usize);
+        Ok(())
+    }
+
+    /// Put `names` first in this order; the rest keep their order after them.
+    pub fn set_order(&self, names: &[String]) -> Result<(), DictzError> {
+        self.registry.borrow_mut().set_order(names);
         Ok(())
     }
 
@@ -211,15 +303,13 @@ impl IndexStore {
     pub fn remove_dictionary(&self, name: &str) -> Result<(), DictzError> {
         self.conn
             .execute("DELETE FROM entries WHERE dictionary = ?1", params![name])?;
-        self.conn
-            .execute("DELETE FROM dictionaries WHERE name = ?1", params![name])?;
+        self.registry.borrow_mut().remove(name);
         Ok(())
     }
 
     /// (Re)build the headword index of `dict`. Returns the number of rows.
     pub fn index_dictionary(&mut self, dict: &dyn Dictionary) -> Result<usize, DictzError> {
-        self.register_dictionary(dict)?;
-        let name = dict.metadata().name.clone();
+        let name = self.register_dictionary(dict)?;
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM entries WHERE dictionary = ?1", params![name])?;
         let mut count = 0usize;
@@ -232,6 +322,7 @@ impl IndexStore {
             }
         }
         tx.commit()?;
+        self.registry.borrow_mut().set_indexed(&name, true);
         Ok(count)
     }
 
@@ -265,12 +356,14 @@ impl IndexStore {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// `true` when the dictionary has a row.
+    /// `true` when the dictionary's headwords are in the index.
     pub fn is_indexed(&self, name: &str) -> Result<bool, DictzError> {
-        let mut st = self
-            .conn
-            .prepare("SELECT 1 FROM dictionaries WHERE name = ?1")?;
-        Ok(st.exists(params![name])?)
+        Ok(self
+            .registry
+            .borrow_mut()
+            .get(name)
+            .map(|e| e.indexed)
+            .unwrap_or(false))
     }
 }
 
@@ -304,10 +397,46 @@ mod tests {
         idx.set_sort_order("Idx", 3).unwrap();
         idx.set_enabled("Idx", false).unwrap();
         let rows = idx.list_dictionaries(false).unwrap();
-        assert_eq!(rows[0].sort_order, 3);
+        assert_eq!(rows[0].sort_order, 0);
         assert!(!rows[0].enabled);
         assert!(idx.list_dictionaries(true).unwrap().is_empty());
         idx.remove_dictionary("Idx").unwrap();
         assert!(!idx.is_indexed("Idx").unwrap());
+    }
+
+    #[test]
+    fn migrates_the_old_sqlite_list() {
+        let d = std::env::temp_dir().join(format!("dictz-mig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let db = d.join("dictz_index.db");
+        {
+            let c = Connection::open(&db).unwrap();
+            c.execute_batch(SCHEMA).unwrap();
+            for (n, p, en, so) in [
+                ("B", "/x/b.ifo", 1, 2),
+                ("A", "/x/a.ifo", 0, 1),
+                ("A2", "/x/a.ifo", 1, 3),
+            ] {
+                c.execute(
+                    "INSERT INTO dictionaries (name, path, format, enabled, sort_order) VALUES (?1, ?2, 'stardict', ?3, ?4)",
+                    params![n, p, en, so],
+                )
+                .unwrap();
+            }
+            c.execute(
+                "INSERT INTO entries (headword, dictionary) VALUES ('w', 'B')",
+                [],
+            )
+            .unwrap();
+        }
+        let idx = IndexStore::open(&db).unwrap();
+        let rows = idx.list_dictionaries(false).unwrap();
+        let names: Vec<_> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["A", "B"], "order kept, duplicate path dropped");
+        assert!(!rows[0].enabled);
+        assert!(rows[1].indexed && !rows[0].indexed);
+        assert!(d.join(REGISTRY_FILE).is_file());
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
