@@ -74,6 +74,7 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
    - Linux: `\cp -f` (or `\cp -rf` for the zip contents)
    - Windows: `Copy-Item -Force`
    - Every destination is written: the GitHub repo **and** the Yandex.Disk handoff folder.
+   - Yandex.Disk folder — Windows: `C:\Users\bayram\Yandex.Disk\GitHub_Handoff_Files\dictz` (**`Yandex.Disk` with a dot, never `YandexDisk`**); Linux: `~/Yandex.Disk/GitHub_Handoff_Files/dictz`.
 3. **The MD5 is checked at every destination** (repo and Yandex.Disk) and must match the table in the delivery.
 4. **After a successful copy the downloaded file is deleted** from Downloads (`rm -f` / `Remove-Item -Force`). Leftover `TODO (2).md`-style duplicates of earlier deliveries are removed in the same block, so Downloads stays clean.
 5. The commands always use the exact versioned file name, never a wildcard that could match an old download.
