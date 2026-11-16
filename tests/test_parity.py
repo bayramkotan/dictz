@@ -124,3 +124,32 @@ def test_scan_golden() -> None:
     for b in app_icon_rgba(64):
         h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
     assert f"{h:016x}" == g["icon_fnv1a64"]
+
+
+def test_dictident_golden() -> None:
+    from dictz.core import dictident as di
+
+    g = _golden("dictident_golden.json")
+    for name, mono, col, langs in g["names"]:
+        assert di.monogram(name) == mono, name
+        assert di.color(name) == col, name
+        assert list(di.languages_from_name(name) or []) == langs, name
+    for c, want in g["language_code"]:
+        assert di.language_code(c) == want, c
+    for a, b, n, want in g["pair"]:
+        assert list(di.language_pair(a, b, n) or []) == want
+    icon = di.bgl_icon(PARITY / "sample.bgl") or b""
+    assert f"{di.fnv1a64(icon):016x}" == g["bgl_icon_fnv1a64"]
+    assert di.icon_bytes(PARITY / "sample.bgl")[1] == ".ico"
+
+
+def test_dictionary_icon_next_to_file(tmp_path) -> None:
+    from dictz.core.dictident import icon_bytes, icon_file
+
+    (tmp_path / "Lingvo.dsl.dz").write_bytes(b"x")
+    assert icon_file(tmp_path / "Lingvo.dsl.dz") is None
+    (tmp_path / "Lingvo.PNG").write_bytes(b"png")
+    (tmp_path / "Lingvo.bmp").write_bytes(b"bmp")
+    assert icon_bytes(tmp_path / "Lingvo.dsl.dz") == (b"png", ".png")
+    (tmp_path / "Lingvo.ico").write_bytes(b"ico")
+    assert icon_bytes(tmp_path / "Lingvo.dsl.dz")[1] == ".ico"

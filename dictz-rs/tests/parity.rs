@@ -239,3 +239,65 @@ fn scan_text_and_hotkeys_match_python_edition() {
         g["icon_fnv1a64"].as_str().unwrap()
     );
 }
+
+#[test]
+fn dictionary_identity_matches_python() {
+    let g: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(parity_dir().join("dictident_golden.json")).unwrap(),
+    )
+    .unwrap();
+    use dictz::dictident as di;
+    for case in g["names"].as_array().unwrap() {
+        let name = case[0].as_str().unwrap();
+        assert_eq!(
+            di::monogram(name),
+            case[1].as_str().unwrap(),
+            "monogram {:?}",
+            name
+        );
+        assert_eq!(
+            di::color(name),
+            case[2].as_str().unwrap(),
+            "color {:?}",
+            name
+        );
+        let want: Vec<String> = case[3]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        let got = di::languages_from_name(name)
+            .map(|(a, b)| vec![a, b])
+            .unwrap_or_default();
+        assert_eq!(got, want, "languages {:?}", name);
+    }
+    for case in g["language_code"].as_array().unwrap() {
+        let c = case[0].as_str().unwrap();
+        assert_eq!(di::language_code(c), case[1].as_str().unwrap(), "{:?}", c);
+    }
+    for case in g["pair"].as_array().unwrap() {
+        let (a, b, n) = (
+            case[0].as_str().unwrap(),
+            case[1].as_str().unwrap(),
+            case[2].as_str().unwrap(),
+        );
+        let want: Vec<String> = case[3]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        let got = di::language_pair(a, b, n)
+            .map(|(x, y)| vec![x, y])
+            .unwrap_or_default();
+        assert_eq!(got, want, "{:?}", case);
+    }
+    let icon = di::bgl_icon(&parity_dir().join("sample.bgl")).unwrap_or_default();
+    assert_eq!(
+        format!("{:016x}", di::fnv1a64(&icon)),
+        g["bgl_icon_fnv1a64"].as_str().unwrap()
+    );
+    let (_, ext) = di::icon_bytes(&parity_dir().join("sample.bgl")).unwrap();
+    assert_eq!(ext, ".ico");
+}

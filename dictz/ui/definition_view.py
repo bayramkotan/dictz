@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QTextBrowser, QVBoxLayout, QWidget
 
 from ..parsers.base import DictionaryEntry
 from ..storage.settings import Preferences
-from . import themes
+from . import dicticons, themes
 
 try:
     from PySide6.QtWebEngineCore import QWebEnginePage
@@ -132,14 +132,23 @@ class DefinitionView(QWidget):
         if not p["article.show_dict_headers"]:
             is_open = " open"
         parts: list[str] = []
+        dark = themes.is_dark(p["appearance.theme"])
         for i, (dict_name, items) in enumerate(group_by_dictionary(entries)):
+            lk = dicticons.look(dict_name)
+            tint = themes._mix(lk.color, "#1b1f26" if dark else "#ffffff", 0.80 if dark else 0.88)
+            ink = themes._mix(lk.color, "#ffffff", 0.40) if dark else lk.color
             count = f'<span class="count">{len(items)} madde</span>' if len(items) > 1 else ""
+            langs = (f'<span class="chip lang">{html.escape(lk.langs[0])} → {html.escape(lk.langs[1])}</span>'
+                     if lk.langs else "")
+            fmt = f'<span class="chip fmt">{html.escape(lk.fmt)}</span>' if lk.fmt else ""
             parts.append(
-                f'<details class="dict{head_cls}" id="dict-{i}"{is_open}><summary>'
-                f'<span class="chev">▸</span>{html.escape(dict_name)} {count}'
-                f'<span class="actions"><a href="dictz-action:copy:{i}" title="Makaleyi kopyala">kopyala</a>'
-                f'<a href="dictz-action:only:{i}" title="Yalnızca bu sözlükte ara">yalnızca bu</a></span>'
-                f'</summary>'
+                f'<details class="dict{head_cls}" id="dict-{i}" style="--dc:{lk.color};--dt:{tint};--dk:{ink}"{is_open}>'
+                f'<summary title="{html.escape(lk.tooltip())}">'
+                f'{dicticons.badge_html(dict_name)}<span class="dname">{html.escape(dict_name)}</span>'
+                f'{langs}{fmt}{count}'
+                f'<span class="actions"><a href="dictz-action:copy:{i}" title="Makaleyi kopyala">⧉ kopyala</a>'
+                f'<a href="dictz-action:only:{i}" title="Yalnızca bu sözlükte ara">◎ yalnızca bu</a></span>'
+                f'<span class="chev">▾</span></summary><div class="dbody">'
             )
             for e in items:
                 definition = e.definition
@@ -148,7 +157,7 @@ class DefinitionView(QWidget):
                 else:
                     body = f'<div class="definition"><pre>{html.escape(definition)}</pre></div>'
                 parts.append(f'<div class="article"><div class="headword">{html.escape(e.headword)}</div>{body}</div>')
-            parts.append("</details>")
+            parts.append("</div></details>")
         self.set_html("\n".join(parts))
 
     def set_html(self, body_html: str) -> None:

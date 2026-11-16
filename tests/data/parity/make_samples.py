@@ -108,6 +108,11 @@ def _entry11(word: bytes, alts: list[bytes], defi: bytes) -> bytes:
     return _block(11, d)
 
 
+# a 1×1 PNG wrapped in an .ico, stored in the BGL info block 0x0B
+BGL_ICON = (struct.pack("<HHH", 0, 1, 1) + struct.pack("<BBBBHHII", 1, 1, 0, 0, 1, 32, len(PNG_1PX), 22)
+            + PNG_1PX)
+
+
 def write_bgl() -> None:
     t = "cp1254"
     body = b""
@@ -120,6 +125,7 @@ def write_bgl() -> None:
     body += _info(0x1A, bytes([0x41]))                        # source cp1252
     body += _info(0x1B, bytes([0x4B]))                        # target cp1254
     body += _info(0x11, struct.pack(">I", 0))                 # not utf-8
+    body += _info(0x0B, BGL_ICON)                             # dictionary icon (.ico)
     body += _block(2, b"\x05a.png" + PNG_1PX)                 # resource (ignored)
     # 1: part of speech + alternates (one with a leading slash) + $index$
     body += _entry1(
@@ -313,8 +319,34 @@ def write_golden() -> None:
     }
     (HERE / "scan_golden.json").write_text(json.dumps(scan, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     write_rust_schema()
+    write_dictident_golden()
     fz = [[a, b, fuzz.ratio(a.lower(), b.lower())] for a, b in FUZZY_PAIRS]
     (HERE / "fuzzy_golden.json").write_text(json.dumps(fz, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
+IDENT_NAMES = [
+    "Adil Hindistan En2Tr", "Erzin English-Turkish Dictionary", "Babylon English-English", "English2Turkish",
+    "English-Turkish Dictionary v0.2", "Mustafa YILDIZ Sözlüğü", "saja english to turkish", "Longman DOCE",
+    "İngilizce → Türkçe", "dictz parity BGL — Türkçe", "Oxford", "x", "123", "", "de-en", "En > Fr", "Ar2Tr",
+    "Osmanlıca-Türkçe Lügat", "日本語-English", "Русский - English", "sample", "WordNet 3.0", "fr/de",
+    "Collins Cobuild 5", "Kubbealtı Lugatı", "ıspanak", "Ölçü", "the dictionary",
+]
+LANG_CASES = ["English", "en", "ENG", "Türkçe", "TÜRKÇE", "İngilizce", "Turkish", "Deutsch", "fr", "Klingon", "",
+              " russian ", "Farsi", "中文", "osmanlıca", "OSMANLICA"]
+PAIR_CASES = [["English", "Turkish", "x"], ["", "", "En2Tr"], ["Klingon", "Vulcan", "a"], ["English", "", "De-Fr"]]
+
+
+def write_dictident_golden() -> None:
+    from dictz.core import dictident as di
+
+    g = {
+        "names": [[n, di.monogram(n), di.color(n), list(di.languages_from_name(n) or [])] for n in IDENT_NAMES],
+        "language_code": [[c, di.language_code(c)] for c in LANG_CASES],
+        "pair": [[a, b, n, list(di.language_pair(a, b, n) or [])] for a, b, n in PAIR_CASES],
+        "bgl_icon_fnv1a64": f"{di.fnv1a64(di.bgl_icon(HERE / 'sample.bgl') or b''):016x}",
+    }
+    (HERE / "dictident_golden.json").write_text(json.dumps(g, ensure_ascii=False, indent=1) + "\n",
+                                                encoding="utf-8")
 
 
 if __name__ == "__main__":

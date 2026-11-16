@@ -8,6 +8,7 @@
 
 mod app;
 mod audio;
+mod dictbadge;
 mod fonts;
 mod prefs_window;
 mod render;

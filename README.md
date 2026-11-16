@@ -43,6 +43,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
 - **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first.
 - **Pictures and sounds:** DSL `[s]` media from `*.dsl.files/` or `*.dsl.files.zip`.
+- **Dictionary icons and article cards:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
 - **Scan popup:** copy a word in any program and its articles pop up next to the mouse. Also a tray icon, global hotkeys and a single running instance.
 - **Modern window:**
   - tabs, back/forward, a dictionary bar and a "found in" panel
