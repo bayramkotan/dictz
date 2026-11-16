@@ -346,3 +346,10 @@ def test_scan_popup_modules_in_both_editions() -> None:
     assert "python-xlib" in py, "Linux global hotkeys (XGrabKey) need python-xlib"
     spec = (ROOT / "packaging" / "pyinstaller" / "dictz.spec").read_text(encoding="utf-8")
     assert 'collect_submodules("Xlib")' in spec
+
+
+def test_actions_runs_are_named_version_first() -> None:
+    """Every run in the Actions list reads "vX.Y.Z: ..." and a tag on the wrong commit fails."""
+    ci = CI_YML.read_text(encoding="utf-8")
+    assert "run-name:" in ci and "format('{0}: {1}', github.ref_name" in ci
+    assert "Check the tagged commit is the release commit" in ci

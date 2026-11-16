@@ -58,6 +58,37 @@ Rust code map (`dictz-rs/src/`):
 
 ---
 
+## ⚠️ READ FIRST: how files are handed over and copied (no more "(2)", "(3)", "(4)")
+
+The browser does not overwrite a download with the same name: a second `TODO.md` becomes `TODO (2).md`, then `TODO (3).md`… The copy commands then pick the wrong (old) file, and the Downloads folder has to be cleaned by hand. So:
+
+1. **Every handed-over file has the version in its name**, so it never collides in Downloads:
+   - `dictz-vX.Y.Z.zip` (the whole project)
+   - `dictz_Handoff_vX.Y.Z.md` → goes to `docs/dictz_Handoff.md`
+   - `dictz_TODO_vX.Y.Z.md` → goes to `TODO.md`
+   - a single code file: `<name>_vX.Y.Z.<ext>` → goes to its path in the repo
+   - A second delivery inside the same version gets a letter: `dictz_TODO_vX.Y.Za.md`, `…b.md`.
+2. **Copy = replace.** Every destination is overwritten:
+   - Linux: `\cp -f` (or `\cp -rf` for the zip contents)
+   - Windows: `Copy-Item -Force`
+   - Every destination is written: the GitHub repo **and** the Yandex.Disk handoff folder.
+3. **The MD5 is checked at every destination** (repo and Yandex.Disk) and must match the table in the delivery.
+4. **After a successful copy the downloaded file is deleted** from Downloads (`rm -f` / `Remove-Item -Force`). Leftover `TODO (2).md`-style duplicates of earlier deliveries are removed in the same block, so Downloads stays clean.
+5. The commands always use the exact versioned file name, never a wildcard that could match an old download.
+
+## ⚠️ READ FIRST: the Actions list is one run per version, version first
+
+- CI runs **only for `v*` tags** (plus PRs and manual runs); plain pushes to `main` (docs, fixes) start no run. So the Actions list is a list of versions.
+- Every run is titled **`vX.Y.Z: <details>`**:
+  - The release commit's title starts with the version (`git commit -m "vX.Y.Z: ..."`).
+  - `run-name` in `ci.yml` puts the tag in front if it is ever missing.
+- The release preflight **fails** a tag that is on the wrong commit: the title must start with `vX.Y.Z: `. This happened with v0.0.8: the tag landed on the docs commit, so the run was titled "docs: roadmap…".
+  - Fix: `git tag -d vX.Y.Z`, then `git push origin :refs/tags/vX.Y.Z`.
+  - Then commit the release with the right title and tag it again.
+- A plain push's commit title never carries a version number. It does not appear in Actions anyway.
+
+---
+
 ## Current version
 
 **v0.0.7**: Python 3.14 Babylon fix and background loading; a full CLI with `dictz update`; 54 shared settings with a detailed Preferences window; a richer interface (dictionary bar, found-in panel, find in page…) — all in both editions.
