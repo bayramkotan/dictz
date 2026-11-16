@@ -58,7 +58,9 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - ✅ completion scripts register both names
 - ✅ READMEs rewritten with per-platform install (Linux / Windows / macOS × portable / pipx / cargo)
 
-### v0.1.1 — dictionary groups
+> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (persistent index, articles read on demand from the file, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
+
+### v0.1.1 → later — dictionary groups
 - 📋 Groups with name, icon, order and their own dictionary list; "All" group
 - 📋 Group selector in the toolbar, popup and CLI (`dictz lookup -g NAME`, `dictz groups`)
 - 📋 Hotkey per group; a tab remembers its group
@@ -183,7 +185,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Recently done
 
-- ✅ **after v0.1.0 (plain push)** — the dictionary list moved to `dictionaries.json` in both editions: dictionaries are known by file path, a duplicate name becomes `Name (2)`, missing / failed dictionaries keep their place, one-time migration from the SQLite table — fixes dictionaries getting mixed up or lost
+- ✅ **v0.1.1** — the dictionary list moved to `dictionaries.json` in both editions: dictionaries are known by file path, a duplicate name becomes `Name (2)`, missing / failed dictionaries keep their place, one-time migration from the SQLite table — fixes dictionaries getting mixed up or lost
 
 - ✅ **v0.1.0** — interface in 25 languages with a flag picker (RTL for ar/fa/ur), dictionary icons + article cards (language pair, format, colour), READMEs with screenshots — in both editions
 - ✅ **v0.0.9** — `dct` short name, every `--version` spelling, `dct shortcut` + Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions
