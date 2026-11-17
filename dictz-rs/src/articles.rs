@@ -239,7 +239,9 @@ pub fn build(dict: &dyn Dictionary, store: &Path) -> Result<usize, DictzError> {
 /// A dictionary served from its article store (nothing parsed).
 pub struct StoredDictionary {
     store: PathBuf,
-    con: Option<Connection>,
+    // opened on first use: a dictionary opened from dictionaries.json alone
+    // reads nothing until it is searched
+    con: std::cell::OnceCell<Option<Connection>>,
     meta: DictionaryMetadata,
     words: OnceLock<WordTable>,
     empty: WordTable,
@@ -267,13 +269,31 @@ impl StoredDictionary {
             file_path: source.to_path_buf(),
             format: get("format"),
         };
+        let con = std::cell::OnceCell::new();
+        let _ = con.set(Some(open_ro(store)?));
         Ok(Self {
             store: store.to_path_buf(),
-            con: Some(open_ro(store)?),
+            con,
             meta,
             words: OnceLock::new(),
             empty: WordTable::new(),
         })
+    }
+
+    /// A dictionary from `dictionaries.json` alone: neither the store nor the
+    /// dictionary file is opened until the first lookup.
+    pub fn from_meta(store: &Path, meta: DictionaryMetadata) -> Self {
+        Self {
+            store: store.to_path_buf(),
+            con: std::cell::OnceCell::new(),
+            meta,
+            words: OnceLock::new(),
+            empty: WordTable::new(),
+        }
+    }
+
+    fn con(&self) -> Option<&Connection> {
+        self.con.get_or_init(|| open_ro(&self.store).ok()).as_ref()
     }
 
     /// The store file.
@@ -282,7 +302,7 @@ impl StoredDictionary {
     }
 
     fn rows(&self, sql: &str, args: &[&dyn rusqlite::ToSql]) -> Vec<(String, i64, Vec<u8>)> {
-        let Some(con) = self.con.as_ref() else {
+        let Some(con) = self.con() else {
             return Vec::new();
         };
         let Ok(mut st) = con.prepare_cached(sql) else {
@@ -307,14 +327,13 @@ impl StoredDictionary {
 
 impl Dictionary for StoredDictionary {
     fn load(&mut self) -> Result<(), DictzError> {
-        if self.con.is_none() {
-            self.con = Some(open_ro(&self.store)?);
-        }
-        Ok(())
+        self.con()
+            .map(|_| ())
+            .ok_or_else(|| DictzError::Malformed(format!("{}: cannot open", self.store.display())))
     }
 
     fn is_loaded(&self) -> bool {
-        self.con.is_some()
+        true // opened on first use
     }
 
     fn metadata(&self) -> &DictionaryMetadata {
@@ -326,7 +345,7 @@ impl Dictionary for StoredDictionary {
     }
 
     fn words(&self) -> &WordTable {
-        let Some(con) = self.con.as_ref() else {
+        let Some(con) = self.con() else {
             return &self.empty;
         };
         self.words.get_or_init(|| {
@@ -354,7 +373,7 @@ impl Dictionary for StoredDictionary {
     }
 
     fn close(&mut self) {
-        self.con = None;
+        self.con = std::cell::OnceCell::new();
         self.words = OnceLock::new();
     }
 
@@ -398,7 +417,49 @@ pub fn open_cached(
     data_dir: &Path,
     rebuild: bool,
 ) -> Result<(Box<dyn Dictionary>, bool), DictzError> {
+    open_cached_row(path, data_dir, rebuild, None).map(|(d, built, _)| (d, built))
+}
+
+/// [`open_cached`] with the dictionary's row of `dictionaries.json`: when
+/// its files still have the stamp kept there, nothing but the list is read
+/// (the third value is then `true`).
+pub fn open_cached_row(
+    path: &Path,
+    data_dir: &Path,
+    rebuild: bool,
+    row: Option<&crate::index::DictionaryRow>,
+) -> Result<(Box<dyn Dictionary>, bool, bool), DictzError> {
     let store = store_path(data_dir, &crate::registry::path_id(path));
+    if let Some(r) = row.filter(|r| !rebuild && !r.stamp.is_empty()) {
+        if r.stamp == source_stamp(path) && store.is_file() {
+            // the fast path: everything from dictionaries.json, nothing opened
+            let meta = DictionaryMetadata {
+                name: r.name.clone(),
+                source_language: r.source_language.clone(),
+                target_language: r.target_language.clone(),
+                description: r.description.clone(),
+                author: r.author.clone(),
+                word_count: r.word_count.max(0) as usize,
+                file_path: path.to_path_buf(),
+                format: r.format.clone(),
+            };
+            return Ok((
+                Box::new(StoredDictionary::from_meta(&store, meta)),
+                false,
+                true,
+            ));
+        }
+    }
+    let (d, built) = open_cached_full(path, &store, rebuild)?;
+    Ok((d, built, false))
+}
+
+fn open_cached_full(
+    path: &Path,
+    store: &Path,
+    rebuild: bool,
+) -> Result<(Box<dyn Dictionary>, bool), DictzError> {
+    let store = store.to_path_buf();
     if !rebuild && is_fresh(&store, path) {
         if let Ok(d) = StoredDictionary::open(&store, path) {
             return Ok((Box::new(d), false));

@@ -51,3 +51,30 @@ def test_export_import(tmp_path) -> None:
     q = Preferences.load(tmp_path / "b.json")
     assert q.import_dict(p.export()) == []
     assert q["search.debounce_ms"] == 300
+
+
+def test_autostart_entry_on_linux(tmp_path, monkeypatch) -> None:
+    import sys
+
+    import pytest
+
+    if sys.platform in ("win32", "darwin"):
+        pytest.skip("Linux autostart file")
+    from dictz.core import autostart
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    assert autostart.sync(True, tmp_path) == ""
+    text = (tmp_path / "autostart" / "dictz.desktop").read_text(encoding="utf-8")
+    assert "--autostart" in text and "X-GNOME-Autostart-enabled=true" in text
+    assert autostart.is_enabled()
+    assert autostart.sync(False) == ""
+    assert not autostart.is_enabled()
+
+
+def test_autostart_flag_is_not_a_cli_command(monkeypatch) -> None:
+    import dictz.app as app
+
+    seen = {}
+    monkeypatch.setattr(app, "run_gui", lambda files, autostart=False: seen.update(f=files, a=autostart) or 0)
+    assert app.main(["--autostart"]) == 0
+    assert seen == {"f": [], "a": True}

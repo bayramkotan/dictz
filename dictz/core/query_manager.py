@@ -115,11 +115,24 @@ def add_folder_source(prefs, folder: Path | str, recursive: bool | None = None) 
     return True
 
 
-def scan_sources(prefs) -> list[Path]:
-    """Dictionary files in every dictionary folder (each with its own recursion)."""
-    out: list[Path] = []
+def scan_sources(prefs, data_dir: Path | str | None = None) -> list[Path]:
+    """Dictionary files in every dictionary folder (each with its own recursion).
+
+    With ``data_dir`` the folders' listings come from ``scan_cache.json``: a
+    folder that has not changed since the last scan is not listed again.
+    """
+    if data_dir is None:
+        out: list[Path] = []
+        for folder, rec in folder_sources(prefs):
+            out += scan_folder(folder, rec)
+        return out
+    from ..storage.scancache import SCAN_CACHE_FILE, ScanCache
+
+    cache = ScanCache(Path(data_dir) / SCAN_CACHE_FILE)
+    out = []
     for folder, rec in folder_sources(prefs):
-        out += scan_folder(folder, rec)
+        out += cache.scan(folder, rec)
+    cache.save()
     return out
 
 
@@ -210,12 +223,11 @@ class QueryManager:
                 progress(i, len(rows), row["name"])
             path = Path(row["path"])
             try:
-                dictionary, built = self.open_cached(path, self.data_dir)
+                dictionary, built = self.open_row(row, self.data_dir, self.index_store)
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 errors.append(f"{path}: {exc}")
                 self.failed[row["name"]] = str(exc)
                 continue
-            dictionary.metadata.name = row["name"]  # the name in the list (may be "X (2)")
             self.attach(dictionary, path, bool(row["enabled"]))
             if _changed(row, path) and (built or reindex_changed):
                 self.index_store.index_dictionary(dictionary)
@@ -230,7 +242,20 @@ class QueryManager:
         return dictionary
 
     @staticmethod
-    def open_cached(path: Path | str, data_dir: Path | str, rebuild: bool = False) -> tuple[Dictionary, bool]:
+    def open_row(row: dict, data_dir: Path | str, store: IndexStore | None = None) -> tuple[Dictionary, bool]:
+        """Open a dictionary of the list. When its files still have the stamp
+        kept in ``dictionaries.json`` nothing but the list is read (no store,
+        no file); otherwise the store is checked or rebuilt and the list is
+        brought up to date (``store``)."""
+        d, built = QueryManager.open_cached(row["path"], data_dir, row=row)
+        d.metadata.name = row["name"]  # the name in the list (may be "X (2)")
+        if store is not None and not getattr(d, "lazy", False):
+            store.register_dictionary(d)  # new stamp / counts / languages into the list
+        return d, built
+
+    @staticmethod
+    def open_cached(path: Path | str, data_dir: Path | str, rebuild: bool = False,
+                    row: dict | None = None) -> tuple[Dictionary, bool]:
         """Open a dictionary from its article store; parse it and build the
         store first when the store is missing, old or ``rebuild`` is set.
 
@@ -244,6 +269,14 @@ class QueryManager:
         from ..storage.registry import path_id
 
         store = articles.store_path(data_dir, path_id(path))
+        if (not rebuild and row is not None and row.get("stamp")
+                and row["stamp"] == articles.source_stamp(path) and store.is_file()):
+            # the fast path: everything from dictionaries.json, nothing opened
+            meta = {"name": row["name"], "description": row.get("description", ""),
+                    "author": row.get("author", ""), "source_lang": row.get("source_lang", ""),
+                    "target_lang": row.get("target_lang", ""), "format": row.get("format", ""),
+                    "word_count": str(row.get("word_count") or 0)}
+            return articles.StoredDictionary(store, path, meta=meta), False
         if not rebuild and articles.is_fresh(store, path):
             try:
                 d = articles.StoredDictionary(store, path)

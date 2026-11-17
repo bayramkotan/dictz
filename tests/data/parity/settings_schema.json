@@ -183,6 +183,13 @@
   "help": "dictz açılışta pencere göstermeden tepside başlar."
  },
  {
+  "key": "general.autostart",
+  "kind": "bool",
+  "default": false,
+  "label": "Sistem açılınca başlat",
+  "help": "Bilgisayarda oturum açılınca dictz kendiliğinden, sistem tepsisinde başlar (Windows, Linux, macOS)."
+ },
+ {
   "key": "general.single_instance",
   "kind": "bool",
   "default": true,

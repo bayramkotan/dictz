@@ -58,11 +58,11 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - ✅ completion scripts register both names
 - ✅ READMEs rewritten with per-platform install (Linux / Windows / macOS × portable / pipx / cargo)
 
-> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (✅ done after v0.1.1 as a plain push: article stores, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then the **Dictionary Center** (maintenance, online catalogs, downloads — the section right below), then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
+> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (✅ done after v0.1.1 as a plain push: article stores, no full parse at start) then **v0.1.3 — start from the JSON files only + start with the system / tray** (✅), then **v0.1.4 — article display like GoldenDict**, then the **Dictionary Center** (maintenance, online catalogs, downloads — the section right below), then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
 
 ## Dictionary Center — maintenance, online catalogs, downloads (big job, both editions)
 
-> Asked for on 2026-11-17: "dictionary maintenance must be very, very rich"; add a link and download straight from the internet; pull dictionaries from **my own server, like isnady**; every detail down to **which language into which language**. Planned as its own group of versions **after v0.1.3 (article display)**, split into phases A–H below; each phase is one delivery, in **both editions** (GUI + CLI, same data files, parity tests).
+> Asked for on 2026-11-17: "dictionary maintenance must be very, very rich"; add a link and download straight from the internet; pull dictionaries from **my own server, like isnady**; every detail down to **which language into which language**. Planned as its own group of versions **after v0.1.4 (article display)**, split into phases A–H below; each phase is one delivery, in **both editions** (GUI + CLI, same data files, parity tests).
 
 ### A. Languages: "from which language into which language" (the base of everything else)
 - 📋 One language model for both editions: ISO 639-1 / 639-3 codes (`en` / `eng`), native and English names, script (Latn, Cyrl, Arab, Hans, Hant, Jpan, Kore, Deva…), RTL flag, flag of the main country (flag-icons, MIT). Shared table `languages.json` (+ golden) so Python and Rust name and sort languages the same.
@@ -277,6 +277,8 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 ---
 
 ## Recently done
+
+- ✅ **v0.1.3** — a start reads only the JSON files: every dictionary opens from `dictionaries.json` alone (stamp of its files; no article store, no dictionary file read until the first lookup), icons are looked for once and kept (`icons/`, `icon` field), the dictionary folders are not listed again when unchanged (`scan_cache.json`); nothing is rebuilt or re-scanned unless a file really changed. New setting **Start with the system** (`general.autostart`, 78 settings): Windows Run key, Linux `~/.config/autostart/dictz.desktop`, macOS LaunchAgent; starts hidden in the tray (`--autostart`), the tray icon is always there then
 
 - ✅ **v0.1.2** — dictionaries no longer get lost (list lock, always re-read before a change, `.bak` backup, failed dictionaries stay visible with ⚠); dictionary folders like GoldenDict's Sources → Files (several folders, each with its own Subfolders box, kept and scanned at every start, also in the dictionary manager); fast start released
 

@@ -410,6 +410,7 @@ impl DictzApp {
             prefs,
         };
         app.start_hidden = app.prefs.bool("general.start_in_tray");
+        app.sync_autostart();
         app.apply_prefs(&cc.egui_ctx);
         app.refresh_lists();
         app.start_loading(&cc.egui_ctx, files);
@@ -888,6 +889,22 @@ impl DictzApp {
             .unwrap_or(Color32::from_rgb(0x25, 0x63, 0xeb))
     }
 
+    /// Started at log-in (`--autostart`): hidden in the tray.
+    pub fn start_in_tray(&mut self) {
+        self.start_hidden = true;
+    }
+
+    /// Make the system's log-in start match `general.autostart`.
+    fn sync_autostart(&mut self) {
+        let on = self.prefs.bool("general.autostart");
+        if let Err(e) = crate::autostart::sync(on, Some(&self.data_dir)) {
+            self.set_status(
+                format!("{} {}", tr("Otomatik başlatma ayarlanamadı:"), e),
+                8,
+            );
+        }
+    }
+
     fn apply_prefs(&mut self, ctx: &egui::Context) {
         i18n::set_language(&self.prefs.str("general.language"));
         let p = &self.prefs;
@@ -979,7 +996,7 @@ impl DictzApp {
         let mut new_files: Vec<PathBuf> = Vec::new();
         if self.prefs.bool("dictionaries.scan_on_startup") {
             // every folder with its own "subfolders" box
-            new_files.extend(scan_sources(&self.prefs));
+            new_files.extend(scan_sources(&self.prefs, Some(&self.data_dir)));
         }
         new_files.extend(files.into_iter().filter(|f| is_dictionary_file(f)));
         new_files.retain(|f| known.insert(canon(f)));
@@ -1766,7 +1783,7 @@ impl DictzApp {
             }
             Action::OpenManager => self.show_manager = true,
             Action::RescanFolders => {
-                let files = scan_sources(&self.prefs);
+                let files = scan_sources(&self.prefs, Some(&self.data_dir));
                 self.load_new_files(ctx, files);
             }
             Action::OpenPreferences => self.prefs_win = Some(PrefsWindow::new(&self.prefs)),
@@ -1994,8 +2011,8 @@ impl DictzApp {
             Advanced::OpenData => self.apply(ctx, Action::OpenDataDir),
             Advanced::Rescan => {
                 let files = match self.prefs_win.as_ref() {
-                    Some(w) => scan_sources(&w.draft),
-                    None => scan_sources(&self.prefs),
+                    Some(w) => scan_sources(&w.draft, Some(&self.data_dir)),
+                    None => scan_sources(&self.prefs, Some(&self.data_dir)),
                 };
                 self.load_new_files(ctx, files);
             }
@@ -3360,6 +3377,7 @@ impl DictzApp {
                 match e {
                     prefs_window::Event::Apply | prefs_window::Event::Ok => {
                         let before = folder_sources(&self.prefs);
+                        let autostart_before = self.prefs.bool("general.autostart");
                         let mut p = w.draft.clone();
                         for (k, _) in state_defaults() {
                             if let Some(v) = self.prefs.get(k) {
@@ -3370,9 +3388,12 @@ impl DictzApp {
                         self.save_prefs();
                         self.apply_prefs(ctx);
                         self.refresh_lists();
+                        if self.prefs.bool("general.autostart") != autostart_before {
+                            self.sync_autostart();
+                        }
                         if folder_sources(&self.prefs) != before {
                             // new folders: their dictionaries are added now
-                            let files = scan_sources(&self.prefs);
+                            let files = scan_sources(&self.prefs, Some(&self.data_dir));
                             self.load_new_files(ctx, files);
                         }
                         if matches!(e, prefs_window::Event::Ok) {
@@ -3622,6 +3643,9 @@ fn load_job(
     let data_dir = db.parent().map(Path::to_path_buf).unwrap_or_default();
     // from the article store: nothing is parsed unless the file changed
     let open = |p: &Path| crate::articles::open_cached(p, &data_dir, false);
+    let open_row = |r: &crate::index::DictionaryRow, s: Option<&IndexStore>| {
+        QueryManager::open_row(r, &data_dir, s)
+    };
     let total = rows.len() + new_files.len();
     let mut i = 0;
     let send = |m: LoadMsg| {
@@ -3631,7 +3655,8 @@ fn load_job(
     for row in rows {
         i += 1;
         send(LoadMsg::Progress(i, total, file_name(&row.path)));
-        match open(&row.path) {
+        // from dictionaries.json: nothing is read unless the files changed
+        match open_row(&row, store.as_ref()) {
             Ok((mut d, built)) => {
                 d.metadata_mut().name = row.name.clone();
                 if row.changed() && (built || reindex) {

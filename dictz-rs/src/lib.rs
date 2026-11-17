@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.1.2", default-features = false }
+//! dictz = { version = "0.1.3", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -38,6 +38,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod articles;
+pub mod autostart;
 pub mod babylon;
 #[cfg(feature = "cli")]
 pub mod cli;
@@ -58,6 +59,7 @@ pub mod media;
 pub mod paths;
 pub mod query;
 pub mod registry;
+pub mod scancache;
 pub mod scantext;
 pub mod selftest;
 pub mod settings;

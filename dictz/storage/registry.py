@@ -38,7 +38,7 @@ from typing import Any, Iterator
 REGISTRY_FILE = "dictionaries.json"
 _THREAD_LOCK = threading.RLock()
 FIELDS = ("id", "name", "path", "format", "enabled", "word_count", "source_lang", "target_lang",
-          "description", "mtime", "indexed")
+          "description", "mtime", "indexed", "stamp", "author", "icon")
 
 
 def fnv1a64(data: bytes) -> int:
@@ -137,6 +137,12 @@ class Registry:
             "description": str(d.get("description") or ""),
             "mtime": float(d.get("mtime") or 0.0),
             "indexed": bool(d.get("indexed", False)),
+            # files' "name:size:mtime_ns" when the article store was built: a start
+            # that finds the same stamp opens the dictionary from this list alone
+            "stamp": str(d.get("stamp") or ""),
+            "author": str(d.get("author") or ""),
+            # cached icon in DATA/icons ("" = not looked for yet, "-" = none)
+            "icon": str(d.get("icon") or ""),
         }
 
     def save(self) -> None:
@@ -250,6 +256,9 @@ class Registry:
 
     def set_enabled(self, name: str, enabled: bool) -> None:
         self._edit(name, enabled=bool(enabled))
+
+    def set_icon(self, name: str, icon: str) -> None:
+        self._edit(name, icon=str(icon))
 
     def set_indexed(self, name: str, indexed: bool = True) -> None:
         self._edit(name, indexed=bool(indexed))

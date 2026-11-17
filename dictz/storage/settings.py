@@ -68,6 +68,8 @@ SCHEMA: list[Setting] = [
             "Pencere kapatılınca dictz tepside çalışmaya devam eder (tarama ve kısayollar çalışır)."),
     Setting("general.start_in_tray", "bool", False, "Tepside başlat",
             "dictz açılışta pencere göstermeden tepside başlar."),
+    Setting("general.autostart", "bool", False, "Sistem açılınca başlat",
+            "Bilgisayarda oturum açılınca dictz kendiliğinden, sistem tepsisinde başlar (Windows, Linux, macOS)."),
     Setting("general.single_instance", "bool", True, "Tek kopya çalıştır",
             "dictz ikinci kez açılınca çalışan pencere öne gelir; `dictz popup` / `dictz show` bu kopyaya gider."),
     # ---------------------------------------------------------- appearance

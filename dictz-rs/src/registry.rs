@@ -101,6 +101,13 @@ pub struct Entry {
     pub mtime: f64,
     /// Headwords are in the FTS index.
     pub indexed: bool,
+    /// Files' `name:size:mtime_ns` when the article store was built: a start
+    /// that finds the same stamp opens the dictionary from this list alone.
+    pub stamp: String,
+    /// Author.
+    pub author: String,
+    /// Cached icon in `DATA/icons` (`""` = not looked for yet, `"-"` = none).
+    pub icon: String,
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -127,6 +134,9 @@ impl Entry {
             description: String::new(),
             mtime: 0.0,
             indexed: false,
+            stamp: String::new(),
+            author: String::new(),
+            icon: String::new(),
         }
     }
 
@@ -157,6 +167,9 @@ impl Entry {
             description: s(v, "description"),
             mtime: v.get("mtime").and_then(Value::as_f64).unwrap_or(0.0),
             indexed: v.get("indexed").and_then(Value::as_bool).unwrap_or(false),
+            stamp: s(v, "stamp"),
+            author: s(v, "author"),
+            icon: s(v, "icon"),
             path,
         })
     }
@@ -175,6 +188,9 @@ impl Entry {
         m.insert("description".into(), json!(self.description));
         m.insert("mtime".into(), json!(self.mtime));
         m.insert("indexed".into(), json!(self.indexed));
+        m.insert("stamp".into(), json!(self.stamp));
+        m.insert("author".into(), json!(self.author));
+        m.insert("icon".into(), json!(self.icon));
         Value::Object(m)
     }
 }
@@ -474,6 +490,11 @@ impl Registry {
     /// Enable / disable.
     pub fn set_enabled(&mut self, name: &str, enabled: bool) {
         self.edit(name, |e| e.enabled = enabled);
+    }
+
+    /// Remember the cached icon (`"-"` = none).
+    pub fn set_icon(&mut self, name: &str, icon: &str) {
+        self.edit(name, |e| e.icon = icon.to_string());
     }
 
     /// Mark as indexed (or not).

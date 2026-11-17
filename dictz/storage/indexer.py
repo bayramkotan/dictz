@@ -112,13 +112,49 @@ class IndexStore:
         """
         if self._conn is None:
             self.open()
+        from .articles import source_stamp
+
         meta = dictionary.metadata
+        stamp = source_stamp(meta.file_path)
+        old = self.registry.by_path(meta.file_path)
+        fields = {}
+        if old is not None and old.get("stamp") and old.get("stamp") != stamp:
+            fields["icon"] = ""  # the files changed: look for the icon again
         name = self.registry.register(
             meta.name, meta.file_path, format=meta.format, word_count=meta.word_count,
             source_lang=meta.source_language, target_lang=meta.target_language,
-            description=meta.description, mtime=file_mtime(meta.file_path))
+            description=meta.description, mtime=file_mtime(meta.file_path), stamp=stamp,
+            author=meta.author or "", **fields)
         meta.name = name
         return name
+
+    def icon_path(self, name: str) -> Path | None:
+        """The dictionary's own icon, cached in ``DATA/icons`` (looked for once,
+        then kept in ``dictionaries.json``: no folder listing or Babylon file
+        read at the next start)."""
+        row = self.registry.get(name)
+        if row is None:
+            return None
+        icons = self.db_path.parent / "icons"
+        mark = row.get("icon") or ""
+        if mark == "-":
+            return None
+        if mark and (icons / mark).is_file():
+            return icons / mark
+        from ..core.dictident import icon_bytes
+
+        found = icon_bytes(row["path"])
+        mark = "-"
+        if found:
+            data, ext = found
+            try:
+                icons.mkdir(parents=True, exist_ok=True)
+                mark = f"{row['id']}{ext}"
+                (icons / mark).write_bytes(data)
+            except OSError:
+                mark = "-"
+        self.registry.set_icon(name, mark)
+        return icons / mark if mark != "-" else None
 
     def unique_name_for(self, name: str, path: Path | str) -> str:
         """The name ``path`` has (or would get) in the list."""

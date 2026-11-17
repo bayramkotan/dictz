@@ -104,7 +104,18 @@ impl DictLooks {
         let texture = if path.as_os_str().is_empty() {
             None
         } else {
-            load_texture(ctx, name, &path)
+            // looked for once, then kept in dictionaries.json + DATA/icons
+            let cached = qm
+                .index
+                .as_ref()
+                .filter(|i| i.get_dictionary(name).ok().flatten().is_some());
+            match cached {
+                Some(i) => i
+                    .icon_path(name)
+                    .and_then(|p| std::fs::read(p).ok())
+                    .and_then(|b| texture_from(ctx, name, &b)),
+                None => load_texture(ctx, name, &path),
+            }
         };
         let look = Rc::new(DictLook {
             name: name.to_string(),
@@ -125,7 +136,11 @@ impl DictLooks {
 
 fn load_texture(ctx: &egui::Context, name: &str, path: &std::path::Path) -> Option<TextureHandle> {
     let (bytes, _ext) = dictident::icon_bytes(path)?;
-    let img = image::load_from_memory(&bytes).ok()?;
+    texture_from(ctx, name, &bytes)
+}
+
+fn texture_from(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Option<TextureHandle> {
+    let img = image::load_from_memory(bytes).ok()?;
     // a 1-pixel "icon" is a placeholder, not a picture
     if img.width() < 8 || img.height() < 8 {
         return None;

@@ -34,14 +34,17 @@ def user_data_dir() -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     """``dictz`` entry point: no arguments (or only files) → window, else CLI."""
-    args = sys.argv[1:] if argv is None else argv
+    args = list(sys.argv[1:] if argv is None else argv)
     from .cli import is_cli_invocation
     from .cli import main as cli_main
+    from .core.autostart import FLAG
 
+    autostart = FLAG in args  # started at log-in: quietly, in the tray
+    args = [a for a in args if a != FLAG]
     if is_cli_invocation(args):
         _attach_console()
         return cli_main(args)
-    return run_gui(args)
+    return run_gui(args, autostart=autostart)
 
 
 def _attach_console() -> None:
@@ -61,12 +64,14 @@ def _attach_console() -> None:
         pass
 
 
-def _hand_over(data_dir: Path, files: list[str], popup: str | None) -> bool:
+def _hand_over(data_dir: Path, files: list[str], popup: str | None, autostart: bool = False) -> bool:
     """Single instance: pass the request to the running dictz. True = done."""
     from .core.instance import send
 
     if send(data_dir, {"cmd": "ping"}, timeout=1.0) is None:
         return False
+    if autostart:
+        return True  # already running: a log-in start changes nothing
     if files:
         send(data_dir, {"cmd": "open", "files": [str(Path(f).absolute()) for f in files]})
     if popup is not None:
@@ -76,7 +81,7 @@ def _hand_over(data_dir: Path, files: list[str], popup: str | None) -> bool:
     return True
 
 
-def run_gui(files: list[str] | None = None, popup: str | None = None) -> int:
+def run_gui(files: list[str] | None = None, popup: str | None = None, autostart: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
     from .core.query_manager import QueryManager
@@ -97,7 +102,7 @@ def run_gui(files: list[str] | None = None, popup: str | None = None) -> int:
     data_dir = user_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     if Preferences.load(data_dir / SETTINGS_FILE)["general.single_instance"] and _hand_over(
-            data_dir, files or [], popup):
+            data_dir, files or [], popup, autostart):
         return 0
 
     index_store = IndexStore(data_dir / "dictz_index.db")
@@ -119,6 +124,7 @@ def run_gui(files: list[str] | None = None, popup: str | None = None) -> int:
     # The window opens at once; dictionaries load in the background.
     window = MainWindow(query_manager, history_store, prefs,
                         startup_files=[Path(f) for f in (files or [])])
+    window.autostarted = autostart
     window.start_services(data_dir)
     if not window.starts_hidden():
         window.show()

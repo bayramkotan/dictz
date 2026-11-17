@@ -48,7 +48,7 @@ Rust code map (`dictz-rs/src/`):
 | `fuzzy.rs` | RapidFuzz `fuzz.ratio` (InDel/LCS), `extract`, `rank` | `dictz/core/fuzzy.py` |
 | `media.rs` | DSL/StarDict media lookup | `dictz/core/media.py` |
 | `html.rs` | article HTML → styled lines (egui) and → text (`to_text`, CLI / copy) | QtWebEngine, `dictz/core/htmltext.py` |
-| `settings.rs` | shared `settings.json`: schema (77 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
+| `settings.rs` | shared `settings.json`: schema (78 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
 | `instance.rs` | single instance + `dictz show/popup/watch` protocol (127.0.0.1 + token in `instance.json`) | `dictz/core/instance.py` |
 | `scantext.rs`, `hotkeys.rs`, `icon.rs` | scan text cleaning + Ctrl+C+C, hotkey parsing, the app icon pixels | `dictz/core/scantext.py`, `dictz/core/hotkeys.py`, `dictz/ui/icons.py` |
 | `gui/services.rs`, `gui/window.rs` | clipboard / selection watcher, global hotkeys, tray, instance server; hide-to-tray per platform | `dictz/ui/scanner.py`, `dictz/core/hotkeys.py`, `dictz/ui/main_window.py` |
@@ -80,6 +80,15 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 3. **The MD5 is checked at every destination** (repo and Yandex.Disk) and must match the table in the delivery.
 4. **After a successful copy the downloaded file is deleted** from Downloads (`rm -f` / `Remove-Item -Force`). Leftover `TODO (2).md`-style duplicates of earlier deliveries are removed in the same block, so Downloads stays clean.
 5. The commands always use the exact versioned file name, never a wildcard that could match an old download.
+
+## ⚠️ READ FIRST: a start reads only the JSON files (v0.1.3)
+
+- The user's rule: **"everything in JSON; open fast from JSON; update the JSON when something changes; never re-scan on every start."**
+- Open a dictionary of the list with **`QueryManager.open_row(row, data_dir, store)`** (both editions). When `row.stamp` (files' `name:size:mtime_ns`, see `articles.source_stamp`) equals the files' stamp now and `articles/<id>.db` exists, the dictionary is a lazy `StoredDictionary` built from the row alone (`lazy = True`; Python `StoredDictionary(store, path, meta=…)`, Rust `StoredDictionary::from_meta`) — the SQLite store is opened on the first lookup. Only stat() calls happen at start.
+- Otherwise (`lazy` false: store rebuilt or stamp missing/old) `open_row` calls `register_dictionary`, which writes the new `stamp`, counts, languages and `author` into `dictionaries.json`. A file change also clears `icon` so the icon is looked for again.
+- **Icons**: `IndexStore.icon_path(name)` / `icon_path(name)` — looked for once (`dictident.icon_bytes`: sibling picture or Babylon info block), copied to `DATA/icons/<id>.<ext>`, `icon` field = file name or `"-"` (none). Never call `icon_bytes` on the start path for listed dictionaries.
+- **Folders**: `scan_sources(prefs, data_dir)` uses `scan_cache.json` (`dictz/storage/scancache.py` ↔ `src/scancache.rs`): each directory's listing with its mtime_ns; a directory whose mtime is unchanged is not listed again. Same result as `scan_folder` (tests compare).
+- **Start with the system**: `dictz/core/autostart.py` ↔ `src/autostart.rs`; `general.autostart` → Windows `HKCU\…\Run` value `dictz` (Python `winreg`, Rust `reg.exe`), Linux `$XDG_CONFIG_HOME/autostart/dictz.desktop`, macOS `~/Library/LaunchAgents/com.bayramkotan.dictz.plist`. Command = launch program + `--autostart` (removed from the arguments before CLI dispatch): start hidden in the tray, do nothing when dictz already runs. The tray icon is shown whenever `general.autostart` is on. Synced when the setting changes and at every start (so it points at the current program). Both editions write the same entry — the edition that ran last owns it.
 
 ## ⚠️ READ FIRST: dictionaries open from their article store (no parsing at start)
 
@@ -135,7 +144,8 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 **v0.1.0**: the interface in **25 languages** with a flag picker at the top right (RTL for ar/fa/ur), dictionary icons and article cards, READMEs with screenshots — in both editions.
 **v0.1.1**: the dictionary list moves to **`dictionaries.json`** (path identity, `Name (2)` for duplicate names, failed dictionaries keep their place, one-time migration) — dictionaries are no longer mixed up or lost; in both editions.
 **v0.1.2**: fast start (article stores `articles/<id>.db`, articles read on demand); dictionaries no longer get lost (`dictionaries.json.lock`, always re-read before a change, `.bak` backup, failed dictionaries stay in the list marked ⚠); dictionary folders like GoldenDict's Sources → Files (several folders, each with its own "subfolders" box, kept in `settings.json`, scanned at every start) — in both editions.
-**Next suggested version:** v0.1.3, article display like GoldenDict; then the **Dictionary Center** (`TODO.md` → "Dictionary Center": languages / pairs, sources incl. his own server like isnady-data, catalog, download manager, updates, health page, conversion, CLI — phases A–H), then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**v0.1.3**: a start reads only the JSON files (`dictionaries.json` stamp fast path, cached icons, `scan_cache.json`) — nothing rebuilt or re-scanned unless a file changed; **Start with the system** + tray (`general.autostart`, `--autostart`) — in both editions.
+**Next suggested version:** v0.1.4, article display like GoldenDict (still waiting for his side-by-side screenshot); then the **Dictionary Center** (`TODO.md` → "Dictionary Center": languages / pairs, sources incl. his own server like isnady-data, catalog, download manager, updates, health page, conversion, CLI — phases A–H), then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-16)
 
