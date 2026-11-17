@@ -132,6 +132,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `query` | lookups across dictionaries, suggestions, fuzzy matching, ordering |
 | `index` / `history` | SQLite FTS5 index; history and favorites (same schema as the Python edition) |
 | `registry` | the shared `dictionaries.json` dictionary list (order, on/off, unique names, path identity) |
+| `articles` | article stores `articles/<id>.db`: a dictionary is parsed once, later starts read articles on demand |
 | `media` | finds pictures and sounds of an article |
 | `html` | converts article HTML into styled lines (GUI) or text (CLI) |
 | `settings` | the shared `settings.json` schema and `Preferences` |

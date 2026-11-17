@@ -142,8 +142,10 @@ impl QueryManager {
         reindex: bool,
     ) -> Result<String, DictzError> {
         let path = path.as_ref();
-        let mut dict = open_dictionary(path)?;
-        dict.load()?;
+        let mut dict = match self.data_dir() {
+            Some(dir) => crate::articles::open_cached(path, &dir, reindex)?.0,
+            None => Self::open_file(path)?,
+        };
         // the list gives every file a unique name ("Name (2)")
         let name = match self.index.as_mut() {
             Some(index) => {
@@ -216,10 +218,15 @@ impl QueryManager {
         let total = rows.len();
         for (i, row) in rows.into_iter().enumerate() {
             progress(i, total, &row.name);
-            match Self::open_file(&row.path) {
-                Ok(mut dict) => {
+            let dir = self.data_dir();
+            let opened = match dir.as_ref() {
+                Some(dir) => crate::articles::open_cached(&row.path, dir, false),
+                None => Self::open_file(&row.path).map(|d| (d, false)),
+            };
+            match opened {
+                Ok((mut dict, built)) => {
                     dict.metadata_mut().name = row.name.clone();
-                    if opts.reindex_changed && row.changed() {
+                    if row.changed() && (built || opts.reindex_changed) {
                         if let Some(index) = self.index.as_mut() {
                             let _ = index.index_dictionary(dict.as_ref());
                         }
@@ -238,6 +245,33 @@ impl QueryManager {
         let mut dict = open_dictionary(path)?;
         dict.load()?;
         Ok(dict)
+    }
+
+    /// The data folder (article stores), when there is an index on disk.
+    pub fn data_dir(&self) -> Option<std::path::PathBuf> {
+        self.index.as_ref().and_then(IndexStore::data_dir)
+    }
+
+    /// Read a dictionary's file again: new article store and headword index.
+    /// Returns the headword count.
+    pub fn rebuild(&mut self, name: &str) -> Result<usize, DictzError> {
+        let i = self
+            .position(name)
+            .ok_or_else(|| DictzError::NotFound(name.to_string()))?;
+        let path = self.dicts[i].dict.metadata().file_path.clone();
+        let mut d = match self.data_dir() {
+            Some(dir) => crate::articles::open_cached(&path, &dir, true)?.0,
+            None => Self::open_file(&path)?,
+        };
+        d.metadata_mut().name = name.to_string();
+        self.dicts[i].dict.close();
+        self.dicts[i].dict = d;
+        self.headword_cache = None;
+        let d = self.dicts[i].dict.as_ref();
+        match self.index.as_mut() {
+            Some(index) => index.index_dictionary(d),
+            None => Ok(d.metadata().word_count),
+        }
     }
 
     /// Append an already-loaded dictionary (no indexing).

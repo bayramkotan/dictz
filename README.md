@@ -367,11 +367,12 @@ To use another folder, pass `--data-dir DIR` or set `DICTZ_DATA_DIR`. A USB stic
 | File | What is in it |
 |---|---|
 | `dictionaries.json` | your dictionary list: order, on/off, names (a dictionary is known by its file path; a second one with the same name is shown as `Name (2)`) |
+| `articles/<id>.db` | each dictionary's articles, saved once when it is added, so dictz starts at once (rebuilt by itself when the file changes) |
 | `settings.json` | the 76 settings |
 | `dictz_index.db` | the headword index (SQLite FTS5) |
 | `dictz_history.db` | history and favorites |
 
-All four are shared by the Python and the Rust edition.
+All of them are shared by the Python and the Rust edition.
 
 ## Supported formats
 

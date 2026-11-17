@@ -37,6 +37,7 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+pub mod articles;
 pub mod babylon;
 #[cfg(feature = "cli")]
 pub mod cli;

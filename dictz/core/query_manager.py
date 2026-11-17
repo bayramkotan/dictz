@@ -102,10 +102,16 @@ class QueryManager:
 
     # ------------------------------------------------------------ loading
 
+    @property
+    def data_dir(self) -> Path | None:
+        """The data folder (where the article stores live), when there is an index."""
+        return self.index_store.db_path.parent if self.index_store is not None else None
+
     def add_dictionary(self, path: Path | str, reindex: bool = False) -> Dictionary:
-        parser_cls = parser_for(path)
-        dictionary = parser_cls(path)
-        dictionary.load()
+        if self.data_dir is not None:
+            dictionary, _built = self.open_cached(path, self.data_dir, rebuild=reindex)
+        else:
+            dictionary = self.open_file(path)
         if self.index_store is not None:
             # a unique name per file: a second "X" becomes "X (2)"
             self.index_store.register_dictionary(dictionary)
@@ -151,13 +157,13 @@ class QueryManager:
                 progress(i, len(rows), row["name"])
             path = Path(row["path"])
             try:
-                dictionary = self.open_file(path)
+                dictionary, built = self.open_cached(path, self.data_dir)
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 errors.append(f"{path}: {exc}")
                 continue
             dictionary.metadata.name = row["name"]  # the name in the list (may be "X (2)")
             self.attach(dictionary, path, bool(row["enabled"]))
-            if reindex_changed and _changed(row, path):
+            if _changed(row, path) and (built or reindex_changed):
                 self.index_store.index_dictionary(dictionary)
             loaded.append(dictionary.metadata.name)
         return loaded, errors
@@ -168,6 +174,52 @@ class QueryManager:
         dictionary = parser_for(path)(path)
         dictionary.load()
         return dictionary
+
+    @staticmethod
+    def open_cached(path: Path | str, data_dir: Path | str, rebuild: bool = False) -> tuple[Dictionary, bool]:
+        """Open a dictionary from its article store; parse it and build the
+        store first when the store is missing, old or ``rebuild`` is set.
+
+        Returns ``(dictionary, built)``. Safe to call from a worker thread.
+        When the store cannot be written (read-only data folder) the parsed
+        dictionary is returned instead.
+        """
+        import sqlite3
+
+        from ..storage import articles
+        from ..storage.registry import path_id
+
+        store = articles.store_path(data_dir, path_id(path))
+        if not rebuild and articles.is_fresh(store, path):
+            try:
+                d = articles.StoredDictionary(store, path)
+                d.load()
+                return d, False
+            except sqlite3.Error:
+                pass
+        parsed = QueryManager.open_file(path)
+        try:
+            articles.build(parsed, store)
+        except (OSError, sqlite3.Error):
+            return parsed, True
+        parsed.close()
+        d = articles.StoredDictionary(store, path)
+        d.load()
+        return d, True
+
+    def rebuild(self, name: str) -> int:
+        """Read a dictionary's file again: new article store and headword index."""
+        old = self.dictionaries[name]
+        path = old.metadata.file_path
+        if self.data_dir is not None:
+            d, _ = self.open_cached(path, self.data_dir, rebuild=True)
+        else:
+            d = self.open_file(path)
+        old.close()
+        d.metadata.name = name
+        self.dictionaries[name] = d
+        self._headword_cache = None
+        return self.index_store.index_dictionary(d) if self.index_store is not None else d.metadata.word_count
 
     def attach(self, dictionary: Dictionary, path: Path | str, enabled: bool = True) -> None:
         """Add an already-loaded dictionary at the end of the list (no indexing)."""
