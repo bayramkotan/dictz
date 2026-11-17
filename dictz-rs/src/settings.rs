@@ -772,6 +772,16 @@ pub static SCHEMA: &[Setting] = &[
         choices: &[],
     },
     Setting {
+        key: "dictionaries.flat_folders",
+        kind: Kind::List,
+        default: Def::List,
+        label: "Alt klasörleri taranmayan klasörler",
+        help: "Sözlük klasörlerinden alt klasörleri taranmayanlar (klasör listesindeki kutu).",
+        min: None,
+        max: None,
+        choices: &[],
+    },
+    Setting {
         key: "dictionaries.scan_on_startup",
         kind: Kind::Bool,
         default: Def::Bool(true),

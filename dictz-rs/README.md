@@ -104,7 +104,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-76 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+77 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 

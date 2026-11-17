@@ -16,7 +16,10 @@ use crate::html::{self, Line};
 use crate::index::IndexStore;
 use crate::media::{media_kind, MediaKind};
 use crate::paths::{HISTORY_DB, INDEX_DB};
-use crate::query::{is_dictionary_file, scan_folder, QueryManager, Suggestion};
+use crate::query::{
+    add_folder_source, folder_sources, is_dictionary_file, scan_folder, scan_sources,
+    set_folder_sources, QueryManager, Suggestion,
+};
 use crate::settings::{state_defaults, Preferences};
 use crate::shortcuts::SHORTCUTS;
 use crate::{Dictionary, DictionaryEntry, VERSION};
@@ -93,18 +96,24 @@ enum Confirm {
     ClearHistory,
     ClearFavorites,
     RemoveDict(String),
-    AddFolder(Vec<PathBuf>, usize),
     Quit,
 }
 
 enum Action {
+    /// Scan the dictionary folders now and add the new files.
+    RescanFolders,
     CreateShortcuts,
     SetScan(bool),
     PopupLookup(String),
     ToggleMain,
     OpenWord(String),
-    OpenWordIn { word: String, dicts: Vec<String> },
-    Explicit { new_tab: bool },
+    OpenWordIn {
+        word: String,
+        dicts: Vec<String>,
+    },
+    Explicit {
+        new_tab: bool,
+    },
     NavBack,
     NavForward,
     Random,
@@ -157,7 +166,7 @@ enum Action {
 enum LoadMsg {
     Progress(usize, usize, String),
     Loaded(Box<dyn Dictionary>, PathBuf, bool),
-    Failed(String),
+    Failed(PathBuf, String),
     Done,
 }
 
@@ -231,6 +240,8 @@ pub struct DictzApp {
     load_progress: Option<(usize, usize, String)>,
     load_errors: Vec<String>,
     loaded_count: usize,
+    /// The running load only adds new files (not the start-up load).
+    extra_load: bool,
 
     search: String,
     edited_at: Option<Instant>,
@@ -340,6 +351,7 @@ impl DictzApp {
             load_progress: None,
             load_errors: Vec::new(),
             loaded_count: 0,
+            extra_load: false,
             search,
             edited_at: None,
             suggestions: Vec::new(),
@@ -966,12 +978,8 @@ impl DictzApp {
             rows.iter().map(|r| canon(&r.path)).collect();
         let mut new_files: Vec<PathBuf> = Vec::new();
         if self.prefs.bool("dictionaries.scan_on_startup") {
-            let rec = self.prefs.bool("dictionaries.recursive");
-            for f in self.prefs.list("dictionaries.folders") {
-                if !f.trim().is_empty() {
-                    new_files.extend(scan_folder(Path::new(f.trim()), rec));
-                }
-            }
+            // every folder with its own "subfolders" box
+            new_files.extend(scan_sources(&self.prefs));
         }
         new_files.extend(files.into_iter().filter(|f| is_dictionary_file(f)));
         new_files.retain(|f| known.insert(canon(f)));
@@ -1005,7 +1013,24 @@ impl DictzApp {
                     self.loaded_count += 1;
                     changed = true;
                 }
-                LoadMsg::Failed(e) => self.load_errors.push(e),
+                LoadMsg::Failed(path, e) => {
+                    // stays in the list, shown with ⚠ (never dropped)
+                    self.load_errors.push(format!("{}: {}", path.display(), e));
+                    let me = crate::registry::norm_path(&path);
+                    let name = self
+                        .qm
+                        .index
+                        .as_ref()
+                        .and_then(|i| i.list_dictionaries(false).ok())
+                        .and_then(|rows| {
+                            rows.into_iter()
+                                .find(|r| crate::registry::norm_path(&r.path) == me)
+                                .map(|r| r.name)
+                        });
+                    if let Some(n) = name {
+                        self.qm.note_failed(&n, &e);
+                    }
+                }
                 LoadMsg::Done => done = true,
             }
         }
@@ -1024,6 +1049,22 @@ impl DictzApp {
         // not load keep their place there
         self.load_progress = None;
         self.loader = None;
+        if std::mem::take(&mut self.extra_load) {
+            // new files from the dictionary folders: no tabs to restore
+            if self.load_errors.is_empty() {
+                let msg = tr_args("{n} sözlük eklendi", &[("n", &self.loaded_count)]);
+                self.set_status(msg, 4);
+            } else {
+                let msg = format!(
+                    "{} {}",
+                    tr_args("{n} sözlük açılamadı:", &[("n", &self.load_errors.len())]),
+                    self.load_errors.join("; ")
+                );
+                self.set_status(msg, 12);
+            }
+            self.refresh_lists();
+            return;
+        }
         if let Some(w) = self.pending_popup.take() {
             self.popup_lookup(ctx, &w);
         }
@@ -1426,13 +1467,61 @@ impl DictzApp {
         self.media_cache.clear();
     }
 
-    fn known_paths(&self) -> std::collections::HashSet<PathBuf> {
-        self.qm
-            .loaded_names()
+    /// Add dictionary files that are not in the list yet, in the background.
+    fn load_new_files(&mut self, ctx: &egui::Context, files: Vec<PathBuf>) {
+        let mut known: std::collections::HashSet<String> = self
+            .qm
+            .index
+            .as_ref()
+            .and_then(|i| i.list_dictionaries(false).ok())
+            .unwrap_or_default()
             .iter()
-            .filter_map(|n| self.qm.path_of(n))
-            .map(|p| p.canonicalize().unwrap_or(p))
-            .collect()
+            .map(|r| crate::registry::norm_path(&r.path))
+            .collect();
+        let new: Vec<PathBuf> = files
+            .into_iter()
+            .filter(|f| known.insert(crate::registry::norm_path(f)))
+            .collect();
+        if new.is_empty() {
+            self.set_status(tr("Yeni sözlük yok"), 4);
+            return;
+        }
+        if self.loader.is_some() || self.qm.index.is_none() {
+            self.add_paths(new);
+            return;
+        }
+        self.loaded_count = 0;
+        self.load_errors.clear();
+        self.extra_load = true;
+        let db = self.data_dir.join(INDEX_DB);
+        let reindex = self.prefs.bool("dictionaries.reindex_on_change");
+        let (tx, rx) = channel();
+        let c = ctx.clone();
+        std::thread::spawn(move || load_job(db, Vec::new(), new, reindex, tx, c));
+        self.loader = Some(rx);
+    }
+
+    /// Keep `folder` in the dictionary folders (Preferences → Dictionaries;
+    /// scanned at every start) and add its dictionaries now.
+    fn add_folder(&mut self, ctx: &egui::Context, folder: &Path) {
+        if add_folder_source(&mut self.prefs, folder, None) {
+            self.save_prefs();
+        }
+        let me = crate::registry::norm_path(folder);
+        let rec = folder_sources(&self.prefs)
+            .into_iter()
+            .find(|(f, _)| *f == me)
+            .map(|(_, r)| r)
+            .unwrap_or(true);
+        let files = scan_folder(folder, rec);
+        if files.is_empty() {
+            self.error = Some((
+                tr("Klasör ekle"),
+                tr("Bu klasörde sözlük dosyası bulunamadı."),
+            ));
+            return;
+        }
+        self.load_new_files(ctx, files);
     }
 
     fn play_audio(&mut self, dict: &str, name: &str) {
@@ -1661,27 +1750,25 @@ impl DictzApp {
                     .set_title(tr("Sözlük klasörü seçin"))
                     .pick_folder()
                 {
-                    let files = scan_folder(&d, self.prefs.bool("dictionaries.recursive"));
-                    if files.is_empty() {
-                        self.error = Some((
-                            tr("Klasör ekle"),
-                            tr("Bu klasörde sözlük dosyası bulunamadı."),
-                        ));
-                    } else {
-                        let known = self.known_paths();
-                        let total = files.len();
-                        let new: Vec<PathBuf> = files
-                            .into_iter()
-                            .filter(|f| {
-                                !known.contains(&f.canonicalize().unwrap_or_else(|_| f.clone()))
-                            })
-                            .collect();
-                        self.confirm = Some(Confirm::AddFolder(new, total));
-                    }
+                    self.add_folder(ctx, &d);
                 }
             }
-            Action::AddPaths(p) => self.add_paths(p),
+            Action::AddPaths(p) => {
+                // a folder is kept like "Add folder…" (scanned at every start)
+                let (dirs, files): (Vec<PathBuf>, Vec<PathBuf>) =
+                    p.into_iter().partition(|x| x.is_dir());
+                for d in dirs {
+                    self.add_folder(ctx, &d);
+                }
+                if !files.is_empty() {
+                    self.add_paths(files);
+                }
+            }
             Action::OpenManager => self.show_manager = true,
+            Action::RescanFolders => {
+                let files = scan_sources(&self.prefs);
+                self.load_new_files(ctx, files);
+            }
             Action::OpenPreferences => self.prefs_win = Some(PrefsWindow::new(&self.prefs)),
             Action::About => self.show_about = true,
             Action::Shortcuts => self.show_shortcuts = true,
@@ -1905,6 +1992,13 @@ impl DictzApp {
     fn advanced(&mut self, ctx: &egui::Context, a: Advanced) {
         match a {
             Advanced::OpenData => self.apply(ctx, Action::OpenDataDir),
+            Advanced::Rescan => {
+                let files = match self.prefs_win.as_ref() {
+                    Some(w) => scan_sources(&w.draft),
+                    None => scan_sources(&self.prefs),
+                };
+                self.load_new_files(ctx, files);
+            }
             Advanced::Reindex => {
                 let names = self.qm.loaded_names();
                 self.apply(ctx, Action::Reindex(names));
@@ -2543,6 +2637,30 @@ impl DictzApp {
                             });
                         });
                     }
+                    // dictionaries of the list that could not be opened: kept, marked ⚠
+                    let failed: Vec<(String, String)> = self
+                        .qm
+                        .list_rows()
+                        .into_iter()
+                        .filter(|r| !r.loaded && keep(&r.name))
+                        .map(|r| (r.name, r.error))
+                        .collect();
+                    for (name, error) in failed {
+                        let red = ui.visuals().error_fg_color;
+                        let r = ui
+                            .add(
+                                egui::Label::new(RichText::new(format!("⚠ {}", name)).color(red))
+                                    .sense(egui::Sense::click())
+                                    .truncate(),
+                            )
+                            .on_hover_text(format!("{}: {}", tr("açılamadı"), error));
+                        r.context_menu(|ui| {
+                            if ui.button(tr("Kaldır…")).clicked() {
+                                actions.push(Action::Ask(Confirm::RemoveDict(name.clone())));
+                                ui.close_menu();
+                            }
+                        });
+                    }
                 });
             }
             SidebarTab::Favorites => {
@@ -3134,8 +3252,27 @@ impl DictzApp {
                             ui.strong(h);
                         }
                         ui.end_row();
-                        for name in self.qm.loaded_names() {
-                            let Some(d) = self.qm.dictionary(&name) else { continue };
+                        // every dictionary of the list; one that could not be opened stays, marked ⚠
+                        for row in self.qm.list_rows() {
+                            let name = row.name.clone();
+                            let Some(d) = self.qm.dictionary(&name) else {
+                                let mut on = row.enabled;
+                                if ui.checkbox(&mut on, "").changed() {
+                                    actions.push(Action::SetEnabled(name.clone(), on));
+                                }
+                                let red = ui.visuals().error_fg_color;
+                                let sel = self.manager_selected.as_deref() == Some(name.as_str());
+                                let label = RichText::new(format!("⚠ {} — {}", name, tr("açılamadı"))).color(red);
+                                if ui.selectable_label(sel, label).on_hover_text(&row.error).clicked() {
+                                    self.manager_selected = Some(name.clone());
+                                }
+                                ui.label(&row.format);
+                                ui.label(group(row.word_count));
+                                ui.label("—");
+                                ui.colored_label(red, row.path.display().to_string()).on_hover_text(&row.error);
+                                ui.end_row();
+                                continue;
+                            };
                             let m = d.metadata();
                             let mut on = self.qm.is_enabled(&name);
                             if ui.checkbox(&mut on, "").changed() {
@@ -3165,6 +3302,47 @@ impl DictzApp {
                 });
                 ui.separator();
                 ui.weak(tr("Sıra arama sonuçlarındaki sözlük sırasıdır. Dosyalar silinmez; yalnızca dictz listesinden çıkarılır."));
+                ui.separator();
+                // the dictionary folders (kept in settings.json, scanned at every start)
+                ui.horizontal_wrapped(|ui| {
+                    ui.strong(tr("Sözlük klasörleri"));
+                    ui.weak(tr("Açılışta bu klasörlerdeki .ifo / .dsl / .dsl.dz / .bgl dosyaları otomatik eklenir."));
+                });
+                let mut items = folder_sources(&self.prefs);
+                let mut changed = false;
+                let mut remove = None;
+                egui::Grid::new("mgr-folders").num_columns(3).spacing([10.0, 4.0]).show(ui, |ui| {
+                    for (i, (f, rec)) in items.iter_mut().enumerate() {
+                        ui.label(f.as_str());
+                        if ui.checkbox(rec, tr("Alt klasörler")).changed() {
+                            changed = true;
+                        }
+                        if ui.small_button("✕").on_hover_text(tr("Kaldır")).clicked() {
+                            remove = Some(i);
+                        }
+                        ui.end_row();
+                    }
+                });
+                if let Some(i) = remove {
+                    items.remove(i);
+                    changed = true;
+                }
+                if items.is_empty() {
+                    ui.weak(tr("(klasör yok)"));
+                }
+                if changed {
+                    set_folder_sources(&mut self.prefs, &items);
+                    self.save_prefs();
+                    actions.push(Action::RescanFolders);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button(tr("Klasör ekle…")).clicked() {
+                        actions.push(Action::AddFolderDialog);
+                    }
+                    if ui.button(tr("Şimdi tara")).clicked() {
+                        actions.push(Action::RescanFolders);
+                    }
+                });
             });
         self.show_manager = open;
     }
@@ -3181,6 +3359,7 @@ impl DictzApp {
             for e in events {
                 match e {
                     prefs_window::Event::Apply | prefs_window::Event::Ok => {
+                        let before = folder_sources(&self.prefs);
                         let mut p = w.draft.clone();
                         for (k, _) in state_defaults() {
                             if let Some(v) = self.prefs.get(k) {
@@ -3191,6 +3370,11 @@ impl DictzApp {
                         self.save_prefs();
                         self.apply_prefs(ctx);
                         self.refresh_lists();
+                        if folder_sources(&self.prefs) != before {
+                            // new folders: their dictionaries are added now
+                            let files = scan_sources(&self.prefs);
+                            self.load_new_files(ctx, files);
+                        }
                         if matches!(e, prefs_window::Event::Ok) {
                             keep = false;
                         }
@@ -3335,15 +3519,19 @@ impl DictzApp {
 
         if let Some(c) = self.confirm.clone() {
             let (title, text) = match &c {
-                Confirm::ClearHistory => (tr("Geçmişi temizle"), tr("Tüm arama geçmişi silinsin mi?").to_string()),
-                Confirm::ClearFavorites => (tr("Favorileri temizle"), tr("Tüm favoriler silinsin mi?").to_string()),
-                Confirm::RemoveDict(n) => (tr("Sözlüğü kaldır"), tr_args("“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)", &[("name", n)])),
-                Confirm::AddFolder(new, total) => (
-                    tr("Klasör ekle"),
-                    format!(
-                        "{}\n\n{}",
-                        tr_args("{n} sözlük bulundu, {m} tanesi yeni.\nYeni olanlar eklensin mi?", &[("n", total), ("m", &new.len())]),
-                        tr("İpucu: Tercihler → Sözlükler'e klasör ekleyince her açılışta otomatik taranır.")
+                Confirm::ClearHistory => (
+                    tr("Geçmişi temizle"),
+                    tr("Tüm arama geçmişi silinsin mi?").to_string(),
+                ),
+                Confirm::ClearFavorites => (
+                    tr("Favorileri temizle"),
+                    tr("Tüm favoriler silinsin mi?").to_string(),
+                ),
+                Confirm::RemoveDict(n) => (
+                    tr("Sözlüğü kaldır"),
+                    tr_args(
+                        "“{name}” dictz'den kaldırılsın mı?\n(Dosyası silinmez.)",
+                        &[("name", n)],
                     ),
                 ),
                 Confirm::Quit => (tr("Çıkış"), tr("dictz kapatılsın mı?").to_string()),
@@ -3382,7 +3570,6 @@ impl DictzApp {
                             self.refresh_lists();
                         }
                         Confirm::RemoveDict(n) => actions.push(Action::RemoveDict(n)),
-                        Confirm::AddFolder(new, _) => actions.push(Action::AddPaths(new)),
                         Confirm::Quit => {
                             self.allow_close = true;
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -3454,7 +3641,7 @@ fn load_job(
                 }
                 send(LoadMsg::Loaded(d, row.path.clone(), row.enabled));
             }
-            Err(e) => send(LoadMsg::Failed(format!("{}: {}", row.path.display(), e))),
+            Err(e) => send(LoadMsg::Failed(row.path.clone(), e.to_string())),
         }
     }
     for f in new_files {
@@ -3473,7 +3660,7 @@ fn load_job(
                 }
                 send(LoadMsg::Loaded(d, f.clone(), true));
             }
-            Err(e) => send(LoadMsg::Failed(format!("{}: {}", f.display(), e))),
+            Err(e) => send(LoadMsg::Failed(f.clone(), e.to_string())),
         }
     }
     send(LoadMsg::Done);

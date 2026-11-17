@@ -25,6 +25,8 @@ pub enum Advanced {
     Export,
     /// Load settings from a file.
     Import,
+    /// Scan the dictionary folders now (with the draft's folders).
+    Rescan,
 }
 
 /// What the window asks the app to do.
@@ -45,7 +47,12 @@ pub struct PrefsWindow {
     pub draft: Preferences,
     page: usize,
     filter: String,
+    pending: Vec<Event>,
 }
+
+/// Settings without their own row: `dictionaries.flat_folders` is the
+/// "subfolders" box of the dictionary folder list.
+pub const HIDDEN_KEYS: &[&str] = &["dictionaries.flat_folders"];
 
 const PAGE_SHORTCUTS: &str = "Kısayollar";
 const PAGE_ADVANCED: &str = "Gelişmiş";
@@ -79,6 +86,7 @@ impl PrefsWindow {
             draft: prefs.clone(),
             page: 0,
             filter: String::new(),
+            pending: Vec::new(),
         }
     }
 
@@ -164,6 +172,7 @@ impl PrefsWindow {
                     });
                 });
             });
+        events.append(&mut self.pending);
         events
     }
 
@@ -253,6 +262,7 @@ impl PrefsWindow {
         let items: Vec<&Setting> = SCHEMA
             .iter()
             .filter(|s| s.key.split('.').next() == Some(sec))
+            .filter(|s| !HIDDEN_KEYS.contains(&s.key))
             .collect();
         self.grid(ui, sec, &items);
     }
@@ -264,6 +274,7 @@ impl PrefsWindow {
             let items: Vec<&Setting> = SCHEMA
                 .iter()
                 .filter(|s| s.key.split('.').next() == Some(*sec))
+                .filter(|s| !HIDDEN_KEYS.contains(&s.key))
                 .filter(|s| {
                     s.label.to_lowercase().contains(&q)
                         || s.key.to_lowercase().contains(&q)
@@ -304,6 +315,9 @@ impl PrefsWindow {
                         .clicked()
                     {
                         let _ = self.draft.reset(Some(s.key));
+                        if s.key == "dictionaries.folders" {
+                            let _ = self.draft.reset(Some("dictionaries.flat_folders"));
+                        }
                     }
                     ui.end_row();
                 }
@@ -320,6 +334,10 @@ impl PrefsWindow {
                 ui.weak(tr(s.help));
             }
         };
+        if s.key == "dictionaries.folders" {
+            self.folder_sources(ui);
+            return;
+        }
         match s.kind {
             Kind::Bool => {
                 let mut v = self.draft.bool(s.key);
@@ -482,6 +500,66 @@ impl PrefsWindow {
                     );
                 }
             }
+        }
+    }
+}
+
+impl PrefsWindow {
+    /// The dictionary folders, each with its own "subfolders" box (like
+    /// GoldenDict's Sources → Files).
+    fn folder_sources(&mut self, ui: &mut egui::Ui) {
+        let mut items = crate::query::folder_sources(&self.draft);
+        let mut changed = false;
+        ui.vertical(|ui| {
+            let mut remove = None;
+            egui::Grid::new("folder-sources")
+                .num_columns(3)
+                .spacing([10.0, 4.0])
+                .show(ui, |ui| {
+                    if !items.is_empty() {
+                        ui.strong(tr("Klasör"));
+                        ui.strong(tr("Alt klasörler"));
+                        ui.label("");
+                        ui.end_row();
+                    }
+                    for (i, (f, rec)) in items.iter_mut().enumerate() {
+                        ui.label(f.as_str()).on_hover_text(f.as_str());
+                        if ui.checkbox(rec, "").changed() {
+                            changed = true;
+                        }
+                        if ui.small_button("✕").on_hover_text(tr("Kaldır")).clicked() {
+                            remove = Some(i);
+                        }
+                        ui.end_row();
+                    }
+                });
+            if let Some(i) = remove {
+                items.remove(i);
+                changed = true;
+            }
+            if items.is_empty() {
+                ui.weak(tr("(klasör yok)"));
+            }
+            ui.horizontal(|ui| {
+                if ui.button(tr("Klasör ekle…")).clicked() {
+                    if let Some(p) = rfd::FileDialog::new()
+                        .set_title(tr("Sözlük klasörü"))
+                        .pick_folder()
+                    {
+                        let p = crate::registry::norm_path(&p);
+                        if !items.iter().any(|(f, _)| *f == p) {
+                            items.push((p, self.draft.bool("dictionaries.recursive")));
+                            changed = true;
+                        }
+                    }
+                }
+                if ui.button(tr("Şimdi tara")).clicked() {
+                    self.pending.push(Event::Action(Advanced::Rescan));
+                }
+            });
+        });
+        if changed {
+            crate::query::set_folder_sources(&mut self.draft, &items);
         }
     }
 }

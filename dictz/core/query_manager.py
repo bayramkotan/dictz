@@ -73,6 +73,56 @@ def scan_folder(folder: Path | str, recursive: bool = True) -> list[Path]:
     return sorted(out, key=lambda p: str(p).lower())
 
 
+def folder_sources(prefs) -> list[tuple[str, bool]]:
+    """Dictionary folders from the settings: ``(folder, recursive)`` in order.
+
+    ``dictionaries.folders`` lists them; a folder that is also in
+    ``dictionaries.flat_folders`` is scanned without its subfolders. Same rule
+    as the Rust edition's ``query::folder_sources``.
+    """
+    flat = {str(f) for f in prefs["dictionaries.flat_folders"]}
+    return [(str(f), str(f) not in flat) for f in prefs["dictionaries.folders"] if str(f).strip()]
+
+
+def set_folder_sources(prefs, sources: list[tuple[str, bool]]) -> None:
+    """Write ``(folder, recursive)`` pairs back to the two settings (duplicates dropped)."""
+    seen: set[str] = set()
+    folders, flat = [], []
+    for f, rec in sources:
+        f = str(f).strip()
+        if not f or f in seen:
+            continue
+        seen.add(f)
+        folders.append(f)
+        if not rec:
+            flat.append(f)
+    prefs.set("dictionaries.folders", folders)
+    prefs.set("dictionaries.flat_folders", flat)
+
+
+def add_folder_source(prefs, folder: Path | str, recursive: bool | None = None) -> bool:
+    """Add a folder to the dictionary folders (kept for every start).
+
+    Returns ``False`` when it is already there. ``recursive=None`` uses the
+    ``dictionaries.recursive`` setting.
+    """
+    folder = str(Path(folder).expanduser().absolute())
+    sources = folder_sources(prefs)
+    if any(f == folder for f, _ in sources):
+        return False
+    rec = bool(prefs["dictionaries.recursive"]) if recursive is None else bool(recursive)
+    set_folder_sources(prefs, sources + [(folder, rec)])
+    return True
+
+
+def scan_sources(prefs) -> list[Path]:
+    """Dictionary files in every dictionary folder (each with its own recursion)."""
+    out: list[Path] = []
+    for folder, rec in folder_sources(prefs):
+        out += scan_folder(folder, rec)
+    return out
+
+
 def _changed(row, path: Path) -> bool:
     from ..storage.indexer import file_mtime
 
@@ -99,6 +149,9 @@ class QueryManager:
         self._order: list[str] = []
         self._media: dict[str, MediaResolver] = {}
         self._headword_cache: list[str] | None = None
+        # dictionaries in the list that could not be opened: name -> reason.
+        # They stay in the list (and in the dictionary manager), never dropped.
+        self.failed: dict[str, str] = {}
 
     # ------------------------------------------------------------ loading
 
@@ -160,6 +213,7 @@ class QueryManager:
                 dictionary, built = self.open_cached(path, self.data_dir)
             except Exception as exc:  # noqa: BLE001 — report and keep going
                 errors.append(f"{path}: {exc}")
+                self.failed[row["name"]] = str(exc)
                 continue
             dictionary.metadata.name = row["name"]  # the name in the list (may be "X (2)")
             self.attach(dictionary, path, bool(row["enabled"]))
@@ -224,6 +278,7 @@ class QueryManager:
     def attach(self, dictionary: Dictionary, path: Path | str, enabled: bool = True) -> None:
         """Add an already-loaded dictionary at the end of the list (no indexing)."""
         name = dictionary.metadata.name
+        self.failed.pop(name, None)
         if name in self.dictionaries:
             self._order.remove(name)
         self.dictionaries[name] = dictionary
@@ -243,6 +298,7 @@ class QueryManager:
             self._order.remove(name)
         self._media.pop(name, None)
         self.enabled_names.discard(name)
+        self.failed.pop(name, None)
         if self.index_store is not None:
             self.index_store.remove_dictionary(name)
         self._persist_order()
@@ -258,7 +314,45 @@ class QueryManager:
         self._headword_cache = None
 
     def is_enabled(self, name: str) -> bool:
+        if name in self.failed and name not in self.dictionaries and self.index_store is not None:
+            row = self.index_store.get_dictionary(name)
+            return bool(row and row["enabled"])
         return name in self.enabled_names
+
+    def note_failed(self, name: str, reason: str) -> None:
+        """Remember that a dictionary of the list could not be opened."""
+        if name not in self.dictionaries:
+            self.failed[name] = reason
+
+    def list_rows(self) -> list[dict]:
+        """Every dictionary of the list in list order — also the ones that
+        could not be opened (``error`` set) — so none ever disappears.
+
+        Keys: name, path, format, word_count, enabled, loaded, error.
+        """
+        out = []
+        rows = self.index_store.list_dictionaries(enabled_only=False) if self.index_store is not None else []
+        listed = set()
+        for r in rows:
+            name = r["name"]
+            listed.add(name)
+            d = self.dictionaries.get(name)
+            loaded = d is not None
+            if not loaded and name not in self.failed:
+                continue  # still loading
+            out.append({
+                "name": name, "path": r["path"], "format": d.metadata.format if loaded else r["format"],
+                "word_count": d.metadata.word_count if loaded else int(r["word_count"] or 0),
+                "enabled": self.is_enabled(name), "loaded": loaded,
+                "error": "" if loaded else self.failed.get(name, ""),
+            })
+        for name in self._order:
+            if name not in listed:
+                m = self.dictionaries[name].metadata
+                out.append({"name": name, "path": str(m.file_path), "format": m.format,
+                            "word_count": m.word_count, "enabled": self.is_enabled(name),
+                            "loaded": True, "error": ""})
+        return out
 
     def move_dictionary(self, name: str, delta: int) -> None:
         """Move a dictionary up (``delta < 0``) or down in the list."""

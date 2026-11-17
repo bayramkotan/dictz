@@ -5,8 +5,14 @@ Same file and rules as the Rust edition (``dictz-rs/src/registry.rs``):
 * the list order is the search order;
 * a dictionary is identified by its **file path**; its ``name`` is unique —
   a second dictionary with the same name gets ``"Name (2)"``;
-* every change is written at once (temp file + rename), after re-reading the
-  file so a change made by the other edition or the CLI is not lost;
+* every change re-reads the file first (always, not only when it looks
+  changed) and is written at once (temp file + rename), so a change made by
+  the other edition, the CLI or another window is never overwritten;
+* a change holds ``dictionaries.json.lock`` (threads, windows, the CLI and
+  both editions take turns), so two changes at once never lose one;
+* the previous file is kept as ``dictionaries.json.bak``; when the file
+  cannot be read, the backup is used and the list is never written empty
+  over an unreadable file;
 * the first start migrates the old SQLite ``dictionaries`` table.
 
 ```json
@@ -22,11 +28,15 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shutil
 import tempfile
+import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 REGISTRY_FILE = "dictionaries.json"
+_THREAD_LOCK = threading.RLock()
 FIELDS = ("id", "name", "path", "format", "enabled", "word_count", "source_lang", "target_lang",
           "description", "mtime", "indexed")
 
@@ -79,20 +89,39 @@ class Registry:
         except (OSError, AttributeError):
             return None
 
-    def reload(self) -> None:
-        """Re-read the file if it changed on disk."""
+    @property
+    def backup_path(self) -> Path | None:
+        return self.path.with_name(self.path.name + ".bak") if self.path is not None else None
+
+    @staticmethod
+    def _read(path: Path) -> list[dict[str, Any]] | None:
+        """Entries of a list file, ``None`` when it is missing or unreadable."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict) or not isinstance(data.get("dictionaries"), list):
+            return None
+        return [Registry._clean(d) for d in data["dictionaries"] if isinstance(d, dict) and d.get("path")]
+
+    def reload(self, force: bool = False) -> None:
+        """Re-read the file (only when it changed on disk, unless ``force``)."""
         if self.path is None:
             return
         stamp = self._file_stamp()
-        if stamp is None or stamp == self._stamp:
+        if stamp is None or (stamp == self._stamp and not force):
             return
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        items = self._read(self.path)
+        if items is None and self.backup_path is not None:
+            items = self._read(self.backup_path)  # half-written or broken file: use the backup
+        if items is None:
             return
-        items = data.get("dictionaries", []) if isinstance(data, dict) else []
-        self.items = [self._clean(d) for d in items if isinstance(d, dict) and d.get("path")]
+        self.items = items
         self._stamp = stamp
+
+    def _fresh(self) -> None:
+        """Before a change: always read what is on disk now."""
+        self.reload(force=True)
 
     @staticmethod
     def _clean(d: dict[str, Any]) -> dict[str, Any]:
@@ -115,11 +144,21 @@ class Registry:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         text = json.dumps({"version": 1, "dictionaries": self.items}, ensure_ascii=False, indent=1) + "\n"
+        if self.path.is_file() and self._read(self.path) is not None:
+            with contextlib.suppress(OSError):
+                shutil.copyfile(self.path, self.backup_path)  # type: ignore[arg-type]
         fd, tmp = tempfile.mkstemp(prefix=".dictionaries-", suffix=".json", dir=str(self.path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(text)
-            os.replace(tmp, self.path)
+            for attempt in range(10):  # Windows: the file may be open in the other edition for a moment
+                try:
+                    os.replace(tmp, self.path)
+                    break
+                except PermissionError:
+                    if attempt == 9:
+                        raise
+                    time.sleep(0.05)
         except OSError:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
@@ -146,31 +185,68 @@ class Registry:
         return next((d for d in self.items if norm_path(d["path"]) == p), None)
 
     # ------------------------------------------------------------------ changes
+    @contextlib.contextmanager
+    def _locked(self) -> Iterator[None]:
+        """Hold the list for one read-change-write: no other thread, window,
+        CLI or edition changes it in between (``dictionaries.json.lock``,
+        the same lock file as the Rust edition; a lock older than 10 s is
+        stale). Every change re-reads the file inside the lock."""
+        if self.path is None:
+            yield
+            return
+        with _THREAD_LOCK:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            lock = self.path.with_name(self.path.name + ".lock")
+            fd = None
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    break
+                except FileExistsError:
+                    with contextlib.suppress(OSError):
+                        if time.time() - lock.stat().st_mtime > 10:
+                            lock.unlink()
+                            continue
+                    if time.monotonic() > deadline:
+                        break  # do the change anyway rather than lose it
+                    time.sleep(0.01)
+                except OSError:
+                    break  # read-only folder: no lock
+            try:
+                self._fresh()
+                yield
+            finally:
+                if fd is not None:
+                    os.close(fd)
+                    with contextlib.suppress(OSError):
+                        lock.unlink()
+
     def register(self, name: str, path: Path | str, **fields: Any) -> str:
         """Add or update the dictionary at ``path``; returns its (unique) name.
 
         An existing entry keeps its name, place and enabled flag.
         """
-        self.reload()
-        hit = self.by_path(path)
-        if hit is None:
-            taken = {d["name"] for d in self.items}
-            hit = self._clean({"path": norm_path(path), "name": unique_name(name, taken), "enabled": True})
-            self.items.append(hit)
-        for k, v in fields.items():
-            if k in FIELDS and k not in ("id", "name", "path", "enabled"):
-                hit[k] = v
-        hit["id"] = path_id(hit["path"])
-        self.save()
-        return hit["name"]
+        with self._locked():
+            hit = self.by_path(path)
+            if hit is None:
+                taken = {d["name"] for d in self.items}
+                hit = self._clean({"path": norm_path(path), "name": unique_name(name, taken), "enabled": True})
+                self.items.append(hit)
+            for k, v in fields.items():
+                if k in FIELDS and k not in ("id", "name", "path", "enabled"):
+                    hit[k] = v
+            hit["id"] = path_id(hit["path"])
+            self.save()
+            return hit["name"]
 
     def _edit(self, name: str, **fields: Any) -> None:
-        self.reload()
-        for d in self.items:
-            if d["name"] == name:
-                d.update(fields)
-                self.save()
-                return
+        with self._locked():
+            for d in self.items:
+                if d["name"] == name:
+                    d.update(fields)
+                    self.save()
+                    return
 
     def set_enabled(self, name: str, enabled: bool) -> None:
         self._edit(name, enabled=bool(enabled))
@@ -180,22 +256,22 @@ class Registry:
 
     def set_order(self, names: list[str]) -> None:
         """Put ``names`` first in this order; the rest keep their order after them."""
-        self.reload()
-        pos = {n: i for i, n in enumerate(names)}
-        first = sorted((d for d in self.items if d["name"] in pos), key=lambda d: pos[d["name"]])
-        self.items = first + [d for d in self.items if d["name"] not in pos]
-        self.save()
+        with self._locked():
+            pos = {n: i for i, n in enumerate(names)}
+            first = sorted((d for d in self.items if d["name"] in pos), key=lambda d: pos[d["name"]])
+            self.items = first + [d for d in self.items if d["name"] not in pos]
+            self.save()
 
     def move_to(self, name: str, index: int) -> None:
-        self.reload()
-        d = next((x for x in self.items if x["name"] == name), None)
-        if d is None:
-            return
-        self.items.remove(d)
-        self.items.insert(max(0, min(index, len(self.items))), d)
-        self.save()
+        with self._locked():
+            d = next((x for x in self.items if x["name"] == name), None)
+            if d is None:
+                return
+            self.items.remove(d)
+            self.items.insert(max(0, min(index, len(self.items))), d)
+            self.save()
 
     def remove(self, name: str) -> None:
-        self.reload()
-        self.items = [d for d in self.items if d["name"] != name]
-        self.save()
+        with self._locked():
+            self.items = [d for d in self.items if d["name"] != name]
+            self.save()

@@ -5,7 +5,19 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.2] — 2026-11-17
+
+Fast start, dictionaries that no longer get lost, and dictionary folders like GoldenDict — in **both editions**.
+
+### Fixed
+- **Dictionaries no longer get lost.** Several windows, the background loader, the CLI and the other edition could change the list at the same moment; one change then wiped out the other. Every change now takes turns through `dictionaries.json.lock` and reads the file again first. The Rust edition no longer writes two changes into the same temporary file. The previous list is kept as `dictionaries.json.bak` and is used if the file is ever broken.
+- **A dictionary that cannot be opened no longer disappears** from the window: the side panel and the dictionary manager show it as **⚠ Name — could not be opened**, with the reason on hover. It keeps its place and can be switched off or removed.
+
+### Added
+- **Dictionary folders, like GoldenDict's Sources → Files.** Preferences → Dictionaries and the dictionary manager show the list of folders; each folder has its own **Subfolders** box, plus **Add folder…**, **Remove** and **Scan now**. The folders are kept in `settings.json` and scanned at every start, so new dictionaries put into them appear by themselves.
+  - Every **Add folder…** (menu, dictionary manager, a folder dropped on the window) now keeps the folder in that list and adds its dictionaries in the background, without asking.
+  - New setting `dictionaries.flat_folders` (77 settings): the folders scanned without subfolders. `dictionaries.recursive` is the default for a new folder.
+  - Removing a folder does not remove its dictionaries.
 
 ### Changed
 - **Fast start, like GoldenDict** (both editions). A dictionary is now parsed **once**, when it is added or its file changes; its articles go into an article store `articles/<id>.db` in the data folder. Every later start opens those stores and reads nothing else; an article is read (and unpacked) only when it is shown.

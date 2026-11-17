@@ -152,6 +152,8 @@ SCHEMA: list[Setting] = [
     Setting("dictionaries.folders", "list", [], "Sözlük klasörleri",
             "Açılışta bu klasörlerdeki .ifo / .dsl / .dsl.dz / .bgl dosyaları otomatik eklenir."),
     Setting("dictionaries.recursive", "bool", True, "Alt klasörleri de tara"),
+    Setting("dictionaries.flat_folders", "list", [], "Alt klasörleri taranmayan klasörler",
+            "Sözlük klasörlerinden alt klasörleri taranmayanlar (klasör listesindeki kutu)."),
     Setting("dictionaries.scan_on_startup", "bool", True, "Açılışta klasörleri tara"),
     Setting("dictionaries.reindex_on_change", "bool", True, "Değişen sözlüğün indeksini yenile",
             "Dosya değiştiyse açılışta indeksi yeniden oluşturur."),

@@ -136,14 +136,25 @@ class Sidebar(QDockWidget):
         self.tabs.addTab(self.history_pane, icon("history"), t("Geçmiş"))
         self.setWidget(self.tabs)
 
-    def set_dictionaries(self, items: list[tuple[str, bool, int]]) -> None:
+    def set_dictionaries(self, items: list[tuple]) -> None:
+        """``(name, enabled, words[, error])``; a dictionary with an error is
+        one of the list that could not be opened: shown with ⚠, never hidden."""
+        from PySide6.QtGui import QBrush, QColor
+
         lst = self.dicts_pane.list
         lst.blockSignals(True)
         lst.clear()
-        for name, enabled, _words in items:
-            it = QListWidgetItem(dicticons.qicon(name), name)
+        for item in items:
+            name, enabled = item[0], item[1]
+            error = item[3] if len(item) > 3 else ""
+            if error:
+                it = QListWidgetItem(f"⚠ {name}")
+                it.setForeground(QBrush(QColor("#dc2626")))
+                it.setToolTip(t("açılamadı") + f": {error}")
+            else:
+                it = QListWidgetItem(dicticons.qicon(name), name)
+                it.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Çift tık: bilgiler"))
             it.setData(Qt.ItemDataRole.UserRole, name)
-            it.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Çift tık: bilgiler"))
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             lst.addItem(it)
