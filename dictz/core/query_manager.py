@@ -265,11 +265,11 @@ class QueryManager:
         """Read a dictionary's file again: new article store and headword index."""
         old = self.dictionaries[name]
         path = old.metadata.file_path
+        old.close()  # Windows: an open store cannot be replaced
         if self.data_dir is not None:
             d, _ = self.open_cached(path, self.data_dir, rebuild=True)
         else:
             d = self.open_file(path)
-        old.close()
         d.metadata.name = name
         self.dictionaries[name] = d
         self._headword_cache = None
