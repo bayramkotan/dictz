@@ -14,6 +14,7 @@ A start reads only the JSON files, and dictz can start with the system in the tr
   - Dictionary icons are looked for once and kept in `icons/` in the data folder (no folder listing and no Babylon file read at every start).
   - The dictionary folders are not listed again when they have not changed: `scan_cache.json` keeps each folder's listing with its time; adding, removing or renaming a file in a folder is noticed.
   - Adding, removing, moving, switching off or reindexing a dictionary updates the JSON files at once.
+  - A folder that changed less than 2 seconds before it was listed is listed again at the next scan: within one file-system clock tick its time may not move when a file is added, and the new file would be missed.
 
 ### Added
 - **Start with the system** (Preferences → General, `general.autostart`, 78 settings): dictz starts by itself when you log in — Windows (Run key), Linux (`~/.config/autostart`), macOS (LaunchAgent) — hidden in the system tray; the tray icon is always shown then. If dictz is already running, the log-in start does nothing.

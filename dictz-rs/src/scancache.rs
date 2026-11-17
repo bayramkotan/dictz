@@ -3,7 +3,9 @@
 //! Same file and rules as the Python edition (`dictz/storage/scancache.py`).
 //! A folder's listing is kept with the folder's modification time; a folder
 //! whose time has not changed is not listed again (adding, removing or
-//! renaming a file changes it). A start only looks at the folders' times.
+//! renaming a file changes it). A start only looks at the folders' times. A
+//! folder that changed less than 2 s before it was listed is listed again
+//! next time (its time may not move within one clock tick).
 //!
 //! ```json
 //! {"version": 1, "dirs": {"/abs/dir": [mtime_ns, ["a.ifo"], ["sub"]]}}
@@ -16,6 +18,8 @@ use serde_json::{json, Value};
 
 /// File name in the data folder.
 pub const SCAN_CACHE_FILE: &str = "scan_cache.json";
+/// A folder changed this recently before it was listed is listed again.
+const RACY_NS: u128 = 2_000_000_000;
 
 type Listing = (u128, Vec<String>, Vec<String>);
 
@@ -104,7 +108,18 @@ impl ScanCache {
                 files.push(name);
             }
         }
-        self.dirs.insert(key, (m, files.clone(), subs.clone()));
+        // A folder changed less than RACY_NS before it was listed may change
+        // again within the same timestamp tick (coarse file-system clocks:
+        // Linux ~4 ms, FAT 2 s): its time could stay the same while a file is
+        // added. Such a listing is kept with time 0, so the next scan lists it
+        // again.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let racy = now < m || now - m < RACY_NS;
+        self.dirs
+            .insert(key, (if racy { 0 } else { m }, files.clone(), subs.clone()));
         self.changed = true;
         Some((files, subs))
     }
@@ -175,13 +190,36 @@ mod tests {
         std::fs::write(d.join("a/x.ifo"), "x").unwrap();
         std::fs::write(d.join("a/sub/y.dsl"), "y").unwrap();
         let f = d.join(SCAN_CACHE_FILE);
+        // just changed (same clock tick as the listing): listed again next time
         let mut c = ScanCache::new(Some(f.clone()));
         let first = c.scan(&d.join("a"), true);
         assert_eq!(first, crate::query::scan_folder(&d.join("a"), true));
         c.save();
-        let mut again = ScanCache::new(Some(f));
-        assert_eq!(again.scan(&d.join("a"), true), first);
-        assert!(!again.changed, "nothing listed again");
+        std::fs::write(d.join("a/sub/z.bgl"), "z").unwrap();
+        assert_eq!(
+            ScanCache::new(Some(f.clone()))
+                .scan(&d.join("a"), true)
+                .len(),
+            3
+        );
+        std::fs::remove_file(d.join("a/sub/z.bgl")).unwrap();
+        // folders that changed a while ago: kept, not listed again (Unix: a
+        // directory's time can be set through std)
+        #[cfg(unix)]
+        {
+            let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+            for p in [d.join("a"), d.join("a/sub")] {
+                std::fs::File::open(&p).unwrap().set_modified(old).unwrap();
+            }
+            let mut c = ScanCache::new(Some(f.clone()));
+            assert_eq!(c.scan(&d.join("a"), true), first);
+            c.save();
+            let mut again = ScanCache::new(Some(f.clone()));
+            assert_eq!(again.scan(&d.join("a"), true), first);
+            assert!(!again.changed, "nothing listed again");
+            std::fs::write(d.join("a/sub/z.bgl"), "z").unwrap();
+            assert_eq!(ScanCache::new(Some(f)).scan(&d.join("a"), true).len(), 3);
+        }
         let _ = std::fs::remove_dir_all(&d);
     }
 }

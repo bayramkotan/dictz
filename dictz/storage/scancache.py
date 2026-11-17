@@ -3,7 +3,8 @@
 Same file and rules as the Rust edition (``dictz-rs/src/scancache.rs``).
 A folder's listing is kept with the folder's modification time; a folder
 whose time has not changed is not listed again (adding, removing or renaming
-a file changes it). So a start only looks at the folders' times — nothing is
+a file changes it). A folder that changed less than 2 s before it was listed
+is listed again next time (its time may not move within one clock tick). So a start only looks at the folders' times — nothing is
 re-scanned unless something was really added or removed.
 
 ```json
@@ -16,9 +17,11 @@ import contextlib
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 SCAN_CACHE_FILE = "scan_cache.json"
+RACY_NS = 2_000_000_000
 
 
 def _is_dictionary_name(name: str) -> bool:
@@ -62,7 +65,12 @@ class ScanCache:
                     files.append(e.name)
             except OSError:
                 continue
-        self.dirs[key] = [m, files, subs]
+        # A folder changed less than RACY_NS before it was listed may change again
+        # within the same timestamp tick (coarse file-system clocks: Linux
+        # ~4 ms, FAT 2 s): its time could stay the same while a file is added.
+        # Such a listing is kept with time 0, so the next scan lists it again.
+        racy = time.time_ns() - m < RACY_NS
+        self.dirs[key] = [0 if racy else m, files, subs]
         self.changed = True
         return files, subs
 
