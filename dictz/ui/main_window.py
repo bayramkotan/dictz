@@ -49,7 +49,14 @@ from ..core import instance as _instance
 from ..core.hotkeys import HotkeyListener, wayland_session
 from ..core.i18n import t
 from ..core.media import media_kind, parse_audio_url, rewrite_media_html
-from ..core.query_manager import QueryManager, Suggestion, is_dictionary_file, scan_folder
+from ..core.query_manager import (
+    QueryManager,
+    Suggestion,
+    add_folder_source,
+    is_dictionary_file,
+    scan_folder,
+    scan_sources,
+)
 from ..parsers.base import DictionaryEntry
 from ..storage.history import HistoryStore
 from ..storage.settings import Preferences
@@ -493,8 +500,7 @@ class MainWindow(QMainWindow):
         known = {norm_path(r["path"]) for r in rows}
         new_files: list[Path] = []
         if self.prefs["dictionaries.scan_on_startup"]:
-            for folder in self.prefs["dictionaries.folders"]:
-                new_files += scan_folder(folder, bool(self.prefs["dictionaries.recursive"]))
+            new_files += scan_sources(self.prefs)  # every folder with its own "subfolders" box
         new_files += [f for f in self.startup_files if is_dictionary_file(f)]
         seen: set[str] = set()
         new_files = [f for f in new_files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
@@ -504,7 +510,7 @@ class MainWindow(QMainWindow):
         db = Path(store.db_path) if store else Path()
         self._loader = DictionaryLoader(db, rows, new_files, bool(self.prefs["dictionaries.reindex_on_change"]), self)
         self._loader.loaded.connect(self._on_dictionary_loaded)
-        self._loader.failed.connect(lambda p, e: self._load_errors.append(f"{p}: {e}"))
+        self._loader.failed.connect(self._on_load_failed)
         self._loader.progress.connect(self._on_load_progress)
         self._loader.finished.connect(self._loading_finished)
         self.progress.show()
@@ -512,6 +518,55 @@ class MainWindow(QMainWindow):
             self._loader.start()
         else:
             self._loader.run()
+
+    def _on_load_failed(self, path: str, error: str) -> None:
+        """A dictionary of the list could not be opened: it stays in the list
+        (marked ⚠ in the sidebar and the dictionary manager), never dropped."""
+        self._load_errors.append(f"{path}: {error}")
+        store = self.query_manager.index_store
+        row = store.registry.by_path(path) if store is not None else None
+        if row is not None:
+            self.query_manager.note_failed(row["name"], error)
+        self._refresh_dictionaries()
+
+    def load_new_files(self, files: list[Path]) -> None:
+        """Add dictionary files that are not in the list yet, in the background."""
+        from ..storage.registry import norm_path
+
+        qm = self.query_manager
+        store = qm.index_store
+        known = {norm_path(r["path"]) for r in store.list_dictionaries(enabled_only=False)} if store else set()
+        seen: set[str] = set()
+        new = [f for f in files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
+        if not new:
+            self.statusBar().showMessage(t("Yeni sözlük yok"), 4000)
+            return
+        if store is None or (self._loader is not None and self._loader.isRunning()):
+            self.add_paths(new)
+            return
+        self._loaded_count = 0
+        self._load_errors = []
+        self._loader = DictionaryLoader(Path(store.db_path), [], new,
+                                        bool(self.prefs["dictionaries.reindex_on_change"]), self)
+        self._loader.loaded.connect(self._on_dictionary_loaded)
+        self._loader.failed.connect(self._on_load_failed)
+        self._loader.progress.connect(self._on_load_progress)
+        self._loader.finished.connect(self._extra_loading_finished)
+        self.progress.show()
+        self._loader.start()
+
+    def _extra_loading_finished(self) -> None:
+        self.progress.hide()
+        self._refresh_dictionaries()
+        if self._load_errors:
+            self.statusBar().showMessage(t("{n} sözlük açılamadı:", n=len(self._load_errors)) + " "
+                                         + "; ".join(self._load_errors), 12000)
+        else:
+            self.statusBar().showMessage(t("{n} sözlük eklendi", n=self._loaded_count), 4000)
+
+    def rescan_folders(self, prefs=None) -> None:
+        """Scan every dictionary folder now and add the new files."""
+        self.load_new_files(scan_sources(prefs or self.prefs))
 
     def _on_load_progress(self, i: int, total: int, name: str) -> None:
         self.progress.setMaximum(total)
@@ -596,12 +651,18 @@ class MainWindow(QMainWindow):
 
     def _open_preferences(self) -> None:
         dlg = PreferencesDialog(self.prefs, self)
+        before = (list(self.prefs["dictionaries.folders"]), list(self.prefs["dictionaries.flat_folders"]))
         dlg.preferences_changed.connect(lambda _p: self.apply_prefs())
-        dlg.action_requested.connect(self._on_prefs_action)
+        dlg.action_requested.connect(lambda a: self._on_prefs_action(a, dlg))
         dlg.exec()
+        after = (list(self.prefs["dictionaries.folders"]), list(self.prefs["dictionaries.flat_folders"]))
+        if after != before:
+            self.rescan_folders()  # new folders: their dictionaries are added now
 
-    def _on_prefs_action(self, action: str) -> None:
-        if action == "open_data":
+    def _on_prefs_action(self, action: str, dlg=None) -> None:
+        if action == "rescan":
+            self.rescan_folders(dlg.draft if dlg is not None else None)
+        elif action == "open_data":
             self._open_data_dir()
         elif action == "reindex":
             qm = self.query_manager
@@ -876,8 +937,9 @@ class MainWindow(QMainWindow):
     # ================================================================ dictionaries
     def _refresh_dictionaries(self) -> None:
         qm = self.query_manager
-        self.sidebar.set_dictionaries([(n, qm.is_enabled(n), qm.dictionaries[n].metadata.word_count)
-                                       for n in qm.loaded_names()])
+        # every dictionary of the list; one that could not be opened is shown with ⚠
+        self.sidebar.set_dictionaries([(r["name"], r["enabled"], r["word_count"], r["error"])
+                                       for r in qm.list_rows()])
         self._refresh_dictionary_bar()
         self._refresh_favorites_pane()
         self._refresh_history_pane()
@@ -948,26 +1010,34 @@ class MainWindow(QMainWindow):
 
     def _add_folder_dialog(self) -> None:
         d = QFileDialog.getExistingDirectory(self, t("Sözlük klasörü seçin"))
-        if not d:
-            return
-        files = scan_folder(d, bool(self.prefs["dictionaries.recursive"]))
+        if d:
+            self.add_folder(Path(d))
+
+    def add_folder(self, folder: Path) -> None:
+        """Keep ``folder`` in the dictionary folders (Preferences → Dictionaries;
+        scanned at every start) and add its dictionaries now."""
+        if add_folder_source(self.prefs, folder):
+            self.prefs.save()
+        files = scan_folder(folder, dict(self._folder_sources()).get(str(Path(folder).expanduser().absolute()),
+                                         bool(self.prefs["dictionaries.recursive"])))
         if not files:
             QMessageBox.information(self, t("Klasör ekle"), t("Bu klasörde sözlük dosyası bulunamadı."))
             return
-        known = {str(Path(self.query_manager.dictionaries[n].metadata.file_path).resolve())
-                 for n in self.query_manager.loaded_names()}
-        new = [f for f in files if str(f.resolve()) not in known]
-        if QMessageBox.question(
-                self, t("Klasör ekle"),
-                t("{n} sözlük bulundu, {m} tanesi yeni.\nYeni olanlar eklensin mi?").format(n=len(files), m=len(new))
-                + "\n\n" + t("İpucu: Tercihler → Sözlükler'e klasör ekleyince her açılışta otomatik taranır.")) \
-                == QMessageBox.StandardButton.Yes:
-            self.add_paths(new)
+        self.load_new_files(files)
+
+    def _folder_sources(self) -> list[tuple[str, bool]]:
+        from ..core.query_manager import folder_sources
+
+        return folder_sources(self.prefs)
 
     def _open_dictionary_manager(self) -> None:
-        dlg = DictionaryManagerDialog(self.query_manager, self)
+        dlg = DictionaryManagerDialog(self.query_manager, self, prefs=self.prefs)
         dlg.dictionaries_changed.connect(self._refresh_dictionaries)
         dlg.add_paths_requested.connect(lambda paths: (self.add_paths(paths), dlg.refresh()))
+        dlg.add_folder_requested.connect(lambda folder: (self.add_folder(Path(folder)), dlg.refresh()))
+        dlg.rescan_requested.connect(lambda: self.rescan_folders())
+        if self._loader is not None:
+            self._loader.loaded.connect(lambda *_a: dlg.refresh())
         dlg.exec()
 
     def dragEnterEvent(self, event):  # noqa: N802
@@ -978,7 +1048,10 @@ class MainWindow(QMainWindow):
         paths: list[Path] = []
         for url in event.mimeData().urls():
             p = Path(url.toLocalFile())
-            paths += scan_folder(p, True) if p.is_dir() else ([p] if is_dictionary_file(p) else [])
+            if p.is_dir():
+                self.add_folder(p)  # a dropped folder is kept like "Add folder…"
+            elif is_dictionary_file(p):
+                paths.append(p)
         if paths:
             self.add_paths(paths)
 

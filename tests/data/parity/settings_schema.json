@@ -632,6 +632,13 @@
   "help": ""
  },
  {
+  "key": "dictionaries.flat_folders",
+  "kind": "list",
+  "default": [],
+  "label": "Alt klasörleri taranmayan klasörler",
+  "help": "Sözlük klasörlerinden alt klasörleri taranmayanlar (klasör listesindeki kutu)."
+ },
+ {
   "key": "dictionaries.scan_on_startup",
   "kind": "bool",
   "default": true,

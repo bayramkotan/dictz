@@ -44,6 +44,91 @@ pub fn is_dictionary_file(path: &Path) -> bool {
     n.ends_with(".ifo") || n.ends_with(".dsl") || n.ends_with(".dsl.dz") || n.ends_with(".bgl")
 }
 
+/// Dictionary folders from the settings: `(folder, recursive)` in order.
+/// `dictionaries.folders` lists them; a folder that is also in
+/// `dictionaries.flat_folders` is scanned without its subfolders (same rule
+/// as the Python edition's `folder_sources`).
+pub fn folder_sources(prefs: &crate::settings::Preferences) -> Vec<(String, bool)> {
+    let flat: std::collections::HashSet<String> = prefs
+        .list("dictionaries.flat_folders")
+        .into_iter()
+        .collect();
+    prefs
+        .list("dictionaries.folders")
+        .into_iter()
+        .filter(|f| !f.trim().is_empty())
+        .map(|f| {
+            let rec = !flat.contains(&f);
+            (f, rec)
+        })
+        .collect()
+}
+
+/// Write `(folder, recursive)` pairs back to the two settings (duplicates dropped).
+pub fn set_folder_sources(prefs: &mut crate::settings::Preferences, sources: &[(String, bool)]) {
+    let mut seen = std::collections::HashSet::new();
+    let mut folders = Vec::new();
+    let mut flat = Vec::new();
+    for (f, rec) in sources {
+        let f = f.trim().to_string();
+        if f.is_empty() || !seen.insert(f.clone()) {
+            continue;
+        }
+        if !rec {
+            flat.push(serde_json::Value::from(f.clone()));
+        }
+        folders.push(serde_json::Value::from(f));
+    }
+    let _ = prefs.set("dictionaries.folders", serde_json::Value::Array(folders));
+    let _ = prefs.set("dictionaries.flat_folders", serde_json::Value::Array(flat));
+}
+
+/// Add a folder to the dictionary folders (kept for every start); `false`
+/// when it is already there. `recursive == None` uses `dictionaries.recursive`.
+pub fn add_folder_source(
+    prefs: &mut crate::settings::Preferences,
+    folder: &Path,
+    recursive: Option<bool>,
+) -> bool {
+    let folder = crate::registry::norm_path(folder);
+    let mut sources = folder_sources(prefs);
+    if sources.iter().any(|(f, _)| *f == folder) {
+        return false;
+    }
+    let rec = recursive.unwrap_or_else(|| prefs.bool("dictionaries.recursive"));
+    sources.push((folder, rec));
+    set_folder_sources(prefs, &sources);
+    true
+}
+
+/// Dictionary files in every dictionary folder (each with its own recursion).
+pub fn scan_sources(prefs: &crate::settings::Preferences) -> Vec<PathBuf> {
+    folder_sources(prefs)
+        .into_iter()
+        .flat_map(|(f, rec)| scan_folder(Path::new(&f), rec))
+        .collect()
+}
+
+/// One dictionary of the list for the dictionary manager and the side
+/// panel — also one that could not be opened (`error` set).
+#[derive(Debug, Clone)]
+pub struct ListRow {
+    /// Name in the list.
+    pub name: String,
+    /// File.
+    pub path: PathBuf,
+    /// Format.
+    pub format: String,
+    /// Headwords.
+    pub word_count: usize,
+    /// Searched.
+    pub enabled: bool,
+    /// Opened.
+    pub loaded: bool,
+    /// Why it could not be opened.
+    pub error: String,
+}
+
 /// Dictionary files under `folder`, sorted (same rules as the Python
 /// edition's `scan_folder`): hidden folders and `*.files` media folders are
 /// skipped.
@@ -113,6 +198,9 @@ pub struct QueryManager {
     /// Optional FTS5 index (suggestions + persistence of the dictionary list).
     pub index: Option<IndexStore>,
     headword_cache: Option<Vec<String>>,
+    /// Dictionaries of the list that could not be opened: name → reason.
+    /// They stay in the list (and in the dictionary manager), never dropped.
+    pub failed: std::collections::HashMap<String, String>,
 }
 
 /// Suggestions are filled up with fuzzy matches when fewer prefix hits exist.
@@ -125,7 +213,70 @@ impl QueryManager {
             dicts: Vec::new(),
             index,
             headword_cache: None,
+            failed: Default::default(),
         }
+    }
+
+    /// Remember that a dictionary of the list could not be opened.
+    pub fn note_failed(&mut self, name: &str, reason: &str) {
+        if self.position(name).is_none() {
+            self.failed.insert(name.to_string(), reason.to_string());
+        }
+    }
+
+    /// Every dictionary of the list in list order — also the ones that could
+    /// not be opened — so none ever disappears.
+    pub fn list_rows(&self) -> Vec<ListRow> {
+        let rows = self
+            .index
+            .as_ref()
+            .and_then(|i| i.list_dictionaries(false).ok())
+            .unwrap_or_default();
+        let mut out = Vec::new();
+        let mut listed = std::collections::HashSet::new();
+        for r in rows {
+            listed.insert(r.name.clone());
+            match self.dictionary(&r.name) {
+                Some(d) => out.push(ListRow {
+                    format: d.metadata().format.clone(),
+                    word_count: d.metadata().word_count,
+                    enabled: self.is_enabled(&r.name),
+                    loaded: true,
+                    error: String::new(),
+                    name: r.name,
+                    path: r.path,
+                }),
+                None => {
+                    let Some(err) = self.failed.get(&r.name) else {
+                        continue;
+                    }; // still loading
+                    out.push(ListRow {
+                        format: r.format,
+                        word_count: r.word_count.max(0) as usize,
+                        enabled: r.enabled,
+                        loaded: false,
+                        error: err.clone(),
+                        name: r.name,
+                        path: r.path,
+                    });
+                }
+            }
+        }
+        for d in &self.dicts {
+            let m = d.dict.metadata();
+            if !listed.contains(&m.name) {
+                out.push(ListRow {
+                    name: m.name.clone(),
+                    path: m.file_path.clone(),
+                    format: m.format.clone(),
+                    word_count: m.word_count,
+                    enabled: d.enabled,
+                    loaded: true,
+                    error: String::new(),
+                });
+            }
+        }
+        out
     }
 
     fn position(&self, name: &str) -> Option<usize> {
@@ -234,7 +385,10 @@ impl QueryManager {
                     ok.push(dict.metadata().name.clone());
                     self.attach(dict, &row.path, row.enabled);
                 }
-                Err(e) => errors.push(format!("{}: {}", row.path.display(), e)),
+                Err(e) => {
+                    self.failed.insert(row.name.clone(), e.to_string());
+                    errors.push(format!("{}: {}", row.path.display(), e))
+                }
             }
         }
         (ok, errors)
@@ -277,6 +431,7 @@ impl QueryManager {
     /// Append an already-loaded dictionary (no indexing).
     pub fn attach(&mut self, dict: Box<dyn Dictionary>, path: &Path, enabled: bool) {
         let name = dict.metadata().name.clone();
+        self.failed.remove(&name);
         if let Some(i) = self.position(&name) {
             self.dicts.remove(i);
         }
@@ -296,6 +451,7 @@ impl QueryManager {
 
     /// Unload a dictionary and drop it from the index.
     pub fn remove_dictionary(&mut self, name: &str) -> Result<(), DictzError> {
+        self.failed.remove(name);
         if let Some(i) = self.position(name) {
             self.dicts[i].dict.close();
             self.dicts.remove(i);
@@ -657,5 +813,32 @@ mod tests {
             open_dictionary(Path::new("x.txt")),
             Err(DictzError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn folder_sources_each_with_its_own_subfolder_box() {
+        let d = std::env::temp_dir().join(format!("dictz-fsrc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("one/sub")).unwrap();
+        std::fs::write(d.join("one/top.ifo"), "x").unwrap();
+        std::fs::write(d.join("one/sub/deep.ifo"), "x").unwrap();
+        let mut p = crate::settings::Preferences::load(&d.join("settings.json"));
+        assert!(add_folder_source(&mut p, &d.join("one"), None));
+        assert!(!add_folder_source(&mut p, &d.join("one"), None));
+        let names = |p: &crate::settings::Preferences| -> Vec<String> {
+            scan_sources(p)
+                .iter()
+                .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(names(&p), ["deep.ifo", "top.ifo"]);
+        let flat: Vec<(String, bool)> = folder_sources(&p)
+            .into_iter()
+            .map(|(f, _)| (f, false))
+            .collect();
+        set_folder_sources(&mut p, &flat);
+        assert_eq!(names(&p), ["top.ifo"]);
+        assert_eq!(p.list("dictionaries.flat_folders").len(), 1);
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

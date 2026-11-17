@@ -184,7 +184,9 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Recently done
 
-- ✅ **after v0.1.1 (plain push)** — fast start like GoldenDict, in both editions: a dictionary is parsed once into `articles/<id>.db`; later starts read articles on demand (500k headwords: Python 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s); rebuilt by itself when the file changes
+- ✅ **v0.1.2** — dictionaries no longer get lost (list lock, always re-read before a change, `.bak` backup, failed dictionaries stay visible with ⚠); dictionary folders like GoldenDict's Sources → Files (several folders, each with its own Subfolders box, kept and scanned at every start, also in the dictionary manager); fast start released
+
+- ✅ **after v0.1.1 (plain push, released in v0.1.2)** — fast start like GoldenDict, in both editions: a dictionary is parsed once into `articles/<id>.db`; later starts read articles on demand (500k headwords: Python 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s); rebuilt by itself when the file changes
 
 - ✅ **v0.1.1** — the dictionary list moved to `dictionaries.json` in both editions: dictionaries are known by file path, a duplicate name becomes `Name (2)`, missing / failed dictionaries keep their place, one-time migration from the SQLite table — fixes dictionaries getting mixed up or lost
 

@@ -48,7 +48,7 @@ Rust code map (`dictz-rs/src/`):
 | `fuzzy.rs` | RapidFuzz `fuzz.ratio` (InDel/LCS), `extract`, `rank` | `dictz/core/fuzzy.py` |
 | `media.rs` | DSL/StarDict media lookup | `dictz/core/media.py` |
 | `html.rs` | article HTML → styled lines (egui) and → text (`to_text`, CLI / copy) | QtWebEngine, `dictz/core/htmltext.py` |
-| `settings.rs` | shared `settings.json`: schema (76 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
+| `settings.rs` | shared `settings.json`: schema (77 settings, **generated** from the Python schema by `make_samples.py`), coerce, Preferences | `dictz/storage/settings.py` |
 | `instance.rs` | single instance + `dictz show/popup/watch` protocol (127.0.0.1 + token in `instance.json`) | `dictz/core/instance.py` |
 | `scantext.rs`, `hotkeys.rs`, `icon.rs` | scan text cleaning + Ctrl+C+C, hotkey parsing, the app icon pixels | `dictz/core/scantext.py`, `dictz/core/hotkeys.py`, `dictz/ui/icons.py` |
 | `gui/services.rs`, `gui/window.rs` | clipboard / selection watcher, global hotkeys, tray, instance server; hide-to-tray per platform | `dictz/ui/scanner.py`, `dictz/core/hotkeys.py`, `dictz/ui/main_window.py` |
@@ -93,6 +93,9 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 
 ## ⚠️ READ FIRST: the dictionary list lives in `dictionaries.json`
 
+- **Every change goes through the lock** (`with self._locked():` in Python, `let _lock = self.lock();` in Rust) and re-reads the file inside it. Never add a method that changes `items` and saves without it — that is how dictionaries got lost before v0.1.2.
+- A dictionary that cannot be opened is **never** dropped or hidden: `QueryManager.failed` / `list_rows()`; UIs list `list_rows()`, not only `loaded_names()`.
+
 - The list (order = search order, `enabled`, unique `name`) is **`dictionaries.json`** in the data folder: `dictz/storage/registry.py` ↔ `dictz-rs/src/registry.rs`. The SQLite `dictionaries` table in `dictz_index.db` is **no longer used**; it is only read once to migrate (when `dictionaries.json` does not exist yet). `entries` (FTS5 headwords) stays in SQLite, keyed by the dictionary's list name.
 - A dictionary's **identity is its absolute file path** (`norm_path`: `~` expanded, no symlink resolution); `id` = FNV-1a 64 of that path, hex. Never key anything by the name the file reports.
 - Names are unique: a second file with the same name becomes `Name (2)` (`unique_name`). The loaded dictionary is renamed to its list name (`metadata.name` in Python, `Dictionary::metadata_mut()` in Rust) before it is attached or indexed, so the FTS `dictionary` column, `QueryManager` keys and the GUI all use the list name.
@@ -130,7 +133,8 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 **v0.0.9**: the short name **`dct`** (= `dictz`), every `--version` spelling, `dct shortcut` / Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions.
 **v0.1.0**: the interface in **25 languages** with a flag picker at the top right (RTL for ar/fa/ur), dictionary icons and article cards, READMEs with screenshots — in both editions.
 **v0.1.1**: the dictionary list moves to **`dictionaries.json`** (path identity, `Name (2)` for duplicate names, failed dictionaries keep their place, one-time migration) — dictionaries are no longer mixed up or lost; in both editions.
-**Next suggested version:** v0.1.2, **speed** — article stores, articles read on demand, no full parse at start (**in both editions**; already pushed after v0.1.1 as a plain push, waits for the user to ask for the version). Then v0.1.3, article display like GoldenDict; then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**v0.1.2**: fast start (article stores `articles/<id>.db`, articles read on demand); dictionaries no longer get lost (`dictionaries.json.lock`, always re-read before a change, `.bak` backup, failed dictionaries stay in the list marked ⚠); dictionary folders like GoldenDict's Sources → Files (several folders, each with its own "subfolders" box, kept in `settings.json`, scanned at every start) — in both editions.
+**Next suggested version:** v0.1.3, article display like GoldenDict; then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-16)
 
@@ -349,9 +353,19 @@ You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-i
 
 ---
 
-## Done after v0.1.1 (plain push, not released yet)
+## Done in v0.1.2 (fast start was pushed first as a plain push, then released with the fixes below)
 
-- **Fast start** (big job 1 of the list the user approved): article stores `articles/<id>.db`, `StoredDictionary`, `open_cached` in both editions (see "READ FIRST: dictionaries open from their article store"). 500k headwords: Python start 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s. Parity golden `articles_golden.db`.
+- **Dictionaries no longer get lost** — causes found and fixed in both editions:
+  - two writers at once (the GUI's loader thread + the window, two windows, the CLI, the other edition) read the list, both changed it, the second write dropped the first one's change. Now every change holds **`dictionaries.json.lock`** (in-process mutex + lock file created with O_EXCL / `create_new`; stale after 10 s; same file name in both editions) and re-reads the file inside the lock (`Registry._locked()` / `Registry::lock()` + `fresh()`).
+  - the Rust edition's temp file was `.dictionaries-<pid>.json` — the loader thread and the window wrote the **same** temp file. Now `<pid>-<sequence>`.
+  - a file that looked unchanged (same size + timestamp tick) was not re-read before a change → a stale copy overwrote it. Changes now always re-read (`reload(force=True)` / `reload_with(true)`).
+  - a half-written or broken file was ignored and later overwritten. Now the previous file is kept as **`dictionaries.json.bak`** and used when the file cannot be read.
+  - a dictionary that could not be opened was hidden from the window (it was still in the list). Now `QueryManager.failed` + `list_rows()`: the sidebar and the dictionary manager show it as **⚠ Name — açılamadı** with the reason; it can be removed or switched off, it keeps its place.
+- **Dictionary folders** (GoldenDict's Sources → Files): `dictionaries.folders` (list) + **`dictionaries.flat_folders`** (new, 77th setting; a folder listed there is scanned without subfolders). Helpers `folder_sources / set_folder_sources / add_folder_source / scan_sources` in `query_manager.py` ↔ `query.rs`. `dictionaries.recursive` is now the default for a newly added folder.
+  - Shown in Preferences → Sözlükler (`FolderSources` widget / `PrefsWindow::folder_sources`, `flat_folders` has no row of its own: `HIDDEN_KEYS`) **and** in the dictionary manager, with "Klasör ekle…", ✕/Kaldır and "Şimdi tara".
+  - Every "Klasör ekle…" (menu, dictionary manager, a folder dropped on the window) now **keeps** the folder in the list and adds its new dictionaries in the background (`load_new_files`). Removing a folder does not remove its dictionaries.
+  - Every start scans every folder with its own box (`dictionaries.scan_on_startup`); changing the folders in Preferences scans at once.
+- **Fast start** (big job 1 of the list the user approved): article stores `articles/<id>.db`, `StoredDictionary`, `open_cached` in both editions (see "READ FIRST: dictionaries open from their article store"). 500k headwords: Python start 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s. Parity golden `articles_golden.db`. (big job 1 of the list the user approved): article stores `articles/<id>.db`, `StoredDictionary`, `open_cached` in both editions (see "READ FIRST: dictionaries open from their article store"). 500k headwords: Python start 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s. Parity golden `articles_golden.db`.
 - **Next big job:** article display like GoldenDict (the user still has to send a side-by-side screenshot of the same word), then themes (isnady-like), then fonts, then dictionary groups and the rest of `TODO.md` in order.
 
 ## Done in v0.1.1 (pushed first as a plain push, then released)

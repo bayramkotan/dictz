@@ -72,6 +72,11 @@ class _ColorButton(QPushButton):
         self._paint()
 
 
+# settings without their own row (``dictionaries.flat_folders`` is the
+# "subfolders" box of the folder list)
+HIDDEN_KEYS = {"dictionaries.flat_folders"}
+
+
 class _FolderList(QWidget):
     changed = Signal()
 
@@ -196,6 +201,8 @@ class PreferencesDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         keys = []
         for s in settings:
+            if s.key in HIDDEN_KEYS:
+                continue  # edited together with another setting
             editor = self._editor_for(s)
             row = QWidget()
             rl = QHBoxLayout(row)
@@ -266,6 +273,14 @@ class PreferencesDialog(QDialog):
         elif s.kind == "color":
             w = _ColorButton(v)
             w.changed.connect(lambda k=s.key, b=w: self._set(k, b.value))
+        elif s.key == "dictionaries.folders":
+            from ..core.query_manager import folder_sources, set_folder_sources
+            from .folder_sources import FolderSources
+
+            w = FolderSources(folder_sources(self.draft), bool(self.draft["dictionaries.recursive"]))
+            w.changed.connect(lambda f=w: set_folder_sources(self.draft, f.value()))
+            w.rescan_requested.connect(lambda f=w: (set_folder_sources(self.draft, f.value()),
+                                                    self.action_requested.emit("rescan")))
         elif s.kind == "list":
             w = _FolderList(list(v))
             w.changed.connect(lambda k=s.key, f=w: self._set(k, f.value()))
@@ -305,6 +320,10 @@ class PreferencesDialog(QDialog):
             editor.set_value(v)
         elif isinstance(editor, _FolderList):
             editor.set_value(list(v))
+        elif key == "dictionaries.folders":
+            from ..core.query_manager import folder_sources
+
+            editor.set_value(folder_sources(self.draft))
         elif hasattr(editor, "box"):
             editor.box.blockSignals(True)
             editor.box.setEditText(v)
@@ -315,6 +334,8 @@ class PreferencesDialog(QDialog):
 
     def _reset_key(self, key: str) -> None:
         self.draft.reset(key)
+        if key == "dictionaries.folders":
+            self.draft.reset("dictionaries.flat_folders")
         self._load_editor(key)
 
     def _reset_page(self) -> None:
