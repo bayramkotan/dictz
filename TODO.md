@@ -58,7 +58,101 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - ✅ completion scripts register both names
 - ✅ READMEs rewritten with per-platform install (Linux / Windows / macOS × portable / pipx / cargo)
 
-> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (✅ done after v0.1.1 as a plain push: article stores, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
+> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (✅ done after v0.1.1 as a plain push: article stores, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then the **Dictionary Center** (maintenance, online catalogs, downloads — the section right below), then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
+
+## Dictionary Center — maintenance, online catalogs, downloads (big job, both editions)
+
+> Asked for on 2026-11-17: "dictionary maintenance must be very, very rich"; add a link and download straight from the internet; pull dictionaries from **my own server, like isnady**; every detail down to **which language into which language**. Planned as its own group of versions **after v0.1.3 (article display)**, split into phases A–H below; each phase is one delivery, in **both editions** (GUI + CLI, same data files, parity tests).
+
+### A. Languages: "from which language into which language" (the base of everything else)
+- 📋 One language model for both editions: ISO 639-1 / 639-3 codes (`en` / `eng`), native and English names, script (Latn, Cyrl, Arab, Hans, Hant, Jpan, Kore, Deva…), RTL flag, flag of the main country (flag-icons, MIT). Shared table `languages.json` (+ golden) so Python and Rust name and sort languages the same.
+- 📋 Every dictionary gets **source → target**: from its own metadata (StarDict `.ifo`, DSL `#INDEX_LANGUAGE` / `#CONTENTS_LANGUAGE`, BGL info, MDict header, FreeDict `eng-tur` names), else from its file / book name (`En2Tr`, `eng-tur`, `English-Turkish`, `İngilizce → Türkçe`, `Англо-русский`, `英汉`), else "unknown" with a one-click fix by hand. Already partly in `dictident` — extend and move to the language table.
+- 📋 Kinds: **bilingual** (en → tr), **monolingual / explanatory** (tr → tr), **multilingual** (en → de, fr, es…), **bidirectional** (one file both ways), **thesaurus / synonyms**, **encyclopedia** (Wikipedia, ZIM), **pronunciation / sound packs**, **phrasebook**, **etymology**, **terminology** (medicine, law, IT, religion…). Stored per dictionary; filterable.
+- 📋 Language pair filter everywhere (catalog, installed list, dictionary bar, popup): **From** and **To** pickers with flags and search, "↔ swap", "any", "both directions", "monolingual only". Counts per choice ("Türkçe → *: 37 sözlük").
+- 📋 Pair matrix view: rows = source languages, columns = target languages, cell = number of installed / available dictionaries; click a cell → that list. Shows at a glance which pairs are missing ("no Kazakh → Turkish dictionary yet").
+- 📋 Automatic groups by pair (en → tr, tr → en …) for the group feature; the search uses the pair of the word's script when "auto pair" is on (Cyrillic word → dictionaries whose source is Cyrillic).
+- 📋 Per-pair default order (which dictionary first for en → tr), kept in `dictionaries.json`.
+
+### B. Sources (where dictionaries come from) — like isnady's data sources
+- 📋 **Sources page** (Dictionary Center → Sources, and Preferences → Dictionaries): built-in sources (editable, they may move) + **"My sources"** (user-added), each with on/off, name, type, URL, last refresh, item count, status (OK / unreachable / needs sign-in), "Refresh", "Edit", "Remove", "Import all".
+- 📋 **My own server (default source, like isnady-data)**: a dictz catalog on his server / GitHub (`dictz-data` repo or `dictz.bayramkotan.com` / any HTTPS URL). Format **`dictz-catalog.json`** (versioned, documented in `docs/CATALOG.md`, JSON schema + golden in `tests/data/parity/`):
+  - `catalog`: `name`, `version`, `updated`, `homepage`, `description`, optional `parent` catalogs to include.
+  - one entry per dictionary: `id` (stable), `name`, `source_lang`, `target_lang` (one or a list), `kind`, `format` (stardict, dsl, bgl, mdict, xdxf, dictd, slob, zim, tabfile…), `headwords`, `edition` / `version`, `date`, `size` (bytes, download and unpacked), `files` (list of `url` + optional `mirrors`, `sha256` / `sha512`, `archive`: zip / tar.gz / tar.xz / tar.bz2 / 7z / none, `inner_path`), `license` (SPDX id + text URL), `author` / `publisher`, `description` per interface language, `tags`, `icon` URL, `sample` (a few headwords + one article for the preview), `min_dictz` version, `replaces` (old id), `deprecated`.
+  - signed catalogs (optional): `catalog.json.sig` with an ed25519 key shown in the source's settings; dictz warns when the signature does not match.
+  - a tool to make the catalog: `dct catalog build FOLDER --base-url URL` reads a folder of dictionaries (both editions), fills languages / counts / checksums / sizes / samples and writes `dictz-catalog.json`; `dct catalog check URL` validates one.
+- 📋 **Source types** dictz can read (each a small adapter; same list in Python and Rust):
+  - `dictz-catalog` — the JSON above (own server, GitHub raw / Pages, any web server).
+  - `freedict` — FreeDict API `https://freedict.org/freedict-database.json` (one entry per pair like `eng-tur`; releases per platform: `stardict` `.tar.xz`, `dictd`, `slob`, `src`; size + SHA-512 per release) → languages from the pair name, licence GPL / per dictionary.
+  - `github-releases` — `owner/repo`: assets of the latest (or every) release (e.g. xxyzz/wiktionary_stardict: dated tags, StarDict assets, GPL-3.0); asset name → languages by a per-source pattern.
+  - `github-folder` — files in a repo folder (e.g. Vuizur/Wiktionary-Dictionaries: `<Language>-English` StarDict `.tar.gz`, TSV, Kindle `.mobi`; CC-BY-SA 3.0 / GFDL) via the GitHub contents API (token optional, rate limit shown).
+  - `nextcloud-share` — a public Nextcloud / ownCloud share link like `cloud.freemdict.com/index.php/s/<token>`: listing via WebDAV `PROPFIND` on `/public.php/webdav/` (token as user name, optional share password), download per file, folders browsable; MDict `.mdx` / `.mdd` pairs kept together.
+  - `webdav` — any WebDAV folder with user name + password.
+  - `http-index` — an Apache / nginx / lighttpd directory listing (e.g. old StarDict mirrors like download.huzheng.org): links parsed, folders walked to a set depth, files grouped by stem (`.ifo` + `.idx` + `.dict.dz`, `.tar.bz2`).
+  - `archive-org` — Internet Archive: search (advanced search API, `mediatype`, query such as `"StarDict"`, `"Babylon BGL"`, `"MDict mdx"`) and item file lists (metadata API); every file of an item shown with size and format; the user picks.
+  - `direct-url` — **"Add from link…"**: paste any URL (file or archive); dictz looks at the name, size and content type, downloads, unpacks and adds it.
+  - `local` — a folder or archive on disk / USB / network share (same install path as downloads).
+  - `telegram` — public channels (e.g. `t.me/s/Dictionaries_GoldenDict`): the web preview lists posts and file names but files can only be fetched with a Telegram account (MTProto). Plan: show the channel's list read-only with "open in Telegram"; a real download only with the user's own Telegram API id / hash (optional extra, off by default).
+  - 💡 later: Google Drive / Yandex.Disk / Dropbox public links, FTP, S3, torrent / magnet (aria2 if installed).
+- 📋 **Credentials** per source: none, basic (user + password), bearer token, custom header, share password; kept in the OS keyring (Windows Credential Manager, macOS Keychain, Secret Service) — never in `settings.json`; the CLI can take them from env vars.
+- 📋 Sources are kept in **`sources.json`** in the data folder (same file in both editions, lock + backup like `dictionaries.json`); export / import a source list to share it.
+- 📋 **Which sources are built in:** only those whose dictionaries are clearly free to redistribute (FreeDict, Wiktionary builds, his own server). Community archives (Huzheng, Internet Archive uploads, FreeMdict, Telegram) are **not** built in: the user adds them himself under "My sources" (dictz supports their protocols); every catalog entry shows its licence, and dictz shows "licence unknown" where a source does not say.
+
+### C. Catalog (browse and choose)
+- 📋 **Catalog page**: all dictionaries of all enabled sources in one list (cached, refreshed in the background, offline: last list): name, **from → to** with flags, kind, format, headwords, size, licence, source, date / edition, installed / update available / not installed.
+- 📋 Filters: from / to language, kind, format, source, licence (free / unknown / all), size range, headword range, "installed", "updates", text search (name, description, tags); sort by name, pair, size, headwords, date, popularity (download count when the source gives one).
+- 📋 Preview before downloading: description, licence text link, sample headwords and one article rendered like a real article, file list with sizes, where it will be installed.
+- 📋 Multi-select → "Install selected"; "install everything for en → tr"; recommended set for a pair ("best free en → tr": FreeDict + Wiktionary).
+- 📋 Duplicates across sources shown once with the source choice (same `id` / same checksum / same name + pair).
+
+### D. Download manager
+- 📋 Queue with parallel downloads (setting: 1–8), per-file and total progress, speed, ETA, pause / resume / cancel, retry with back-off, **resume after restart** (HTTP Range, `.part` files), mirrors tried in order.
+- 📋 Verification: size, SHA-256 / SHA-512 when the source gives one; failed check → delete + retry once, then report.
+- 📋 Unpacking: zip, tar.gz, tar.xz, tar.bz2, 7z (when available), single `.gz` / `.dz` / `.bz2`; StarDict sets (`.ifo` + `.idx[.gz]` + `.dict[.dz]` + `.syn`), DSL with `.files.zip` / `_abrv.dsl` / `.ann`, MDict `.mdx` + `.mdd`, BGL; pictures / icons next to them. Rust: `zip`, `tar`, `flate2`, `xz2` / `lzma-rs`, `bzip2`; Python: stdlib (`zipfile`, `tarfile`, `lzma`, `bz2`), `py7zr` optional.
+- 📋 Install folder: setting `downloads.folder` (default `DATA/dictionaries/<source>/<id>/`), shown in the folder list as a dictionary folder (scanned like the others); disk-space check before starting; "open folder".
+- 📋 After install: added to `dictionaries.json` (at the end, or right after other dictionaries of the same pair), article store built in the background, the dictionary bar shows it at once.
+- 📋 Proxy (system / manual / none), bandwidth limit, "only on Wi-Fi / unmetered" (later), user agent `dictz/<version>`, timeouts; everything online is opt-in (off until the user opens the Dictionary Center or turns it on).
+- 📋 Download history / log (what, from where, when, checksum, licence) kept in `downloads.json`.
+
+### E. Updates
+- 📋 Installed dictionaries remember their source, id, edition, date and checksum (`dictionaries.json` fields `source`, `source_id`, `edition`, `sha256`).
+- 📋 "Check for dictionary updates" (button, on start optional, every N days optional): newer edition / date / checksum → "update available" badge; update keeps the dictionary's place, name, on/off and group; the old version can be kept as backup (setting).
+- 📋 Replaced / renamed ids follow `replaces`; deprecated entries show a note.
+
+### F. Maintenance (the "Health" page — very rich)
+- 📋 **Health check** (`dct doctor dicts` too): missing files, moved files (find by name + size + checksum in the dictionary folders and offer "relink"), broken / unreadable files with the parser's reason, duplicates (same file twice, same dictionary in two formats, same checksum), dictionaries without languages, stale or orphan article stores (`articles/*.db` without a dictionary), stale headword index, failed loads, huge stores; each with a one-click fix.
+- 📋 Rebuild one / all article stores and indexes; compact (VACUUM) the stores and the index; show disk use per dictionary (files + store + index + media).
+- 📋 Per-dictionary settings (in its info / properties window): display name, icon, languages (fix by hand), kind, tags, notes, priority within its pair, font and size, RTL, "hide pictures", "full-text search on/off" (later), "open collapsed"; kept in `dictionaries.json`.
+- 📋 Batch operations on a selection: enable / disable, move, set languages, add to group, rebuild, remove (with "also delete the files" for downloaded ones), export.
+- 📋 Export / import the whole setup (list + order + settings + sources, optionally the files) as one `.dictz-setup.zip` to move to another computer.
+- 📋 Statistics: dictionaries and headwords per pair / format / source, size totals, most used dictionaries (from history), dictionaries never shown in results.
+
+### G. Conversion (PyGlossary-backed, like GoldenDict + more)
+- 📋 "Convert…" for a dictionary: StarDict, DSL, BGL, MDict, XDXF, dictd, Slob, TSV / CSV, JSON, Kindle (`.mobi` via PyGlossary where available), Kobo, AppleDict source, plain HTML. Python edition through PyGlossary (`github.com/ilius/pyglossary`, GPL-3.0); the Rust edition calls the same conversion through `dct`'s Python helper when PyGlossary is installed, otherwise offers the formats it writes natively (StarDict, TSV, JSON).
+- 📋 Options: target folder, compression (dictzip), keep media, merge several dictionaries into one, split by letter, filter by headword list, reverse a bilingual dictionary (tr → en from en → tr, marked as "reversed").
+- 📋 `dct convert IN --to FORMAT [-o OUT]` and `dct merge A B -o C`.
+
+### H. CLI (everything above, same commands in both editions)
+- 📋 `dct sources [list | add URL --type T --name N [--user U --password-env VAR | --token-env VAR] | remove N | refresh [N] | export FILE | import FILE]`
+- 📋 `dct catalog [search TEXT] [--from en --to tr] [--kind K] [--format F] [--source S] [--free] [--json]`
+- 📋 `dct install ID|URL ... [--to FOLDER] [--no-verify]`, `dct uninstall NAME [--delete-files]`, `dct downloads [list | pause | resume | cancel]`
+- 📋 `dct update-dicts [--check]`, `dct doctor dicts [--fix]`, `dct pairs [--matrix]`, `dct convert`, `dct merge`, `dct catalog build / check`
+- 📋 Completion scripts, `cli_commands.json` golden and READMEs updated.
+
+### Order of the phases (proposal)
+1. **A** languages + pair filter (needed by everything else) · 2. **B** sources + own-server catalog + "Add from link…" · 3. **C + D** catalog page + download manager (FreeDict, GitHub, direct URL first; Nextcloud, WebDAV, http-index, archive.org next) · 4. **E** updates · 5. **F** health page and per-dictionary settings · 6. **G** conversion · 7. **H** remaining CLI. MDict (`.mdx/.mdd`) and dictd reading (from "formats I") must land before the FreeMdict / dictd sources are useful.
+
+### Sources the user named (2026-11-17), with what is known about them
+| Source | What it offers | How dictz reaches it | Built in? |
+|---|---|---|---|
+| FreeDict (`freedict.org/downloads`) | free (GPL etc.) bilingual dictionaries, hundreds of pairs; StarDict `.tar.xz`, dictd, Slob, sources | `freedict` adapter on `freedict-database.json` (sizes, SHA-512) | yes |
+| Wiktionary StarDict (`github.com/xxyzz/wiktionary_stardict`) | Wiktionary dictionaries for KOReader / e-readers, dated releases, GPL-3.0 | `github-releases` | yes |
+| Wiktionary Dictionaries (`github.com/Vuizur/Wiktionary-Dictionaries`) | `<Language>-English` StarDict, TSV, Kindle; CC-BY-SA 3.0 / GFDL | `github-folder` | yes |
+| Huzheng StarDict archive (`download.huzheng.org`) | the oldest, largest StarDict archive, many languages; licences mixed / often unknown | `http-index` | no — "My sources" |
+| Internet Archive (`archive.org`) | community uploads (StarDict, Babylon BGL, MDict packs) | `archive-org` (search + item files) | no — "My sources" |
+| FreeMdict forum + cloud (`forum.freemdict.com`, `cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs`) | the most active MDict / StarDict community, Nextcloud shares | `nextcloud-share` (WebDAV) | no — "My sources" |
+| Telegram (`t.me/s/Dictionaries_GoldenDict`) | packs in 40+ languages: DSL, BGL, MDX, StarDict | read-only list; download only with the user's own Telegram API key (optional) | no |
+| His own server (like isnady-data) | everything he publishes | `dictz-catalog` | **yes, the default source** |
+| PyGlossary (`github.com/ilius/pyglossary`) | converter between dictionary formats | phase G | — |
 
 ### v0.1.1 → later — dictionary groups
 - 📋 Groups with name, icon, order and their own dictionary list; "All" group

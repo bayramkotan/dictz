@@ -134,7 +134,7 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 **v0.1.0**: the interface in **25 languages** with a flag picker at the top right (RTL for ar/fa/ur), dictionary icons and article cards, READMEs with screenshots — in both editions.
 **v0.1.1**: the dictionary list moves to **`dictionaries.json`** (path identity, `Name (2)` for duplicate names, failed dictionaries keep their place, one-time migration) — dictionaries are no longer mixed up or lost; in both editions.
 **v0.1.2**: fast start (article stores `articles/<id>.db`, articles read on demand); dictionaries no longer get lost (`dictionaries.json.lock`, always re-read before a change, `.bak` backup, failed dictionaries stay in the list marked ⚠); dictionary folders like GoldenDict's Sources → Files (several folders, each with its own "subfolders" box, kept in `settings.json`, scanned at every start) — in both editions.
-**Next suggested version:** v0.1.3, article display like GoldenDict; then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**Next suggested version:** v0.1.3, article display like GoldenDict; then the **Dictionary Center** (`TODO.md` → "Dictionary Center": languages / pairs, sources incl. his own server like isnady-data, catalog, download manager, updates, health page, conversion, CLI — phases A–H), then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-16)
 
@@ -352,6 +352,12 @@ GitHub → https://github.com/bayramkotan/dictz/settings/secrets/actions
 You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-io` environments on GitHub.
 
 ---
+
+## Planned after v0.1.2: the Dictionary Center (user's request, 2026-11-17)
+
+- Very rich dictionary maintenance; add a link and download straight from the internet; pull from **his own server like isnady** (default source, `dictz-catalog.json`); every detail down to **which language into which language**. Full plan with phases A–H, the catalog format, source types (FreeDict API, GitHub releases / folders, Nextcloud shares, WebDAV, http directory listings, archive.org, direct link, Telegram read-only) and the sources he named: `TODO.md` → "Dictionary Center".
+- Rule written there: only sources whose dictionaries are clearly free to redistribute are **built in** (FreeDict, Wiktionary builds, his own server); community archives (Huzheng, archive.org uploads, FreeMdict, Telegram) are added by the user under "My sources"; every entry shows its licence.
+- Credentials go to the OS keyring, never `settings.json`; sources live in `sources.json` (lock + backup like `dictionaries.json`).
 
 ## Done in v0.1.2 (fast start was pushed first as a plain push, then released with the fixes below)
 
