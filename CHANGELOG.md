@@ -11,6 +11,7 @@ Fast start, dictionaries that no longer get lost, and dictionary folders like Go
 
 ### Fixed
 - **Dictionaries no longer get lost.** Several windows, the background loader, the CLI and the other edition could change the list at the same moment; one change then wiped out the other. Every change now takes turns through `dictionaries.json.lock` and reads the file again first. The Rust edition no longer writes two changes into the same temporary file. The previous list is kept as `dictionaries.json.bak` and is used if the file is ever broken.
+- Windows: the selftest no longer fails because an article store is still open when its temporary folder is deleted; "Reindex" closes a dictionary's store before replacing it (Windows cannot replace an open file).
 - **A dictionary that cannot be opened no longer disappears** from the window: the side panel and the dictionary manager show it as **⚠ Name — could not be opened**, with the reason on hover. It keeps its place and can be switched off or removed.
 
 ### Added

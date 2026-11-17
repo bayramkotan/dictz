@@ -89,6 +89,7 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 - Tables: `meta(key, value)`, `articles(id, word, folded, z, body)`; rows in the parser's sorted order (`ORDER BY id`), `folded` = lower-cased word, `z = 1` zlib body. Lookups must keep the parsers' rule (exact → first case-insensitive → up to 50 prefix); `test_articles.py` and `parity.rs` compare store answers with parser answers.
 - Written to a temp file and renamed; if the data folder is read-only, `open_cached` returns the parsed dictionary instead.
 - `index_dictionary` reads `headwords()` / `words().sorted()` only (never the articles).
+- **Windows:** an open store (a `StoredDictionary` keeps its SQLite connection) cannot be deleted or replaced. Close it first: `QueryManager.rebuild` closes the old dictionary before building; code that deletes a temp folder with stores in it (selftest, tests) must `qm.close_all()` first. v0.1.2's first tag failed CI on Windows for exactly this.
 - When a store is rebuilt because the file changed (`row changed` + `built`), the FTS headword index is rebuilt too.
 
 ## ⚠️ READ FIRST: the dictionary list lives in `dictionaries.json`

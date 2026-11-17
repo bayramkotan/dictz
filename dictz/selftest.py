@@ -92,7 +92,8 @@ def run() -> int:
             lines.append(f"FAIL  {name}: {type(exc).__name__}: {exc}")
             lines.append(traceback.format_exc())
 
-    with tempfile.TemporaryDirectory(prefix="dictz-selftest-") as tmp:
+    # ignore_cleanup_errors: a file still open on Windows must not fail the selftest
+    with tempfile.TemporaryDirectory(prefix="dictz-selftest-", ignore_cleanup_errors=True) as tmp:
         tmpdir = Path(tmp)
 
         def stardict() -> str:
@@ -142,9 +143,12 @@ def run() -> int:
             store = IndexStore(tmpdir / "i.db")
             store.open()
             qm = QueryManager(store)
-            qm.add_dictionary(sd.with_suffix(".ifo"))
-            got = [s for s in qm.suggest("cafe", 10) if not s.fuzzy]
-            store.close()
+            try:
+                qm.add_dictionary(sd.with_suffix(".ifo"))
+                got = [s for s in qm.suggest("cafe", 10) if not s.fuzzy]
+            finally:
+                qm.close_all()  # Windows cannot delete an open article store
+                store.close()
             assert len(got) == 2, f"unexpected suggestions: {got}"
             return "FTS5 prefix search"
 

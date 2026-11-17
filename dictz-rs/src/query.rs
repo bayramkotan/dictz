@@ -413,12 +413,20 @@ impl QueryManager {
             .position(name)
             .ok_or_else(|| DictzError::NotFound(name.to_string()))?;
         let path = self.dicts[i].dict.metadata().file_path.clone();
-        let mut d = match self.data_dir() {
-            Some(dir) => crate::articles::open_cached(&path, &dir, true)?.0,
-            None => Self::open_file(&path)?,
+        // Windows: an open store cannot be replaced, so close it first
+        self.dicts[i].dict.close();
+        let opened = match self.data_dir() {
+            Some(dir) => crate::articles::open_cached(&path, &dir, true).map(|(d, _)| d),
+            None => Self::open_file(&path),
+        };
+        let mut d = match opened {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = self.dicts[i].dict.load(); // keep the old one usable
+                return Err(e);
+            }
         };
         d.metadata_mut().name = name.to_string();
-        self.dicts[i].dict.close();
         self.dicts[i].dict = d;
         self.headword_cache = None;
         let d = self.dicts[i].dict.as_ref();
