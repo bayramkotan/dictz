@@ -379,6 +379,24 @@ def write_registry_golden() -> None:
                                                encoding="utf-8")
 
 
+def write_articles_golden() -> None:
+    """articles_golden.db: the article store of sample.dsl written by the Python
+    edition; the Rust parity test reads it and must get its own parser's answers."""
+    from dictz.core.query_manager import QueryManager
+    from dictz.storage import articles
+
+    out = HERE / "articles_golden.db"
+    articles.build(QueryManager.open_file(HERE / "sample.dsl"), out)
+    # a fixed stamp: the golden file must not depend on the checkout's mtimes
+    import sqlite3
+
+    con = sqlite3.connect(str(out))
+    con.execute("UPDATE meta SET value = 'golden' WHERE key = 'stamp'")
+    con.commit()
+    con.execute("VACUUM")
+    con.close()
+
+
 def write_i18n() -> None:
     """Rust copy of the interface catalogues and flags (embedded with include_str!/include_bytes!)."""
     import shutil
@@ -402,4 +420,5 @@ if __name__ == "__main__":
     write_bgl()
     write_golden()
     write_registry_golden()
+    write_articles_golden()
     print("written:", sorted(p.name for p in HERE.iterdir()))

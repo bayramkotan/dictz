@@ -221,6 +221,16 @@ impl IndexStore {
             }))
     }
 
+    /// The data folder (where `dictionaries.json` and the article stores
+    /// live); `None` for an in-memory index.
+    pub fn data_dir(&self) -> Option<PathBuf> {
+        self.registry
+            .borrow()
+            .path
+            .as_ref()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+    }
+
     /// The name `path` has (or would get) in the list.
     pub fn unique_name_for(&self, name: &str, path: &Path) -> String {
         let reg = self.registry.borrow();
@@ -303,7 +313,18 @@ impl IndexStore {
     pub fn remove_dictionary(&self, name: &str) -> Result<(), DictzError> {
         self.conn
             .execute("DELETE FROM entries WHERE dictionary = ?1", params![name])?;
+        let row = self.registry.borrow_mut().get(name);
         self.registry.borrow_mut().remove(name);
+        if let (Some(row), Some(dir)) = (row, self.data_dir()) {
+            if self
+                .registry
+                .borrow()
+                .by_path(Path::new(&row.path))
+                .is_none()
+            {
+                let _ = std::fs::remove_file(crate::articles::store_path(&dir, &row.id));
+            }
+        }
         Ok(())
     }
 

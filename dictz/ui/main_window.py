@@ -92,9 +92,10 @@ class DictionaryLoader(QThread):
                 i += 1
                 self.progress.emit(i, total, Path(row["path"]).name)
                 try:
-                    d = QueryManager.open_file(row["path"])
+                    # from the article store: nothing is parsed unless the file changed
+                    d, built = QueryManager.open_cached(row["path"], self.db_path.parent)
                     d.metadata.name = row["name"]  # the name in the list (may be "X (2)")
-                    if self.reindex_changed and _changed(row, Path(row["path"])):
+                    if _changed(row, Path(row["path"])) and (built or self.reindex_changed):
                         store.index_dictionary(d)
                     self.loaded.emit(d, row["path"], bool(row["enabled"]))
                 except Exception as exc:  # noqa: BLE001
@@ -103,7 +104,7 @@ class DictionaryLoader(QThread):
                 i += 1
                 self.progress.emit(i, total, f.name)
                 try:
-                    d = QueryManager.open_file(f)
+                    d, _built = QueryManager.open_cached(f, self.db_path.parent)
                     name = store.register_dictionary(d)  # unique name: "X (2)" for a second "X"
                     if not store.is_indexed(name):
                         store.index_dictionary(d)
@@ -606,7 +607,7 @@ class MainWindow(QMainWindow):
             qm = self.query_manager
             if qm.index_store is not None:
                 for n in qm.loaded_names():
-                    qm.index_store.index_dictionary(qm.dictionaries[n])
+                    qm.rebuild(n)
                 QMessageBox.information(self, t("İndeks"), t("{n} sözlük yeniden indekslendi.", n=len(qm.loaded_names())))
         elif action == "check_updates":
             self._check_updates(silent=False)

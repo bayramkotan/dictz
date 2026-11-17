@@ -1872,17 +1872,14 @@ impl DictzApp {
             Action::Reindex(names) => {
                 let mut n = 0;
                 let mut errors = Vec::new();
-                let mut index = self.qm.index.take();
                 for name in names {
-                    let (Some(d), Some(idx)) = (self.qm.dictionary(&name), index.as_mut()) else {
-                        continue;
-                    };
-                    match idx.index_dictionary(d) {
+                    // reads the file again: new article store + headword index
+                    match self.qm.rebuild(&name) {
                         Ok(_) => n += 1,
                         Err(e) => errors.push(format!("{}: {}", name, e)),
                     }
                 }
-                self.qm.index = index;
+                self.media_cache.clear();
                 if errors.is_empty() {
                     self.set_status(tr_args("{n} sözlük yeniden indekslendi.", &[("n", &n)]), 4);
                 } else {
@@ -3435,6 +3432,9 @@ fn load_job(
     ctx: egui::Context,
 ) {
     let mut store = IndexStore::open(&db).ok();
+    let data_dir = db.parent().map(Path::to_path_buf).unwrap_or_default();
+    // from the article store: nothing is parsed unless the file changed
+    let open = |p: &Path| crate::articles::open_cached(p, &data_dir, false);
     let total = rows.len() + new_files.len();
     let mut i = 0;
     let send = |m: LoadMsg| {
@@ -3444,10 +3444,10 @@ fn load_job(
     for row in rows {
         i += 1;
         send(LoadMsg::Progress(i, total, file_name(&row.path)));
-        match QueryManager::open_file(&row.path) {
-            Ok(mut d) => {
+        match open(&row.path) {
+            Ok((mut d, built)) => {
                 d.metadata_mut().name = row.name.clone();
-                if reindex && row.changed() {
+                if row.changed() && (built || reindex) {
                     if let Some(s) = store.as_mut() {
                         let _ = s.index_dictionary(d.as_ref());
                     }
@@ -3460,8 +3460,8 @@ fn load_job(
     for f in new_files {
         i += 1;
         send(LoadMsg::Progress(i, total, file_name(&f)));
-        match QueryManager::open_file(&f) {
-            Ok(mut d) => {
+        match open(&f) {
+            Ok((mut d, _built)) => {
                 if let Some(s) = store.as_mut() {
                     // a unique name in the list ("Name (2)")
                     if let Ok(name) = s.register_dictionary(d.as_ref()) {

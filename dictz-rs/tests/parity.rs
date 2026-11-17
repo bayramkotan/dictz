@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use dictz::query::open_dictionary;
+use dictz::Dictionary as _;
 use serde_json::Value;
 
 fn parity_dir() -> PathBuf {
@@ -339,4 +340,63 @@ fn dictionary_list_file_matches_python() {
             case[1].as_str().unwrap()
         );
     }
+}
+
+fn same_answers(parsed: &dyn dictz::Dictionary, stored: &dyn dictz::Dictionary) {
+    let words: Vec<String> = parsed.words().sorted().to_vec();
+    assert_eq!(stored.words().sorted(), &words[..]);
+    let mut qs = vec![String::new(), "zzzz-none".into(), "a".into(), "A".into()];
+    for w in words.iter().step_by((words.len() / 15).max(1)) {
+        qs.push(w.clone());
+        qs.push(w.to_uppercase());
+        qs.push(w.chars().take(2).collect());
+    }
+    let pairs = |v: Vec<dictz::DictionaryEntry>| -> Vec<(String, String)> {
+        v.into_iter().map(|e| (e.headword, e.definition)).collect()
+    };
+    for q in &qs {
+        for exact in [true, false] {
+            assert_eq!(
+                pairs(parsed.lookup(q, exact)),
+                pairs(stored.lookup(q, exact)),
+                "{q:?} exact={exact}"
+            );
+        }
+    }
+    assert_eq!(pairs(parsed.entries()), pairs(stored.entries()));
+}
+
+#[test]
+fn article_store_written_by_python_reads_like_the_parser() {
+    use dictz::articles::StoredDictionary;
+    let src = parity_dir().join("sample.dsl");
+    let stored = StoredDictionary::open(&parity_dir().join("articles_golden.db"), &src).unwrap();
+    let parsed = dictz::query::QueryManager::open_file(&src).unwrap();
+    assert_eq!(stored.metadata().format, "dsl");
+    same_answers(parsed.as_ref(), &stored);
+}
+
+#[test]
+fn article_store_built_by_rust_answers_like_the_parser() {
+    use dictz::articles::{build, is_fresh, open_cached, StoredDictionary};
+    let dir = std::env::temp_dir().join(format!("dictz-art-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sample in ["sample.dsl", "sample.bgl"] {
+        let src = parity_dir().join(sample);
+        let parsed = dictz::query::QueryManager::open_file(&src).unwrap();
+        let store = dir.join(format!("{sample}.db"));
+        let n = build(parsed.as_ref(), &store).unwrap();
+        assert_eq!(n, parsed.words().len());
+        assert!(is_fresh(&store, &src));
+        let stored = StoredDictionary::open(&store, &src).unwrap();
+        assert_eq!(stored.metadata().name, parsed.metadata().name);
+        same_answers(parsed.as_ref(), &stored);
+        // open_cached uses the fresh store and does not parse again
+        let (_, built) = open_cached(&src, &dir, false).unwrap();
+        assert!(built, "first open_cached builds articles/<id>.db");
+        let (d, built) = open_cached(&src, &dir, false).unwrap();
+        assert!(!built);
+        same_answers(parsed.as_ref(), d.as_ref());
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

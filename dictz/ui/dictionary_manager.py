@@ -186,7 +186,7 @@ class DictionaryManagerDialog(QDialog):
         qm = self.query_manager
         if not name or qm.index_store is None:
             return
-        n = qm.index_store.index_dictionary(qm.dictionaries[name])
+        n = qm.rebuild(name)  # reads the file again (article store + index)
         QMessageBox.information(self, t("Yeniden indeksle"), t("{name}: {n} kelime indekslendi.", name=name, n=f"{n:,}"))
 
     def _info(self) -> None:

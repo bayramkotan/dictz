@@ -43,6 +43,7 @@ Rust code map (`dictz-rs/src/`):
 | `wordtable.rs` | headwords; first one wins; `sorted(key=str.lower)` order | `_index` / `_sorted_words` |
 | `index.rs`, `history.rs` | SQLite (rusqlite bundled, FTS5); the list itself is in `registry.rs` | `dictz/storage/indexer.py`, `history.py` |
 | `registry.rs` | `dictionaries.json`: list order, on/off, unique names, path identity, migration | `dictz/storage/registry.py` |
+| `articles.rs` | article stores `articles/<id>.db`, `StoredDictionary`, `open_cached` (parse once, read on demand) | `dictz/storage/articles.py` |
 | `query.rs` | QueryManager: order, enable, restore, suggest, fuzzy | `dictz/core/query_manager.py` |
 | `fuzzy.rs` | RapidFuzz `fuzz.ratio` (InDel/LCS), `extract`, `rank` | `dictz/core/fuzzy.py` |
 | `media.rs` | DSL/StarDict media lookup | `dictz/core/media.py` |
@@ -79,6 +80,16 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 3. **The MD5 is checked at every destination** (repo and Yandex.Disk) and must match the table in the delivery.
 4. **After a successful copy the downloaded file is deleted** from Downloads (`rm -f` / `Remove-Item -Force`). Leftover `TODO (2).md`-style duplicates of earlier deliveries are removed in the same block, so Downloads stays clean.
 5. The commands always use the exact versioned file name, never a wildcard that could match an old download.
+
+## ⚠️ READ FIRST: dictionaries open from their article store (no parsing at start)
+
+- `dictz/storage/articles.py` ↔ `dictz-rs/src/articles.rs`. A dictionary is parsed **once** (when added, when its files change, or on "Reindex"); every article goes into `DATA/articles/<id>.db` (`id` = the dictionary's id in `dictionaries.json`). Starts open the store (`StoredDictionary`) and read only `meta`; articles are read on demand.
+- Always open known dictionaries with `QueryManager.open_cached(path, data_dir)` / `articles::open_cached(...)` → `(dictionary, built)`. Use `open_file` (parse) only for files that are not in the list (`dictz info FILE`, `dictz dump FILE`) and inside `open_cached`.
+- Freshness: `meta.stamp` = `name:size:mtime_ns` of every source file (`.ifo` + `.idx[.gz]` + `.dict[.dz]` for StarDict), joined by `;`, and `meta.version` = `STORE_VERSION` ("1"). Bump `STORE_VERSION` in **both** editions when the stored text or the schema changes (e.g. when a parser's output changes) — every store is then rebuilt once.
+- Tables: `meta(key, value)`, `articles(id, word, folded, z, body)`; rows in the parser's sorted order (`ORDER BY id`), `folded` = lower-cased word, `z = 1` zlib body. Lookups must keep the parsers' rule (exact → first case-insensitive → up to 50 prefix); `test_articles.py` and `parity.rs` compare store answers with parser answers.
+- Written to a temp file and renamed; if the data folder is read-only, `open_cached` returns the parsed dictionary instead.
+- `index_dictionary` reads `headwords()` / `words().sorted()` only (never the articles).
+- When a store is rebuilt because the file changed (`row changed` + `built`), the FTS headword index is rebuilt too.
 
 ## ⚠️ READ FIRST: the dictionary list lives in `dictionaries.json`
 
@@ -119,7 +130,7 @@ The browser does not overwrite a download with the same name: a second `TODO.md`
 **v0.0.9**: the short name **`dct`** (= `dictz`), every `--version` spelling, `dct shortcut` / Dosya → Masaüstü kısayolu oluştur, completion for both names, per-platform READMEs — in both editions.
 **v0.1.0**: the interface in **25 languages** with a flag picker at the top right (RTL for ar/fa/ur), dictionary icons and article cards, READMEs with screenshots — in both editions.
 **v0.1.1**: the dictionary list moves to **`dictionaries.json`** (path identity, `Name (2)` for duplicate names, failed dictionaries keep their place, one-time migration) — dictionaries are no longer mixed up or lost; in both editions.
-**Next suggested version:** v0.1.2, **speed** — a GoldenDict-like persistent index, articles read on demand from the file, no full parse at start (**in both editions**). Then v0.1.3, article display like GoldenDict; then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
+**Next suggested version:** v0.1.2, **speed** — article stores, articles read on demand, no full parse at start (**in both editions**; already pushed after v0.1.1 as a plain push, waits for the user to ask for the version). Then v0.1.3, article display like GoldenDict; then themes (isnady-like) and fonts. Dictionary groups and the rest of the `TODO.md` roadmap move to later numbers in the same order. The full GoldenDict comparison and the roadmap to v0.2.0 are in `TODO.md` → "Goal: more than GoldenDict".
 
 ### Release status (2026-11-16)
 
@@ -337,6 +348,11 @@ GitHub → https://github.com/bayramkotan/dictz/settings/secrets/actions
 You no longer need the Trusted Publisher entry on PyPI or the `pypi` / `crates-io` environments on GitHub.
 
 ---
+
+## Done after v0.1.1 (plain push, not released yet)
+
+- **Fast start** (big job 1 of the list the user approved): article stores `articles/<id>.db`, `StoredDictionary`, `open_cached` in both editions (see "READ FIRST: dictionaries open from their article store"). 500k headwords: Python start 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s. Parity golden `articles_golden.db`.
+- **Next big job:** article display like GoldenDict (the user still has to send a side-by-side screenshot of the same word), then themes (isnady-like), then fonts, then dictionary groups and the rest of `TODO.md` in order.
 
 ## Done in v0.1.1 (pushed first as a plain push, then released)
 

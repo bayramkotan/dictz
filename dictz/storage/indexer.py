@@ -168,7 +168,15 @@ class IndexStore:
     def remove_dictionary(self, name: str) -> None:
         with self._cursor() as cur:
             cur.execute("DELETE FROM entries WHERE dictionary = ?", (name,))
+        row = self.registry.get(name)
         self.registry.remove(name)
+        if row is not None and self.registry.by_path(row["path"]) is None:
+            import contextlib
+
+            from .articles import store_path
+
+            with contextlib.suppress(OSError):
+                store_path(self.db_path.parent, row["id"]).unlink()
 
     def index_dictionary(self, dictionary: Dictionary) -> int:
         if not dictionary.loaded:
@@ -180,8 +188,8 @@ class IndexStore:
         count = 0
         BATCH_SIZE = 5000
         with self._cursor() as cur:
-            for entry in dictionary.iter_entries():
-                batch.append((entry.headword, dictionary.metadata.name))
+            for word in dictionary.headwords():
+                batch.append((word, dictionary.metadata.name))
                 if len(batch) >= BATCH_SIZE:
                     cur.executemany("INSERT INTO entries (headword, dictionary) VALUES (?, ?)", batch)
                     count += len(batch)

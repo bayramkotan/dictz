@@ -5,6 +5,17 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Fast start, like GoldenDict** (both editions). A dictionary is now parsed **once**, when it is added or its file changes; its articles go into an article store `articles/<id>.db` in the data folder. Every later start opens those stores and reads nothing else; an article is read (and unpacked) only when it is shown.
+  - Measured with 500,000 headwords (StarDict 300k + DSL 100k + Babylon 100k): Python start 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s; the Python window has the dictionaries 0.03 s after it opens.
+  - The store is rebuilt by itself when a dictionary's files change (size or modification time); "Reindex" (window, dictionary manager, `dictz reindex`) now reads the file again too.
+  - Lookups give exactly the parsers' answers (exact word, then the first case-insensitive match, then up to 50 prefix matches).
+  - A store written by one edition is read by the other; removing a dictionary deletes its store.
+  - The first start after the update parses every dictionary one last time to build the stores.
+- Building the headword index reads only the headwords, not the articles.
+
 ## [0.1.1] — 2026-11-16
 
 The dictionary list moves to **`dictionaries.json`**, in **both editions**: dictionaries are no longer mixed up or lost.

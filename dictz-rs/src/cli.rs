@@ -1241,11 +1241,34 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// A dictionary in the list opens from its article store; any other file is parsed.
+fn open_known(
+    ctx: &mut Ctx,
+    path: &Path,
+) -> (
+    Box<dyn crate::Dictionary>,
+    Option<crate::index::DictionaryRow>,
+) {
+    let me = crate::registry::norm_path(path);
+    let row = ctx
+        .rows()
+        .into_iter()
+        .find(|r| crate::registry::norm_path(&r.path) == me);
+    let opened = match (&row, ctx.index().data_dir()) {
+        (Some(_), Some(dir)) => crate::articles::open_cached(path, &dir, false).map(|(d, _)| d),
+        _ => QueryManager::open_file(path),
+    };
+    let mut d = opened.unwrap_or_else(|e| die(format!("error: {}", e)));
+    if let Some(r) = &row {
+        d.metadata_mut().name = r.name.clone();
+    }
+    (d, row)
+}
+
 fn cmd_info(ctx: &mut Ctx, target: Vec<String>, as_json: bool) -> i32 {
     let path = resolve_target(ctx, &target.join(" "));
-    let d = QueryManager::open_file(&path).unwrap_or_else(|e| die(format!("error: {}", e)));
+    let (d, row) = open_known(ctx, &path);
     let m = d.metadata();
-    let row = ctx.index().get_dictionary(&m.name).ok().flatten();
     let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     let info = json!({
         "name": m.name, "format": m.format, "words": m.word_count, "path": path.to_string_lossy(),
@@ -1282,7 +1305,15 @@ fn cmd_reindex(ctx: &mut Ctx, names: Vec<String>) -> i32 {
         let Some(row) = ctx.index().get_dictionary(&n).ok().flatten() else {
             continue;
         };
-        match QueryManager::open_file(&row.path) {
+        let dir = ctx.index().data_dir();
+        let opened = match dir {
+            Some(dir) => crate::articles::open_cached(&row.path, &dir, true).map(|(d, _)| d),
+            None => QueryManager::open_file(&row.path),
+        };
+        match opened.map(|mut d| {
+            d.metadata_mut().name = n.clone();
+            d
+        }) {
             Ok(d) => match ctx.index().index_dictionary(d.as_ref()) {
                 Ok(c) => println!("reindexed: {} ({} headwords)", n, group(c as i64)),
                 Err(e) => {
@@ -1326,7 +1357,7 @@ fn cmd_scan(ctx: &mut Ctx, folders: &[PathBuf], no_recursive: bool, add: bool) -
 
 fn cmd_dump(ctx: &mut Ctx, target: &str, format: DumpFormat, output: Option<PathBuf>) -> i32 {
     let path = resolve_target(ctx, target);
-    let d = QueryManager::open_file(&path).unwrap_or_else(|e| die(format!("error: {}", e)));
+    let (d, _row) = open_known(ctx, &path);
     let mut buf = String::new();
     match format {
         DumpFormat::Json => {

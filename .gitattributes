@@ -6,3 +6,4 @@
 *.png binary
 *.wav binary
 *.txt text eol=lf
+*.db binary

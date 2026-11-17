@@ -58,7 +58,7 @@ dictz must do everything GoldenDict / GoldenDict-ng does, in **both editions**, 
 - ✅ completion scripts register both names
 - ✅ READMEs rewritten with per-platform install (Linux / Windows / macOS × portable / pipx / cargo)
 
-> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (persistent index, articles read on demand from the file, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
+> **Version numbers moved up:** v0.1.1 became the dictionary-list fix. Next come **v0.1.2 — speed** (✅ done after v0.1.1 as a plain push: article stores, no full parse at start) and **v0.1.3 — article display like GoldenDict**, then themes and fonts. The groups below and everything after them shift to later numbers in the same order; the matrix above keeps the old numbers until they are renumbered.
 
 ### v0.1.1 → later — dictionary groups
 - 📋 Groups with name, icon, order and their own dictionary list; "All" group
@@ -163,8 +163,7 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 
 ## Known bugs / limitations
 
-- ⏳ **Slow start**: every dictionary is parsed fully at start. Next job: a persistent index with articles read on demand from the file (like GoldenDict), in both editions
-- ⏳ **Article display** is not yet as clean as GoldenDict's (next job after speed)
+- ⏳ **Article display** is not yet as clean as GoldenDict's (next big job)
 
 - DSL `[s]` media: only `wav`/`mp3` sounds and `jpg/jpeg/gif/tif/tiff/png/bmp` pictures, with case-sensitive extensions (PyGlossary's rule, kept for parity); Lingvo `.spx` sounds are not played
 - Rust GUI: Arabic/Persian **dictionary article** text is not shaped right-to-left (the interface texts are, since v0.1.0)
@@ -184,6 +183,8 @@ dictz is built **twice**: in Python (`dictz` on PyPI, Qt) and in Rust (`dictz-rs
 ---
 
 ## Recently done
+
+- ✅ **after v0.1.1 (plain push)** — fast start like GoldenDict, in both editions: a dictionary is parsed once into `articles/<id>.db`; later starts read articles on demand (500k headwords: Python 7.2 s → 0.07 s, Rust 1.0 s → 0.01 s); rebuilt by itself when the file changes
 
 - ✅ **v0.1.1** — the dictionary list moved to `dictionaries.json` in both editions: dictionaries are known by file path, a duplicate name becomes `Name (2)`, missing / failed dictionaries keep their place, one-time migration from the SQLite table — fixes dictionaries getting mixed up or lost
 

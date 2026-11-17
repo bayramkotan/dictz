@@ -421,9 +421,19 @@ def cmd_move(ctx: Ctx, args) -> int:
     return 0
 
 
+def _open_known(ctx: Ctx, path: Path, row):
+    """A dictionary in the list opens from its article store; any other file is parsed."""
+    from .core.query_manager import QueryManager
+
+    if row is None:
+        return QueryManager.open_file(path)
+    d, _built = QueryManager.open_cached(path, ctx.index.db_path.parent)
+    d.metadata.name = row["name"]
+    return d
+
+
 def cmd_info(ctx: Ctx, args) -> int:
     target = " ".join(args.target)
-    from .core.query_manager import QueryManager
     from .storage.indexer import file_mtime
 
     if Path(target).expanduser().exists():
@@ -431,9 +441,9 @@ def cmd_info(ctx: Ctx, args) -> int:
     else:
         (name,) = ctx.resolve_names([target])
         path = Path(ctx.index.get_dictionary(name)["path"])
-    d = QueryManager.open_file(path)
+    row = ctx.index.registry.by_path(path)
+    d = _open_known(ctx, path, row)
     m = d.metadata
-    row = ctx.index.get_dictionary(m.name)
     info = {"name": m.name, "format": m.format, "words": m.word_count, "path": str(path),
             "source_language": m.source_language, "target_language": m.target_language,
             "author": m.author, "description": m.description,
@@ -459,7 +469,8 @@ def cmd_reindex(ctx: Ctx, args) -> int:
     for n in names:
         row = ctx.index.get_dictionary(n)
         try:
-            d = QueryManager.open_file(row["path"])
+            d, _built = QueryManager.open_cached(row["path"], ctx.index.db_path.parent, rebuild=True)
+            d.metadata.name = n
             count = ctx.index.index_dictionary(d)
             print(f"reindexed: {n} ({_group(count)} headwords)")
         except Exception as exc:  # noqa: BLE001
@@ -485,7 +496,6 @@ def cmd_scan(ctx: Ctx, args) -> int:
 
 
 def cmd_dump(ctx: Ctx, args) -> int:
-    from .core.query_manager import QueryManager
 
     target = args.target
     if Path(target).expanduser().exists():
@@ -493,7 +503,7 @@ def cmd_dump(ctx: Ctx, args) -> int:
     else:
         (name,) = ctx.resolve_names([target])
         path = Path(ctx.index.get_dictionary(name)["path"])
-    d = QueryManager.open_file(path)
+    d = _open_known(ctx, path, ctx.index.registry.by_path(path))
     fh = open(args.output, "w", encoding="utf-8", newline="\n") if args.output else sys.stdout  # noqa: SIM115
     try:
         if args.format == "json":
