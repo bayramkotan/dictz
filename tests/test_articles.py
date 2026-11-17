@@ -131,18 +131,33 @@ def test_a_start_reads_only_the_json(tmp_path) -> None:
 
 
 def test_unchanged_folders_are_not_listed_again(tmp_path) -> None:
+    import time
+
     from dictz.core.query_manager import scan_folder
     from dictz.storage.scancache import ScanCache
 
-    (tmp_path / "a" / "sub").mkdir(parents=True)
-    (tmp_path / "a" / "x.ifo").write_text("x")
-    (tmp_path / "a" / "sub" / "y.dsl").write_text("y")
+    a, sub = tmp_path / "a", tmp_path / "a" / "sub"
+    sub.mkdir(parents=True)
+    (a / "x.ifo").write_text("x")
+    (sub / "y.dsl").write_text("y")
     f = tmp_path / "scan_cache.json"
+    # just changed (same clock tick as the listing): listed again next time
     c = ScanCache(f)
-    first = c.scan(tmp_path / "a", True)
-    assert first == scan_folder(tmp_path / "a", True)
+    first = c.scan(a, True)
+    assert first == scan_folder(a, True)
+    c.save()
+    (sub / "z.bgl").write_text("z")  # may not move the folder's time at all
+    assert len(ScanCache(f).scan(a, True)) == 3  # still seen
+    (sub / "z.bgl").unlink()
+    # folders that changed a while ago: kept, not listed again
+    old = time.time() - 60
+    for d in (a, sub):
+        os.utime(d, (old, old))
+    c = ScanCache(f)
+    assert c.scan(a, True) == first
     c.save()
     again = ScanCache(f)
-    assert again.scan(tmp_path / "a", True) == first and not again.changed
-    (tmp_path / "a" / "sub" / "z.bgl").write_text("z")
-    assert len(ScanCache(f).scan(tmp_path / "a", True)) == 3  # a new file is seen
+    assert again.scan(a, True) == first and not again.changed
+    # a new file moves the folder's time: seen
+    (sub / "z.bgl").write_text("z")
+    assert len(ScanCache(f).scan(a, True)) == 3
