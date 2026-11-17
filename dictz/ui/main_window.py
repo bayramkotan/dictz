@@ -99,9 +99,8 @@ class DictionaryLoader(QThread):
                 i += 1
                 self.progress.emit(i, total, Path(row["path"]).name)
                 try:
-                    # from the article store: nothing is parsed unless the file changed
-                    d, built = QueryManager.open_cached(row["path"], self.db_path.parent)
-                    d.metadata.name = row["name"]  # the name in the list (may be "X (2)")
+                    # from dictionaries.json: nothing is read unless the files changed
+                    d, built = QueryManager.open_row(row, self.db_path.parent, store)
                     if _changed(row, Path(row["path"])) and (built or self.reindex_changed):
                         store.index_dictionary(d)
                     self.loaded.emit(d, row["path"], bool(row["enabled"]))
@@ -500,7 +499,9 @@ class MainWindow(QMainWindow):
         known = {norm_path(r["path"]) for r in rows}
         new_files: list[Path] = []
         if self.prefs["dictionaries.scan_on_startup"]:
-            new_files += scan_sources(self.prefs)  # every folder with its own "subfolders" box
+            # every folder with its own "subfolders" box; unchanged folders come
+            # from scan_cache.json (not listed again)
+            new_files += scan_sources(self.prefs, Path(store.db_path).parent if store else None)
         new_files += [f for f in self.startup_files if is_dictionary_file(f)]
         seen: set[str] = set()
         new_files = [f for f in new_files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
@@ -566,7 +567,8 @@ class MainWindow(QMainWindow):
 
     def rescan_folders(self, prefs=None) -> None:
         """Scan every dictionary folder now and add the new files."""
-        self.load_new_files(scan_sources(prefs or self.prefs))
+        store = self.query_manager.index_store
+        self.load_new_files(scan_sources(prefs or self.prefs, Path(store.db_path).parent if store else None))
 
     def _on_load_progress(self, i: int, total: int, name: str) -> None:
         self.progress.setMaximum(total)
@@ -644,6 +646,9 @@ class MainWindow(QMainWindow):
         self._update_zoom_label()
         self._refresh_dictionaries()
         self._apply_scan_prefs()
+        if p["general.autostart"] != getattr(self, "_autostart_synced", None):
+            self._autostart_synced = p["general.autostart"]
+            self._sync_autostart()
 
     def _toggle_pref(self, key: str, on: bool) -> None:
         self.prefs.set(key, on, save=True)
@@ -1320,9 +1325,22 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, app.quit)
 
     # ================================================================ scan popup, tray, hotkeys
+    autostarted = False  # started at log-in (``--autostart``)
+
     def starts_hidden(self) -> bool:
-        """``general.start_in_tray`` (only when a tray icon can be shown)."""
-        return bool(self.prefs["general.start_in_tray"]) and self.tray is not None and self.tray.isVisible()
+        """``general.start_in_tray`` or a log-in start (only when a tray icon can be shown)."""
+        hidden = bool(self.prefs["general.start_in_tray"]) or self.autostarted
+        return hidden and self.tray is not None and self.tray.isVisible()
+
+    def _sync_autostart(self) -> None:
+        """Make the system's log-in start match ``general.autostart``."""
+        from ..core import autostart
+
+        store = self.query_manager.index_store
+        err = autostart.sync(bool(self.prefs["general.autostart"]),
+                             Path(store.db_path).parent if store is not None else None)
+        if err:
+            self.statusBar().showMessage(t("Otomatik başlatma ayarlanamadı:") + f" {err}", 8000)
 
     def start_services(self, data_dir: Path) -> None:
         """Instance server (for `dictz show/popup/watch` and single instance)."""
@@ -1394,8 +1412,8 @@ class MainWindow(QMainWindow):
         self.scan_action.blockSignals(True)
         self.scan_action.setChecked(self._scan_on)
         self.scan_action.blockSignals(False)
-        # tray
-        if p["general.tray_icon"] and QSystemTrayIcon.isSystemTrayAvailable():
+        # tray (always there when dictz starts with the system)
+        if (p["general.tray_icon"] or p["general.autostart"]) and QSystemTrayIcon.isSystemTrayAvailable():
             if self.tray is None:
                 self._build_tray()
             self.tray.show()

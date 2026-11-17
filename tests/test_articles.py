@@ -93,3 +93,56 @@ def test_golden_store_is_readable() -> None:
     stored = articles.StoredDictionary(g, PARITY / "sample.dsl")
     _same(QueryManager.open_file(PARITY / "sample.dsl"), stored)
     stored.close()
+
+
+def test_a_start_reads_only_the_json(tmp_path) -> None:
+    """Second start: every dictionary from dictionaries.json alone — no store
+    opened, no file parsed, nothing written."""
+    src = _build_tiny_stardict(tmp_path)
+    data = tmp_path / "data"
+    store = IndexStore(data / "dictz_index.db")
+    store.open()
+    qm = QueryManager(store)
+    qm.add_dictionary(src)
+    qm.close_all()
+    reg = data / "dictionaries.json"
+    before = reg.stat().st_mtime_ns, reg.read_bytes()
+    qm2 = QueryManager(store)
+    loaded, _ = qm2.restore_from_index()
+    d = qm2.dictionaries[loaded[0]]
+    assert d.lazy and d._con is None  # nothing opened yet
+    assert (reg.stat().st_mtime_ns, reg.read_bytes()) == before
+    assert qm2.search("apple")[0].definition.startswith("elma")  # opened on first use
+    qm2.close_all()
+    # the file changes → the store is rebuilt and the list updated
+    dict_file = src.with_suffix(".dict")
+    st = dict_file.stat()
+    os.utime(dict_file, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+    qm3 = QueryManager(store)
+    loaded, _ = qm3.restore_from_index()
+    assert not getattr(qm3.dictionaries[loaded[0]], "lazy", False)
+    assert reg.read_bytes() != before[1]
+    qm3.close_all()
+    qm4 = QueryManager(store)
+    loaded, _ = qm4.restore_from_index()
+    assert qm4.dictionaries[loaded[0]].lazy  # fast again
+    qm4.close_all()
+    store.close()
+
+
+def test_unchanged_folders_are_not_listed_again(tmp_path) -> None:
+    from dictz.core.query_manager import scan_folder
+    from dictz.storage.scancache import ScanCache
+
+    (tmp_path / "a" / "sub").mkdir(parents=True)
+    (tmp_path / "a" / "x.ifo").write_text("x")
+    (tmp_path / "a" / "sub" / "y.dsl").write_text("y")
+    f = tmp_path / "scan_cache.json"
+    c = ScanCache(f)
+    first = c.scan(tmp_path / "a", True)
+    assert first == scan_folder(tmp_path / "a", True)
+    c.save()
+    again = ScanCache(f)
+    assert again.scan(tmp_path / "a", True) == first and not again.changed
+    (tmp_path / "a" / "sub" / "z.bgl").write_text("z")
+    assert len(ScanCache(f).scan(tmp_path / "a", True)) == 3  # a new file is seen

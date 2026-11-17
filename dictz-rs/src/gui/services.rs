@@ -193,7 +193,8 @@ impl Services {
                     }
                 }
             }
-            if prefs.bool("general.tray_icon") {
+            // the tray is always there when dictz starts with the system
+            if prefs.bool("general.tray_icon") || prefs.bool("general.autostart") {
                 if self.tray.is_none() {
                     match tray::Tray::new(self.sender(), scan) {
                         Ok(t) => self.tray = Some(t),

@@ -102,11 +102,23 @@ pub fn add_folder_source(
 }
 
 /// Dictionary files in every dictionary folder (each with its own recursion).
-pub fn scan_sources(prefs: &crate::settings::Preferences) -> Vec<PathBuf> {
-    folder_sources(prefs)
+/// With `data_dir` the listings come from `scan_cache.json`: a folder that
+/// has not changed since the last scan is not listed again.
+pub fn scan_sources(prefs: &crate::settings::Preferences, data_dir: Option<&Path>) -> Vec<PathBuf> {
+    let Some(dir) = data_dir else {
+        return folder_sources(prefs)
+            .into_iter()
+            .flat_map(|(f, rec)| scan_folder(Path::new(&f), rec))
+            .collect();
+    };
+    let mut cache =
+        crate::scancache::ScanCache::new(Some(dir.join(crate::scancache::SCAN_CACHE_FILE)));
+    let out = folder_sources(prefs)
         .into_iter()
-        .flat_map(|(f, rec)| scan_folder(Path::new(&f), rec))
-        .collect()
+        .flat_map(|(f, rec)| cache.scan(Path::new(&f), rec))
+        .collect();
+    cache.save();
+    out
 }
 
 /// One dictionary of the list for the dictionary manager and the side
@@ -371,7 +383,7 @@ impl QueryManager {
             progress(i, total, &row.name);
             let dir = self.data_dir();
             let opened = match dir.as_ref() {
-                Some(dir) => crate::articles::open_cached(&row.path, dir, false),
+                Some(dir) => Self::open_row(&row, dir, self.index.as_ref()),
                 None => Self::open_file(&row.path).map(|d| (d, false)),
             };
             match opened {
@@ -392,6 +404,24 @@ impl QueryManager {
             }
         }
         (ok, errors)
+    }
+
+    /// Open a dictionary of the list. When its files still have the stamp
+    /// kept in `dictionaries.json` nothing but the list is read (no store, no
+    /// file); otherwise the store is checked or rebuilt and the list is
+    /// brought up to date through `store`.
+    pub fn open_row(
+        row: &crate::index::DictionaryRow,
+        data_dir: &Path,
+        store: Option<&IndexStore>,
+    ) -> Result<(Box<dyn Dictionary>, bool), DictzError> {
+        let (mut d, built, lazy) =
+            crate::articles::open_cached_row(&row.path, data_dir, false, Some(row))?;
+        d.metadata_mut().name = row.name.clone();
+        if let (false, Some(s)) = (lazy, store) {
+            let _ = s.register_dictionary(d.as_ref()); // new stamp / counts into the list
+        }
+        Ok((d, built))
     }
 
     /// Parse a dictionary file (safe to call from a worker thread).
@@ -834,7 +864,7 @@ mod tests {
         assert!(add_folder_source(&mut p, &d.join("one"), None));
         assert!(!add_folder_source(&mut p, &d.join("one"), None));
         let names = |p: &crate::settings::Preferences| -> Vec<String> {
-            scan_sources(p)
+            scan_sources(p, None)
                 .iter()
                 .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
                 .collect()

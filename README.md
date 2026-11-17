@@ -51,7 +51,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 77 settings, searchable, per-setting reset</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 78 settings, searchable, per-setting reset</sub></td>
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
@@ -76,7 +76,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - favorites and history
   - light and dark themes, accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
-- **77 settings** in 9 pages with search and per-setting reset.
+- **78 settings** in 9 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
 - **Offline and private:** no telemetry. The only network use is `dct update` / the update check, and only when you ask.
 - **Portable:** each release ships standalone builds of both editions, and CI self-tests every build before publishing.
@@ -331,11 +331,11 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 
 ## Settings
 
-**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 77 settings, stored in `settings.json` in the data folder and shared by both editions:
+**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 78 settings, stored in `settings.json` in the data folder and shared by both editions:
 
 | Page | Examples |
 |---|---|
-| Genel | interface language, restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, single instance |
+| Genel | interface language, restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, **start with the system** (Windows, Linux, macOS — in the tray), single instance |
 | Görünüm | theme, accent color, UI font and size, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
 | Makale | font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, picture height, find highlight color |
 | Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
@@ -368,7 +368,9 @@ To use another folder, pass `--data-dir DIR` or set `DICTZ_DATA_DIR`. A USB stic
 |---|---|
 | `dictionaries.json` | your dictionary list: order, on/off, names (a dictionary is known by its file path; a second one with the same name is shown as `Name (2)`); `dictionaries.json.bak` is the previous copy |
 | `articles/<id>.db` | each dictionary's articles, saved once when it is added, so dictz starts at once (rebuilt by itself when the file changes) |
-| `settings.json` | the 77 settings |
+| `scan_cache.json` | what the dictionary folders held at the last scan (unchanged folders are not listed again) |
+| `icons/` | dictionary icons, looked for once |
+| `settings.json` | the 78 settings |
 | `dictz_index.db` | the headword index (SQLite FTS5) |
 | `dictz_history.db` | history and favorites |
 
@@ -467,7 +469,7 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
 - **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
-- **Ayarlar:** 9 sayfada 77 ayar, arama kutusu ve ayar başına sıfırlama.
+- **Ayarlar:** 9 sayfada 78 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
 
 ### Lisans

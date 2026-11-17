@@ -63,6 +63,12 @@ pub struct DictionaryRow {
     pub description: String,
     /// Headwords are in the index.
     pub indexed: bool,
+    /// Source files' stamp when the article store was built.
+    pub stamp: String,
+    /// Author.
+    pub author: String,
+    /// Cached icon (`""` not looked for, `"-"` none).
+    pub icon: String,
 }
 
 impl DictionaryRow {
@@ -80,6 +86,9 @@ impl DictionaryRow {
             target_language: e.target_lang,
             description: e.description,
             indexed: e.indexed,
+            stamp: e.stamp,
+            author: e.author,
+            icon: e.icon,
         }
     }
 }
@@ -208,6 +217,7 @@ impl IndexStore {
     pub fn register_dictionary(&self, dict: &dyn Dictionary) -> Result<String, DictzError> {
         let m = dict.metadata();
         let mtime = file_mtime(&m.file_path);
+        let stamp = crate::articles::source_stamp(&m.file_path);
         Ok(self
             .registry
             .borrow_mut()
@@ -218,7 +228,37 @@ impl IndexStore {
                 e.target_lang = m.target_language.clone();
                 e.description = m.description.clone();
                 e.mtime = mtime;
+                if !e.stamp.is_empty() && e.stamp != stamp {
+                    e.icon.clear(); // the files changed: look for the icon again
+                }
+                e.stamp = stamp;
+                e.author = m.author.clone();
             }))
+    }
+
+    /// The dictionary's own icon, cached in `DATA/icons` — looked for once,
+    /// then kept in `dictionaries.json` (no folder listing or Babylon file
+    /// read at the next start).
+    pub fn icon_path(&self, name: &str) -> Option<PathBuf> {
+        let row = self.registry.borrow_mut().get(name)?;
+        let icons = self.data_dir()?.join("icons");
+        if row.icon == "-" {
+            return None;
+        }
+        if !row.icon.is_empty() && icons.join(&row.icon).is_file() {
+            return Some(icons.join(&row.icon));
+        }
+        let mut mark = "-".to_string();
+        if let Some((data, ext)) = crate::dictident::icon_bytes(Path::new(&row.path)) {
+            let file = format!("{}{}", row.id, ext);
+            if std::fs::create_dir_all(&icons).is_ok()
+                && std::fs::write(icons.join(&file), data).is_ok()
+            {
+                mark = file;
+            }
+        }
+        self.registry.borrow_mut().set_icon(name, &mark);
+        (mark != "-").then(|| icons.join(mark))
     }
 
     /// The data folder (where `dictionaries.json` and the article stores

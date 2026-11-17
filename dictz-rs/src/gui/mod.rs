@@ -53,11 +53,29 @@ fn hand_over(data_dir: &std::path::Path, files: &[PathBuf], popup: &Option<Strin
 /// Start the GUI, adding `files` (dictionaries) first; `popup` opens the
 /// scan popup with that word (empty = clipboard). Blocks until the window is
 /// closed.
-pub fn run(data_dir: PathBuf, files: Vec<PathBuf>, popup: Option<String>) -> Result<(), String> {
+pub fn run(
+    data_dir: PathBuf,
+    files: Vec<PathBuf>,
+    popup: Option<String>,
+    autostart: bool,
+) -> Result<(), String> {
     let _ = std::fs::create_dir_all(&data_dir);
     let mut prefs = Preferences::load(&data_dir.join(SETTINGS_FILE));
-    if prefs.bool("general.single_instance") && hand_over(&data_dir, &files, &popup) {
-        return Ok(());
+    if prefs.bool("general.single_instance") {
+        if autostart {
+            // already running: a log-in start changes nothing
+            if crate::instance::send(
+                &data_dir,
+                &serde_json::json!({"cmd": "ping"}),
+                std::time::Duration::from_secs(1),
+            )
+            .is_some()
+            {
+                return Ok(());
+            }
+        } else if hand_over(&data_dir, &files, &popup) {
+            return Ok(());
+        }
     }
     prefs.migrate_from_ini(&data_dir.join(PREFS_FILE));
     let mut viewport = eframe::egui::ViewportBuilder::default()
@@ -79,9 +97,11 @@ pub fn run(data_dir: PathBuf, files: Vec<PathBuf>, popup: Option<String>) -> Res
         "dictz",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(app::DictzApp::new(
-                cc, data_dir, prefs, files, popup,
-            )))
+            let mut a = app::DictzApp::new(cc, data_dir, prefs, files, popup);
+            if autostart {
+                a.start_in_tray();
+            }
+            Ok(Box::new(a))
         }),
     )
     .map_err(|e| e.to_string())

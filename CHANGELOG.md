@@ -5,6 +5,19 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-11-17
+
+A start reads only the JSON files, and dictz can start with the system in the tray — in **both editions**.
+
+### Changed
+- **Nothing is re-scanned or re-read at start.** Every dictionary of the list opens from `dictionaries.json` alone: the list keeps each dictionary's languages, counts, author and a stamp of its files (size + modification time). When the stamp still matches, neither the dictionary file nor its article store is opened until the first lookup. Only when a file really changed is it read again — and the list is updated at once.
+  - Dictionary icons are looked for once and kept in `icons/` in the data folder (no folder listing and no Babylon file read at every start).
+  - The dictionary folders are not listed again when they have not changed: `scan_cache.json` keeps each folder's listing with its time; adding, removing or renaming a file in a folder is noticed.
+  - Adding, removing, moving, switching off or reindexing a dictionary updates the JSON files at once.
+
+### Added
+- **Start with the system** (Preferences → General, `general.autostart`, 78 settings): dictz starts by itself when you log in — Windows (Run key), Linux (`~/.config/autostart`), macOS (LaunchAgent) — hidden in the system tray; the tray icon is always shown then. If dictz is already running, the log-in start does nothing.
+
 ## [0.1.2] — 2026-11-17
 
 Fast start, dictionaries that no longer get lost, and dictionary folders like GoldenDict — in **both editions**.

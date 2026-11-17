@@ -183,12 +183,16 @@ def build(dictionary: Dictionary, store: Path | str, builder: str = "python") ->
 class StoredDictionary(Dictionary):
     """A dictionary served from its article store (nothing parsed)."""
 
-    def __init__(self, store: Path | str, source: Path | str):
+    def __init__(self, store: Path | str, source: Path | str, meta: dict | None = None):
+        """``meta`` (from ``dictionaries.json``) skips reading the store at all:
+        nothing but the list is read until the first lookup."""
         super().__init__(source)
         self.store = Path(store)
         self._con: sqlite3.Connection | None = None
         self._words: list[str] | None = None
-        meta = read_meta(self.store) or {}
+        self.lazy = meta is not None  # opened from the list alone
+        if meta is None:
+            meta = read_meta(self.store) or {}
         m = self.metadata
         m.name = meta.get("name") or self.path.stem
         m.description = meta.get("description", "")

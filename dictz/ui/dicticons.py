@@ -45,11 +45,21 @@ class DictLook:
         return "\n".join(parts)
 
 
-def _load_image(path: Path) -> QImage | None:
-    found = dictident.icon_bytes(path)
-    if not found:
-        return None
-    data, ext = found
+def _load_image(path: Path, name: str = "") -> QImage | None:
+    store = getattr(_qm, "index_store", None) if _qm is not None else None
+    if store is not None and name and store.get_dictionary(name) is not None:
+        cached = store.icon_path(name)  # looked for once, then kept in dictionaries.json
+        if cached is None:
+            return None
+        try:
+            data, ext = cached.read_bytes(), cached.suffix.lower()
+        except OSError:
+            return None
+    else:
+        found = dictident.icon_bytes(path)
+        if not found:
+            return None
+        data, ext = found
     img = QImage()
     if not img.loadFromData(QByteArray(data)):
         img.loadFromData(QByteArray(data), ext.lstrip(".").upper())
@@ -73,7 +83,7 @@ def look(name: str) -> DictLook:
         langs=dictident.language_pair(m.source_language if m else "", m.target_language if m else "", name),
         fmt=dictident.format_label(m.format) if m and m.format else "",
         words=m.word_count if m else 0,
-        image=_load_image(Path(path)) if path else None,
+        image=_load_image(Path(path), name) if path else None,
     )
     _cache[key] = lk
     return lk

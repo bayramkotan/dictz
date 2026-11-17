@@ -222,6 +222,16 @@ pub static SCHEMA: &[Setting] = &[
         choices: &[],
     },
     Setting {
+        key: "general.autostart",
+        kind: Kind::Bool,
+        default: Def::Bool(false),
+        label: "Sistem açılınca başlat",
+        help: "Bilgisayarda oturum açılınca dictz kendiliğinden, sistem tepsisinde başlar (Windows, Linux, macOS).",
+        min: None,
+        max: None,
+        choices: &[],
+    },
+    Setting {
         key: "general.single_instance",
         kind: Kind::Bool,
         default: Def::Bool(true),
