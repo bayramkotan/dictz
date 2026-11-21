@@ -332,7 +332,9 @@ class QueryManager:
             del self.dictionaries[name]
         if name in self._order:
             self._order.remove(name)
-        self._media.pop(name, None)
+        old_media = self._media.pop(name, None)
+        if old_media is not None:
+            old_media.close()  # its media zip stays open otherwise (Windows: locked)
         self.enabled_names.discard(name)
         self.failed.pop(name, None)
         if self.index_store is not None:

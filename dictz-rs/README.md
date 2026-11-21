@@ -52,7 +52,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
 - **Multi-dictionary search** in your own order. You can enable, disable and reorder dictionaries in the dictionary manager.
 - **Fuzzy search:** "did you mean" suggestions. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
-- **DSL pictures and sounds** are read from `X.dsl.files/` or `X.dsl.files.zip`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
+- **DSL pictures and sounds** are read from `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same names as folders (any letter case), StarDict's from `res/`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
 - **SQLite FTS5 index:** instant, diacritic-insensitive prefix suggestions.
 - **Interface:**
   - tabs, back/forward, random word, favorites and history (with filters)

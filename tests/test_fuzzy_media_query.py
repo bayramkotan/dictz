@@ -6,6 +6,8 @@ import struct
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from dictz.core import fuzzy
 from dictz.core.media import (
     MediaResolver,
@@ -144,3 +146,24 @@ def test_search_headword_empty_filter_means_none(tmp_path: Path) -> None:
     assert store.search_headword("app", dictionaries=[]) == []
     assert store.search_headword("app", dictionaries=["A"]) == [("apple", "A")]
     store.close()
+
+
+@pytest.mark.parametrize("zip_name", ["OALD.dsl.dz.files.zip", "OALD.DSL.DZ.FILES.ZIP", "OALD.files.zip"])
+def test_resolver_finds_goldendict_zip_names(tmp_path: Path, zip_name: str) -> None:
+    """``X.dsl.dz`` with ``X.dsl.dz.files.zip`` (the usual GoldenDict packs,
+    e.g. OALD8): the zip keeps the ``.dz`` in its name; names match in any case."""
+    (tmp_path / "OALD.dsl.dz").write_bytes(b"")
+    with zipfile.ZipFile(tmp_path / zip_name, "w") as z:
+        z.writestr("z_house__gb_2.wav", b"wav")
+        z.writestr("pics/x_verb_forms_house.jpg", b"jpg")
+    r = MediaResolver(tmp_path / "OALD.dsl.dz")
+    assert r.read("z_house__gb_2.wav") == b"wav"
+    assert r.read("x_verb_forms_house.jpg") == b"jpg"
+    assert r.read("X_VERB_FORMS_HOUSE.JPG") == b"jpg"
+    r.close()
+
+
+def test_resolver_finds_dz_files_folder(tmp_path: Path) -> None:
+    (tmp_path / "OALD.dsl.dz.files").mkdir()
+    (tmp_path / "OALD.dsl.dz.files" / "a.wav").write_bytes(b"w")
+    assert MediaResolver(tmp_path / "OALD.dsl.dz").read("a.wav") == b"w"

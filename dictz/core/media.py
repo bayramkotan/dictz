@@ -1,19 +1,25 @@
 """Pictures and sounds referenced by dictionary articles.
 
-Lookup order (same as the Rust edition, ``dictz-rs/src/media.rs``):
+Lookup order (same as the Rust edition, ``dictz-rs/src/media.rs``; the same
+names GoldenDict tries):
 
-1. folder ``<file>.files/`` — e.g. ``En-Tr.dsl.files/`` (for ``.dsl.dz`` the
-   ``.dz`` is dropped first), then ``<stem>.files/``
-2. zip ``<file>.files.zip``, then ``<stem>.files.zip``
-3. StarDict ``res/`` folder next to the ``.ifo``
-4. the dictionary's own folder
+1. folders ``<name>.files/`` for every base name of the file — for
+   ``En-Tr.dsl.dz``: ``En-Tr.dsl.dz.files/``, ``En-Tr.dsl.files/``,
+   ``En-Tr.files/`` — then StarDict's ``res/`` next to the ``.ifo``
+2. zips ``<name>.files.zip`` for the same base names
+   (``En-Tr.dsl.dz.files.zip``, ``En-Tr.dsl.files.zip``, ``En-Tr.files.zip``;
+   a plain ``.dsl`` tries the same three names)
+3. the dictionary's own folder
 
+Folder and zip names match without regard to case (``EN-TR.DSL.FILES.ZIP``).
 Inside each place the exact name is tried first, then a case-insensitive
-match (zips: also by base name, ignoring sub-folders).
+match (zips: also by base name, ignoring sub-folders). A zip's list of names
+is read once and kept (big media zips hold 100 000+ files).
 """
 from __future__ import annotations
 
 import base64
+import contextlib
 import html
 import re
 import zipfile
@@ -50,17 +56,43 @@ def _safe_relative(name: str) -> PurePosixPath | None:
     return p
 
 
+def _base_names(path: Path) -> list[Path]:
+    """``X.dsl.dz`` → ``X.dsl.dz``, ``X.dsl``, ``X``; ``X.dsl`` → the same three
+    (GoldenDict tries all of them for any DSL); ``X.ifo`` → ``X.ifo``, ``X``."""
+    out = [path]
+    p = path
+    if p.suffix.lower() == ".dz":
+        p = p.with_suffix("")
+        out.append(p)
+    elif p.suffix.lower() == ".dsl":
+        out.insert(0, Path(f"{p}.dz"))
+    out.append(p.with_suffix(""))
+    return list(dict.fromkeys(out))
+
+
+def _sibling(path: Path, listing: dict[str, Path] | None) -> Path:
+    """``path`` itself, or the entry of its folder with the same name in
+    another case (``X.DSL.FILES.ZIP``)."""
+    if path.exists() or listing is None:
+        return path
+    return listing.get(path.name.lower(), path)
+
+
 class MediaResolver:
     """Finds media files for one dictionary."""
 
     def __init__(self, dict_path: Path | str):
         path = Path(dict_path)
-        file = path.with_suffix("") if path.suffix.lower() == ".dz" else path
-        stem = file.with_suffix("")
         parent = path.parent
-        dirs = [Path(f"{file}.files"), Path(f"{stem}.files"), parent / "res", parent]
-        self._dirs = list(dict.fromkeys(dirs))
-        self._zips = list(dict.fromkeys([Path(f"{file}.files.zip"), Path(f"{stem}.files.zip")]))
+        try:
+            listing = {e.name.lower(): e for e in parent.iterdir()}
+        except OSError:
+            listing = None
+        bases = _base_names(path)
+        dirs = [_sibling(Path(f"{b}.files"), listing) for b in bases] + [_sibling(parent / "res", listing)]
+        self._dirs = list(dict.fromkeys(dirs)) + [parent]
+        self._zips = list(dict.fromkeys(_sibling(Path(f"{b}.files.zip"), listing) for b in bases))
+        self._zip_index: dict[Path, tuple[float, zipfile.ZipFile, dict[str, str], dict[str, str]] | None] = {}
 
     def search_locations(self) -> list[Path]:
         return self._dirs[:-1] + self._zips + self._dirs[-1:]
@@ -74,10 +106,50 @@ class MediaResolver:
             if data is not None:
                 return data
         for z in self._zips:
-            data = _read_from_zip(z, str(rel))
+            data = self._read_from_zip(z, str(rel))
             if data is not None:
                 return data
         return _read_from_dir(self._dirs[-1], rel)
+
+    def _read_from_zip(self, zip_path: Path, rel: str) -> bytes | None:
+        try:
+            mtime = zip_path.stat().st_mtime
+        except OSError:
+            return None
+        entry = self._zip_index.get(zip_path)
+        if entry is None or entry[0] != mtime:
+            if entry is not None:
+                entry[1].close()
+            try:
+                z = zipfile.ZipFile(zip_path)
+            except (OSError, zipfile.BadZipFile):
+                return None
+            lower: dict[str, str] = {}
+            base: dict[str, str] = {}
+            for n in z.namelist():
+                lower.setdefault(n.lower(), n)
+                base.setdefault(n.lower().rsplit("/", 1)[-1], n)
+            entry = (mtime, z, lower, base)
+            self._zip_index[zip_path] = entry
+        _m, z, lower, base = entry
+        want = rel.lower()
+        pick = lower.get(want) or base.get(want.rsplit("/", 1)[-1])
+        if pick != rel and lower.get(want) is not None:
+            with contextlib.suppress(KeyError):
+                z.getinfo(rel)  # the exact name wins over another case
+                pick = rel
+        if not pick:
+            return None
+        try:
+            return z.read(pick)
+        except (OSError, KeyError, zipfile.BadZipFile):
+            return None
+
+    def close(self) -> None:
+        for entry in self._zip_index.values():
+            if entry is not None:
+                entry[1].close()
+        self._zip_index.clear()
 
 
 def _read_from_dir(directory: Path, rel: PurePosixPath) -> bytes | None:
@@ -94,22 +166,6 @@ def _read_from_dir(directory: Path, rel: PurePosixPath) -> bytes | None:
         if entry.name.lower() == wanted and entry.is_file():
             return entry.read_bytes()
     return None
-
-
-def _read_from_zip(zip_path: Path, rel: str) -> bytes | None:
-    if not zip_path.is_file():
-        return None
-    try:
-        with zipfile.ZipFile(zip_path) as z:
-            names = z.namelist()
-            lower = rel.lower()
-            base = lower.rsplit("/", 1)[-1]
-            pick = (next((n for n in names if n == rel), None)
-                    or next((n for n in names if n.lower() == lower), None)
-                    or next((n for n in names if n.lower().rsplit("/", 1)[-1] == base), None))
-            return z.read(pick) if pick else None
-    except (OSError, zipfile.BadZipFile):
-        return None
 
 
 _IMG_SRC = re.compile(r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])(.*?)\2', re.IGNORECASE | re.DOTALL)

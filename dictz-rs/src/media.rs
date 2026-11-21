@@ -1,18 +1,24 @@
 //! Pictures and sounds referenced by dictionary articles.
 //!
-//! Lookup order (same as the Python edition, `dictz/core/media.py`):
+//! Lookup order (same as the Python edition, `dictz/core/media.py`; the
+//! same names GoldenDict tries):
 //!
-//! 1. folder `<file>.files/` — e.g. `En-Tr.dsl.files/` (for `.dsl.dz` the
-//!    `.dz` is dropped first), then `<stem>.files/`
-//! 2. zip `<file>.files.zip`, then `<stem>.files.zip`
-//! 3. StarDict `res/` folder next to the `.ifo`
-//! 4. the dictionary's own folder
+//! 1. folders `<name>.files/` for every base name of the file — for
+//!    `En-Tr.dsl.dz`: `En-Tr.dsl.dz.files/`, `En-Tr.dsl.files/`,
+//!    `En-Tr.files/` (a plain `.dsl` tries the same three) — then
+//!    StarDict's `res/` next to the `.ifo`
+//! 2. zips `<name>.files.zip` for the same base names
+//! 3. the dictionary's own folder
 //!
-//! Inside each place the exact name is tried first, then a case-insensitive
-//! match (zips: also by base name, ignoring sub-folders).
+//! Folder and zip names match without regard to case. Inside each place the
+//! exact name is tried first, then a case-insensitive match (zips: also by
+//! base name, ignoring sub-folders). A zip's list of names is read once and
+//! kept (big media zips hold 100 000+ files).
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 /// Extensions shown as pictures.
 pub const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp"];
@@ -45,11 +51,25 @@ pub fn media_kind(name: &str) -> MediaKind {
     }
 }
 
+struct ZipIndex {
+    mtime: std::time::SystemTime,
+    archive: zip::ZipArchive<std::fs::File>,
+    lower: HashMap<String, String>, // lower-case name → name
+    base: HashMap<String, String>,  // lower-case base name → name
+}
+
+impl std::fmt::Debug for ZipIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ZipIndex({} names)", self.lower.len())
+    }
+}
+
 /// Finds media files for one dictionary.
 #[derive(Debug, Clone)]
 pub struct MediaResolver {
     dirs: Vec<PathBuf>,
     zips: Vec<PathBuf>,
+    index: Arc<Mutex<HashMap<PathBuf, ZipIndex>>>,
 }
 
 fn append(path: &Path, suffix: &str) -> PathBuf {
@@ -71,32 +91,72 @@ fn safe_relative(name: &str) -> Option<PathBuf> {
     Some(p)
 }
 
+/// `X.dsl.dz` → `X.dsl.dz`, `X.dsl`, `X`; `X.dsl` → the same three;
+/// `X.ifo` → `X.ifo`, `X`.
+fn base_names(path: &Path) -> Vec<PathBuf> {
+    let mut out = vec![path.to_path_buf()];
+    let mut p = path.to_path_buf();
+    if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dz")) {
+        p = p.with_extension("");
+        out.push(p.clone());
+    } else if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dsl")) {
+        // GoldenDict tries X.dsl.dz.files(.zip) for a plain .dsl too
+        out.insert(0, append(&p, ".dz"));
+    }
+    out.push(p.with_extension(""));
+    out.dedup();
+    out
+}
+
+/// `path` itself, or the entry of its folder with the same name in another
+/// case (`X.DSL.FILES.ZIP`).
+fn sibling(path: PathBuf, listing: &HashMap<String, PathBuf>) -> PathBuf {
+    if path.exists() {
+        return path;
+    }
+    let key = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    listing.get(&key).cloned().unwrap_or(path)
+}
+
+fn push_unique(v: &mut Vec<PathBuf>, p: PathBuf) {
+    if !v.contains(&p) {
+        v.push(p);
+    }
+}
+
 impl MediaResolver {
     /// Resolver for the dictionary file at `dict_path`.
     pub fn for_dictionary(dict_path: &Path) -> Self {
-        let mut file = dict_path.to_path_buf();
-        if file
-            .extension()
-            .map(|e| e.eq_ignore_ascii_case("dz"))
-            .unwrap_or(false)
-        {
-            file = file.with_extension("");
-        }
-        let stem = file.with_extension("");
         let parent = dict_path
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_default();
-        let mut dirs = vec![
-            append(&file, ".files"),
-            append(&stem, ".files"),
-            parent.join("res"),
-            parent,
-        ];
-        dirs.dedup();
-        let mut zips = vec![append(&file, ".files.zip"), append(&stem, ".files.zip")];
-        zips.dedup();
-        Self { dirs, zips }
+        let listing: HashMap<String, PathBuf> = std::fs::read_dir(&parent)
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| (e.file_name().to_string_lossy().to_lowercase(), e.path()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let bases = base_names(dict_path);
+        let mut dirs = Vec::new();
+        for b in &bases {
+            push_unique(&mut dirs, sibling(append(b, ".files"), &listing));
+        }
+        push_unique(&mut dirs, sibling(parent.join("res"), &listing));
+        dirs.push(parent);
+        let mut zips = Vec::new();
+        for b in &bases {
+            push_unique(&mut zips, sibling(append(b, ".files.zip"), &listing));
+        }
+        Self {
+            dirs,
+            zips,
+            index: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Read a media file, or `None` when it cannot be found.
@@ -111,7 +171,7 @@ impl MediaResolver {
             }
         }
         for z in &self.zips {
-            if let Some(b) = read_from_zip(z, &rel_str) {
+            if let Some(b) = self.read_from_zip(z, &rel_str) {
                 return Some(b);
             }
         }
@@ -124,6 +184,47 @@ impl MediaResolver {
         v.extend(self.zips.iter().cloned());
         v.extend(self.dirs.last().cloned());
         v
+    }
+
+    fn read_from_zip(&self, zip_path: &Path, rel: &str) -> Option<Vec<u8>> {
+        let mtime = std::fs::metadata(zip_path)
+            .and_then(|m| m.modified())
+            .ok()?;
+        // the zip stays open with its list of names (opened once, not per picture)
+        let mut idx = self.index.lock().unwrap_or_else(|e| e.into_inner());
+        if !idx.get(zip_path).is_some_and(|e| e.mtime == mtime) {
+            let file = std::fs::File::open(zip_path).ok()?;
+            let archive = zip::ZipArchive::new(file).ok()?;
+            let mut lower = HashMap::new();
+            let mut base = HashMap::new();
+            for n in archive.file_names() {
+                let l = n.to_lowercase();
+                let b = l.rsplit('/').next().unwrap_or(&l).to_string();
+                base.entry(b).or_insert_with(|| n.to_string());
+                lower.entry(l).or_insert_with(|| n.to_string());
+            }
+            idx.insert(
+                zip_path.to_path_buf(),
+                ZipIndex {
+                    mtime,
+                    archive,
+                    lower,
+                    base,
+                },
+            );
+        }
+        let z = idx.get_mut(zip_path)?;
+        let pick = if z.archive.index_for_name(rel).is_some() {
+            rel.to_string() // the exact name wins over another case
+        } else {
+            let want = rel.to_lowercase();
+            let b = want.rsplit('/').next().unwrap_or(&want);
+            z.lower.get(&want).or_else(|| z.base.get(b))?.clone()
+        };
+        let mut f = z.archive.by_name(&pick).ok()?;
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).ok()?;
+        Some(buf)
     }
 }
 
@@ -144,31 +245,6 @@ fn read_from_dir(dir: &Path, rel: &Path) -> Option<Vec<u8>> {
         }
     }
     None
-}
-
-fn read_from_zip(zip_path: &Path, rel: &str) -> Option<Vec<u8>> {
-    if !zip_path.is_file() {
-        return None;
-    }
-    let file = std::fs::File::open(zip_path).ok()?;
-    let mut archive = zip::ZipArchive::new(file).ok()?;
-    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
-    let lower = rel.to_lowercase();
-    let base = lower.rsplit('/').next().unwrap_or(&lower).to_string();
-    let pick = names
-        .iter()
-        .find(|n| *n == rel)
-        .or_else(|| names.iter().find(|n| n.to_lowercase() == lower))
-        .or_else(|| {
-            names
-                .iter()
-                .find(|n| n.to_lowercase().rsplit('/').next() == Some(base.as_str()))
-        })?
-        .clone();
-    let mut f = archive.by_name(&pick).ok()?;
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf).ok()?;
-    Some(buf)
 }
 
 #[cfg(test)]
@@ -204,5 +280,50 @@ mod tests {
         assert!(r.read("../etc/passwd").is_none());
         assert!(r.read("/etc/passwd").is_none());
         assert!(r.read("missing.png").is_none());
+    }
+
+    #[test]
+    fn finds_goldendict_zip_names() {
+        // X.dsl.dz with X.dsl.dz.files.zip (the usual GoldenDict packs, e.g. OALD8)
+        for (i, zname) in [
+            "OALD.dsl.dz.files.zip",
+            "OALD.DSL.DZ.FILES.ZIP",
+            "OALD.files.zip",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let d =
+                std::env::temp_dir().join(format!("dictz-media-gd-{}-{}", std::process::id(), i));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("OALD.dsl.dz"), b"").unwrap();
+            let zf = std::fs::File::create(d.join(zname)).unwrap();
+            let mut zw = zip::ZipWriter::new(zf);
+            zw.start_file(
+                "z_house__gb_2.wav",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            zw.write_all(b"wav").unwrap();
+            zw.start_file(
+                "pics/x_verb_forms_house.jpg",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            zw.write_all(b"jpg").unwrap();
+            zw.finish().unwrap();
+            let r = MediaResolver::for_dictionary(&d.join("OALD.dsl.dz"));
+            assert_eq!(
+                r.read("z_house__gb_2.wav").as_deref(),
+                Some(&b"wav"[..]),
+                "{zname}"
+            );
+            assert_eq!(
+                r.read("X_VERB_FORMS_HOUSE.JPG").as_deref(),
+                Some(&b"jpg"[..])
+            );
+            let _ = std::fs::remove_dir_all(&d);
+        }
     }
 }

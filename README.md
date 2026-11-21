@@ -67,7 +67,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 - **Multi-dictionary:** one query hits every dictionary, in your order.
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
 - **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first.
-- **Pictures and sounds:** DSL `[s]` media from `*.dsl.files/` or `*.dsl.files.zip`.
+- **Pictures and sounds:** DSL `[s]` media and StarDict `res/`, found under every name GoldenDict uses — `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same as folders, in any letter case.
 - **Compact, GoldenDict-like window:** search box and word list in the left pane (with Dictionaries, Favourites and History as icon tabs), one toolbar row with the dictionary bar as small toggles, thin article headers, no tab row while there is one tab, dictz's own line icons, and an **interface scale** setting (50–250 %) for high-resolution screens.
 - **Dictionary icons:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
 - **Scan popup:** copy a word in any program and its articles pop up next to the mouse. Also a tray icon, global hotkeys and a single running instance.

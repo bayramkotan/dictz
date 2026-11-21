@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-11-21
+
+Dictionaries are added in the background, several at once, and the pictures and sounds of GoldenDict packs are found — in **both editions**.
+
 ### Fixed
+- **Pictures and sounds of GoldenDict packs** (e.g. Oxford Advanced Learner's 8th): sounds did not play and pictures showed as broken, because the media zip was named `X.dsl.dz.files.zip` (with `.dz`, GoldenDict's name) and dictz looked only for `X.dsl.files.zip` / `X.files.zip`. Now every name GoldenDict tries is looked for — `X.dsl.dz`, `X.dsl` and `X`, each as a `.files/` folder and a `.files.zip`, in any letter case — then StarDict's `res/` and the dictionary's folder.
+- A media zip is opened once and its list of names kept, so articles with many pictures and sounds open fast even with zips of 100 000+ files.
 - **Adding dictionaries froze the window** (both editions): "Sözlük ekle", the dictionary manager's add, dropped files and "Reindex" read every file in the window's own thread — with big dictionaries the window stood still for minutes with no progress shown. Now all of it runs in the background:
   - new or changed dictionaries are read by **several workers at once** — separate processes in the Python edition (no waiting on Python's GIL), threads in the Rust edition; one coordinating thread writes `dictionaries.json` and the headword index;
   - folders are listed in the background too (adding a big folder tree, the scan at start, "Rescan");
