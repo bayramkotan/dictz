@@ -397,6 +397,33 @@ def write_articles_golden() -> None:
     con.close()
 
 
+def write_ui_icons() -> None:
+    """dictz-rs/src/uiicons/*.png: the interface icons (dictz/resources/icons/*.svg)
+    drawn white on transparent at 48 px; the Rust edition tints them."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QByteArray, QRectF, Qt
+    from PySide6.QtGui import QGuiApplication, QImage, QPainter
+    from PySide6.QtSvg import QSvgRenderer
+
+    _app = QGuiApplication.instance() or QGuiApplication([])
+    src = ROOT / "dictz" / "resources" / "icons"
+    out = ROOT / "dictz-rs" / "src" / "uiicons"
+    out.mkdir(exist_ok=True)
+    for old in out.glob("*.png"):
+        old.unlink()
+    for f in sorted(src.glob("*.svg")):
+        r = QSvgRenderer(QByteArray(f.read_text(encoding="utf-8").replace("currentColor", "#ffffff").encode()))
+        img = QImage(48, 48, QImage.Format.Format_ARGB32)
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r.render(p, QRectF(0, 0, 48, 48))
+        p.end()
+        img.save(str(out / f"{f.stem}.png"))
+
+
 def write_i18n() -> None:
     """Rust copy of the interface catalogues and flags (embedded with include_str!/include_bytes!)."""
     import shutil
@@ -420,5 +447,6 @@ if __name__ == "__main__":
     write_bgl()
     write_golden()
     write_registry_golden()
+    write_ui_icons()
     write_articles_golden()
     print("written:", sorted(p.name for p in HERE.iterdir()))

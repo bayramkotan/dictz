@@ -234,11 +234,20 @@
  {
   "key": "appearance.ui_font_size",
   "kind": "int",
-  "default": 14,
+  "default": 13,
   "label": "Arayüz yazı boyutu",
   "help": "",
   "min": 8,
   "max": 32
+ },
+ {
+  "key": "appearance.ui_scale",
+  "kind": "int",
+  "default": 100,
+  "label": "Arayüz ölçeği",
+  "help": "Yüzde: tüm pencereyi büyütür ya da küçültür (yüksek çözünürlüklü ekranlar). Python sürümünde yeniden başlatınca uygulanır.",
+  "min": 50,
+  "max": 250
  },
  {
   "key": "appearance.show_toolbar",
@@ -311,7 +320,7 @@
  {
   "key": "article.font_size",
   "kind": "int",
-  "default": 16,
+  "default": 15,
   "label": "Makale yazı boyutu",
   "help": "",
   "min": 8,
@@ -320,7 +329,7 @@
  {
   "key": "article.line_spacing",
   "kind": "float",
-  "default": 1.6,
+  "default": 1.45,
   "label": "Satır aralığı",
   "help": "",
   "min": 1.0,
@@ -329,7 +338,7 @@
  {
   "key": "article.headword_scale",
   "kind": "float",
-  "default": 1.4,
+  "default": 1.2,
   "label": "Başlık kelime büyüklüğü",
   "help": "Makale yazı boyutunun katı.",
   "min": 1.0,

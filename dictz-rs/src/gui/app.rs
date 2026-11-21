@@ -27,6 +27,7 @@ use crate::{Dictionary, DictionaryEntry, VERSION};
 use super::prefs_window::{self, Advanced, PrefsWindow};
 use super::render::{self, Click, MediaSource};
 use super::services::{Event as SvcEvent, Services, TrayAction};
+use super::uiicons;
 use super::window::MainWindow;
 use super::{audio, fonts, system};
 use crate::scantext::{clean_scan_text, DoubleCopy};
@@ -86,6 +87,7 @@ impl Tab {
 
 #[derive(Clone, Copy, PartialEq)]
 enum SidebarTab {
+    Search,
     Dictionaries,
     Favorites,
     History,
@@ -364,7 +366,7 @@ impl DictzApp {
             nav: Vec::new(),
             nav_cursor: -1,
             applying_nav: false,
-            sidebar_tab: SidebarTab::Dictionaries,
+            sidebar_tab: SidebarTab::Search,
             side_filter: Default::default(),
             favorites: Vec::new(),
             recent: Vec::new(),
@@ -944,7 +946,13 @@ impl DictzApp {
             };
             style.visuals.selection.bg_fill =
                 accent.gamma_multiply(if style.visuals.dark_mode { 0.6 } else { 0.35 });
+            compact_style(style);
         });
+        // interface scale (Preferences → Appearance), on top of the system's own
+        let zoom = (p.int("appearance.ui_scale").clamp(50, 250) as f32) / 100.0;
+        if (ctx.zoom_factor() - zoom).abs() > 0.001 {
+            ctx.set_zoom_factor(zoom);
+        }
         let key = (
             p.str("appearance.ui_font_family"),
             p.str("article.font_family"),
@@ -2333,163 +2341,204 @@ impl DictzApp {
         });
     }
 
+    /// One compact row like GoldenDict: navigation · the dictionary bar
+    /// (icons only) · tools on the right. The search box is in the side pane.
     fn toolbar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let show_buttons = self.prefs.bool("appearance.show_toolbar");
+        let show_dicts = self.prefs.bool("appearance.show_dictionary_bar");
+        uiicons::flat(ui);
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 1.0;
             if show_buttons {
                 let can_back = self.nav_cursor > 0;
                 let can_fwd = self.nav_cursor + 1 < self.nav.len() as isize;
-                if ui
-                    .add_enabled(can_back, egui::Button::new("◀"))
-                    .on_hover_text(tr("Geri (Alt+←)"))
-                    .clicked()
-                {
+                if uiicons::button(ui, "back", &tr("Geri (Alt+←)"), false, can_back).clicked() {
                     actions.push(Action::NavBack);
                 }
-                if ui
-                    .add_enabled(can_fwd, egui::Button::new("▶"))
-                    .on_hover_text(tr("İleri (Alt+→)"))
-                    .clicked()
+                if uiicons::button(ui, "forward", &tr("İleri (Alt+→)"), false, can_fwd).clicked()
                 {
                     actions.push(Action::NavForward);
                 }
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(2.0);
             }
-            // room for the buttons on the right (translated labels are longer than Turkish ones)
-            let right_w = if show_buttons { 470.0 } else { 90.0 };
-            let id = egui::Id::new("search-box");
-            let edit = egui::TextEdit::singleline(&mut self.search)
-                .hint_text(tr("Bir kelime ara…   (Ctrl+F)"))
-                .desired_width((ui.available_width() - right_w).max(160.0))
-                .id(id);
-            let mut out = edit.show(ui);
-            let resp = out.response.clone();
-            if self.focus_search {
-                resp.request_focus();
-                self.focus_search = false;
+            // room for the tools on the right
+            let right_w = if show_buttons { 300.0 } else { 70.0 };
+            if show_dicts {
+                let width = (ui.available_width() - right_w).max(60.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(width, ui.available_height()),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        egui::ScrollArea::horizontal()
+                            .id_salt("dictbar")
+                            .scroll_bar_visibility(
+                                egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                            )
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| self.dictionary_bar(ui, actions))
+                            });
+                    },
+                );
             }
-            if resp.gained_focus() && self.prefs.bool("search.select_all_on_focus") {
-                let n = self.search.chars().count();
-                out.state
-                    .cursor
-                    .set_char_range(Some(egui::text::CCursorRange::two(
-                        egui::text::CCursor::new(0),
-                        egui::text::CCursor::new(n),
-                    )));
-                out.state.store(ui.ctx(), id);
-            }
-            if resp.changed() {
-                self.edited_at = Some(Instant::now());
-            }
-            let has_list = self.show_suggestions && !self.suggestions.is_empty();
-            if resp.has_focus() && has_list {
-                if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
-                    self.sugg_index = Some(
-                        self.sugg_index
-                            .map(|i| (i + 1).min(self.suggestions.len() - 1))
-                            .unwrap_or(0),
-                    );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 1.0;
+                self.language_button(ui, actions);
+                if !show_buttons {
+                    return;
                 }
-                if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
-                    self.sugg_index = self.sugg_index.and_then(|i| i.checked_sub(1));
+                if uiicons::button(ui, "settings", &tr("Tercihler (Ctrl+,)"), false, true).clicked()
+                {
+                    actions.push(Action::OpenPreferences);
                 }
-            }
-            if resp.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
-                self.show_suggestions = false;
-            }
-            if resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                match self.sugg_index.and_then(|i| self.suggestions.get(i)) {
-                    Some(s) if has_list => actions.push(Action::OpenWord(s.word.clone())),
-                    _ => {
-                        let new_tab = ui.input(|i| i.modifiers.command);
-                        actions.push(Action::Explicit { new_tab });
-                    }
+                let scan = self.prefs.bool("scan.enabled");
+                if uiicons::button(
+                    ui,
+                    "scan",
+                    &tr("Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir"),
+                    scan,
+                    true,
+                )
+                .clicked()
+                {
+                    actions.push(Action::SetScan(!scan));
                 }
-                self.focus_search = true;
-            }
-            if show_buttons {
-                if ui
-                    .button(tr("Rastgele"))
-                    .on_hover_text(tr("Rastgele kelime (Ctrl+R)"))
+                ui.separator();
+                let theme = self.prefs.str("appearance.theme");
+                let tip = format!(
+                    "{} · {}",
+                    tr("Tema: Otomatik → Açık → Koyu"),
+                    theme_label(&theme)
+                );
+                if uiicons::button(ui, "theme", &tip, false, true).clicked() {
+                    actions.push(Action::CycleTheme);
+                }
+                if uiicons::button(ui, "zoom-in", &tr("Büyüt (Ctrl+=)"), false, true).clicked() {
+                    actions.push(Action::Zoom(0.1));
+                }
+                if uiicons::button(ui, "zoom-reset", &tr("Normal boyut (Ctrl+0)"), false, true)
                     .clicked()
                 {
-                    actions.push(Action::Random);
+                    actions.push(Action::ZoomReset);
                 }
-                let star = if self.is_favorite { "★" } else { "☆" };
-                if ui
-                    .button(star)
-                    .on_hover_text(tr("Favori (Ctrl+D)"))
+                if uiicons::button(ui, "zoom-out", &tr("Küçült (Ctrl+-)"), false, true).clicked()
+                {
+                    actions.push(Action::Zoom(-0.1));
+                }
+                ui.separator();
+                let star = if self.is_favorite {
+                    "star-filled"
+                } else {
+                    "star"
+                };
+                if uiicons::button(ui, star, &tr("Favori (Ctrl+D)"), self.is_favorite, true)
                     .clicked()
                 {
                     actions.push(Action::ToggleFavorite);
                 }
-                if ui
-                    .button("−")
-                    .on_hover_text(tr("Küçült (Ctrl+-)"))
+                if uiicons::button(ui, "random", &tr("Rastgele kelime (Ctrl+R)"), false, true)
                     .clicked()
                 {
-                    actions.push(Action::Zoom(-0.1));
+                    actions.push(Action::Random);
                 }
-                if ui.button("+").on_hover_text(tr("Büyüt (Ctrl+=)")).clicked() {
-                    actions.push(Action::Zoom(0.1));
-                }
-                let theme = self.prefs.str("appearance.theme");
-                let icon = match theme.as_str() {
-                    "light" => "☀",
-                    "dark" => "🌙",
-                    _ => "A",
-                };
-                if ui
-                    .button(icon)
-                    .on_hover_text(format!(
-                        "{} · {}",
-                        tr("Tema: Otomatik → Açık → Koyu"),
-                        theme_label(&theme)
-                    ))
-                    .clicked()
-                {
-                    actions.push(Action::CycleTheme);
-                }
-                let scan = self.prefs.bool("scan.enabled");
-                if ui
-                    .selectable_label(scan, tr("Tarama"))
-                    .on_hover_text(tr(
-                        "Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir",
-                    ))
-                    .clicked()
-                {
-                    actions.push(Action::SetScan(!scan));
-                }
-                if ui
-                    .button("⚙")
-                    .on_hover_text(tr("Tercihler (Ctrl+,)"))
-                    .clicked()
-                {
-                    actions.push(Action::OpenPreferences);
-                }
-                ui.separator();
-            }
-            self.language_button(ui, actions);
+            });
         });
-        if self.show_suggestions && !self.suggestions.is_empty() {
-            ui.add_space(2.0);
-            egui::Frame::group(ui.style()).show(ui, |ui| {
+    }
+
+    /// The search box and the word list (GoldenDict's search pane).
+    fn search_pane(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let id = egui::Id::new("search-box");
+        let edit = egui::TextEdit::singleline(&mut self.search)
+            .hint_text(tr("Bir kelime ara…   (Ctrl+F)"))
+            .desired_width(f32::INFINITY)
+            .margin(egui::Margin::symmetric(6, 4))
+            .id(id);
+        let mut out = edit.show(ui);
+        let resp = out.response.clone();
+        if self.focus_search {
+            resp.request_focus();
+            self.focus_search = false;
+        }
+        if resp.gained_focus() && self.prefs.bool("search.select_all_on_focus") {
+            let n = self.search.chars().count();
+            out.state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::two(
+                    egui::text::CCursor::new(0),
+                    egui::text::CCursor::new(n),
+                )));
+            out.state.store(ui.ctx(), id);
+        }
+        if resp.changed() {
+            self.edited_at = Some(Instant::now());
+            self.show_suggestions = true;
+        }
+        let has_list = !self.search.trim().is_empty() && !self.suggestions.is_empty();
+        if resp.has_focus() && has_list {
+            if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
+                self.sugg_index = Some(
+                    self.sugg_index
+                        .map(|i| (i + 1).min(self.suggestions.len() - 1))
+                        .unwrap_or(0),
+                );
+            }
+            if ui.input(|i| i.key_pressed(Key::ArrowUp)) {
+                self.sugg_index = self.sugg_index.and_then(|i| i.checked_sub(1));
+            }
+        }
+        if resp.has_focus() && ui.input(|i| i.key_pressed(Key::Escape)) {
+            self.sugg_index = None;
+        }
+        if resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+            match self.sugg_index.and_then(|i| self.suggestions.get(i)) {
+                Some(s) if has_list => actions.push(Action::OpenWord(s.word.clone())),
+                _ => {
+                    let new_tab = ui.input(|i| i.modifiers.command);
+                    actions.push(Action::Explicit { new_tab });
+                }
+            }
+            self.focus_search = true;
+        }
+        ui.add_space(3.0);
+        egui::Frame::NONE
+            .fill(ui.visuals().extreme_bg_color)
+            .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+            .inner_margin(egui::Margin::symmetric(2, 2))
+            .show(ui, |ui| {
+                ui.set_min_height(ui.available_height());
                 egui::ScrollArea::vertical()
-                    .id_salt("suggestions")
-                    .max_height(170.0)
+                    .id_salt("word-list")
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
                         ui.set_width(ui.available_width());
+                        if self.search.trim().is_empty() {
+                            // an empty box: the last searched words
+                            for w in self.recent.iter().take(30) {
+                                let r = ui.add(
+                                    egui::Button::new(RichText::new(w).weak())
+                                        .frame(false)
+                                        .min_size(egui::vec2(ui.available_width(), 0.0)),
+                                );
+                                if r.clicked() {
+                                    actions.push(Action::OpenWord(w.clone()));
+                                }
+                            }
+                            return;
+                        }
                         for (i, s) in self.suggestions.iter().enumerate() {
-                            let label = if s.fuzzy {
-                                format!("≈ {}", s.word)
-                            } else {
-                                s.word.clone()
-                            };
-                            let mut rt = RichText::new(label);
+                            let mut rt = RichText::new(&s.word);
                             if s.fuzzy {
                                 rt = rt.italics().weak();
                             }
                             let sel = self.sugg_index == Some(i);
-                            let r = ui.selectable_label(sel, rt);
+                            let r = ui.add(
+                                egui::Button::new(rt)
+                                    .selected(sel)
+                                    .frame(sel)
+                                    .min_size(egui::vec2(ui.available_width(), 0.0)),
+                            );
                             if sel {
                                 r.scroll_to_me(None);
                             }
@@ -2504,93 +2553,107 @@ impl DictzApp {
                         }
                     });
             });
-        }
     }
 
     fn dictionary_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        egui::ScrollArea::horizontal()
-            .id_salt("dictbar")
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let names = self.qm.loaded_names();
-                    if ui
-                        .small_button(tr("Tümü"))
-                        .on_hover_text(tr("Tüm sözlükleri etkinleştir"))
-                        .clicked()
-                    {
-                        actions.push(Action::EnableAll(true));
-                    }
-                    ui.separator();
-                    if names.is_empty() {
-                        ui.weak(if self.loader.is_some() {
-                            tr("Sözlükler yükleniyor…")
-                        } else {
-                            tr("Sözlük yok — Ctrl+O ile ekleyin")
-                        });
-                    }
-                    for n in names {
-                        let on = self.qm.is_enabled(&n);
-                        let words = self
-                            .qm
-                            .dictionary(&n)
-                            .map(|d| d.metadata().word_count)
-                            .unwrap_or(0);
-                        let _ = words;
-                        let look = self.dict_looks.get(ui.ctx(), &self.qm, &n);
-                        let mut text = RichText::new(truncate(&n, 24));
-                        if !on {
-                            text = text.weak().strikethrough();
-                        }
-                        let r = ui
-                            .horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 3.0;
-                                let b = super::dictbadge::badge(ui, &look, 16.0);
-                                if !on {
-                                    ui.painter().rect_filled(
-                                        b.rect,
-                                        4.0,
-                                        ui.visuals().panel_fill.gamma_multiply(0.6),
-                                    );
-                                }
-                                ui.selectable_label(on, text)
-                            })
-                            .inner
-                            .on_hover_text(format!(
-                                "{}\n\n{}",
-                                look.tooltip(),
-                                tr("Tıkla: aç/kapat · Sağ tık: yalnızca bu")
-                            ));
-                        if r.clicked() {
-                            actions.push(Action::SetEnabled(n.clone(), !on));
-                        }
-                        if r.secondary_clicked() {
-                            actions.push(Action::Solo(n.clone()));
-                        }
-                    }
-                });
+        let names = self.qm.loaded_names();
+        if names.is_empty() {
+            ui.weak(if self.loader.is_some() {
+                tr("Sözlükler yükleniyor…")
+            } else {
+                tr("Sözlük yok — Ctrl+O ile ekleyin")
             });
+            return;
+        }
+        let sel = ui.visuals().selection.bg_fill;
+        for n in names {
+            let on = self.qm.is_enabled(&n);
+            let look = self.dict_looks.get(ui.ctx(), &self.qm, &n);
+            let size = egui::vec2(26.0, 26.0);
+            let (rect, r) = ui.allocate_exact_size(size, egui::Sense::click());
+            if on {
+                ui.painter()
+                    .rect_filled(rect.shrink(1.0), 3.0, sel.gamma_multiply(0.7));
+            } else if r.hovered() {
+                ui.painter().rect_filled(
+                    rect.shrink(1.0),
+                    3.0,
+                    ui.visuals().widgets.hovered.weak_bg_fill,
+                );
+            }
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(rect.shrink(4.0))
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            );
+            let b = super::dictbadge::badge(&mut child, &look, 18.0);
+            if !on {
+                ui.painter()
+                    .rect_filled(b.rect, 3.0, ui.visuals().panel_fill.gamma_multiply(0.65));
+            }
+            let r = r.on_hover_text(format!(
+                "{}\n\n{}",
+                look.tooltip(),
+                tr("Tıkla: aç/kapat · Sağ tık: yalnızca bu")
+            ));
+            if r.clicked() {
+                actions.push(Action::SetEnabled(n.clone(), !on));
+            }
+            if r.secondary_clicked() {
+                actions.push(Action::Solo(n.clone()));
+            }
+        }
+        if uiicons::button(ui, "all", &tr("Tüm sözlükleri etkinleştir"), false, true).clicked()
+        {
+            actions.push(Action::EnableAll(true));
+        }
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        if self.focus_search {
+            self.sidebar_tab = SidebarTab::Search;
+        }
+        // icon tabs (names in the tooltips), like a compact GoldenDict pane
         ui.horizontal(|ui| {
-            ui.selectable_value(
-                &mut self.sidebar_tab,
-                SidebarTab::Dictionaries,
-                format!("📚 {}", tr("Sözlükler")),
-            );
-            ui.selectable_value(
-                &mut self.sidebar_tab,
-                SidebarTab::Favorites,
-                format!("★ {}", tr("Favoriler")),
-            );
-            ui.selectable_value(
-                &mut self.sidebar_tab,
-                SidebarTab::History,
-                format!("🕘 {}", tr("Geçmiş")),
-            );
+            uiicons::flat(ui);
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let w = (ui.available_width() / 4.0).floor();
+            for (tab, icon, tip) in [
+                (SidebarTab::Search, "search", tr("Ara")),
+                (SidebarTab::Dictionaries, "dict", tr("Sözlükler")),
+                (SidebarTab::Favorites, "star", tr("Favoriler")),
+                (SidebarTab::History, "history", tr("Geçmiş")),
+            ] {
+                let on = self.sidebar_tab == tab;
+                let tint = if on {
+                    ui.visuals().strong_text_color()
+                } else {
+                    ui.visuals().weak_text_color()
+                };
+                let Some(img) = uiicons::image(ui.ctx(), icon, 16.0, tint) else {
+                    continue;
+                };
+                let r = ui
+                    .add(egui::Button::image(img).min_size(egui::vec2(w, 24.0)))
+                    .on_hover_text(tip);
+                if on {
+                    let rr = r.rect;
+                    ui.painter().line_segment(
+                        [rr.left_bottom(), rr.right_bottom()],
+                        egui::Stroke::new(2.0_f32, ui.visuals().hyperlink_color),
+                    );
+                }
+                if r.clicked() {
+                    self.sidebar_tab = tab;
+                }
+            }
         });
-        ui.separator();
+        ui.add_space(3.0);
         let slot = match self.sidebar_tab {
+            SidebarTab::Search => {
+                self.search_pane(ui, actions);
+                return;
+            }
             SidebarTab::Dictionaries => 0,
             SidebarTab::Favorites => 1,
             SidebarTab::History => 2,
@@ -2603,6 +2666,7 @@ impl DictzApp {
         let filter = self.side_filter[slot].to_lowercase();
         let keep = |s: &str| filter.is_empty() || s.to_lowercase().contains(&filter);
         match self.sidebar_tab {
+            SidebarTab::Search => {}
             SidebarTab::Dictionaries => {
                 let names = self.qm.loaded_names();
                 let enabled = names.iter().filter(|n| self.qm.is_enabled(n)).count();
@@ -2854,6 +2918,9 @@ impl DictzApp {
     }
 
     fn tab_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        if self.tabs.len() <= 1 {
+            return; // one tab: no tab row (like GoldenDict); Ctrl+T opens another
+        }
         let max = self.prefs.int("appearance.tab_title_length").max(4) as usize;
         egui::ScrollArea::horizontal()
             .id_salt("tabbar")
@@ -3021,7 +3088,6 @@ impl DictzApp {
                     ui.vertical(|ui| {
                         ui.set_max_width(width);
                         ui.set_min_width(width);
-                        ui.add_space(6.0);
                         match &tab.content {
                             Content::Welcome => {
                                 ui.vertical_centered(|ui| {
@@ -3083,77 +3149,73 @@ impl DictzApp {
                                             let mut media = MediaCache { qm: &self.qm, dict: &g.dict, cache: &mut self.media_cache };
                                             render::lines(ui, &a.lines, &opts, &g.dict, &mut media, find, &mut local);
                                             clicks.extend(local.into_iter().map(|c| (g.dict.clone(), c)));
-                                            ui.add_space(size * 0.6);
+                                            ui.add_space(size * 0.35);
                                         }
                                     };
                                     if show_headers {
+                                        // GoldenDict-like: a thin strip per dictionary, then the text
                                         let look = looks[gi].clone();
                                         let border = ui.visuals().widgets.noninteractive.bg_stroke.color;
                                         let open = state.is_open();
-                                        let radius = 10u8;
-                                        egui::Frame::NONE
-                                            .stroke(egui::Stroke::new(1.0_f32, border))
-                                            .corner_radius(radius)
-                                            .fill(ui.visuals().extreme_bg_color)
+                                        let hdr = egui::Frame::NONE
+                                            .fill(look.tint(dark))
+                                            .inner_margin(egui::Margin { left: 9, right: 6, top: 2, bottom: 2 })
                                             .show(ui, |ui| {
                                                 ui.set_width(ui.available_width());
-                                                let bottom = if open { 0 } else { radius };
-                                                let hdr = egui::Frame::NONE
-                                                    .fill(look.tint(dark))
-                                                    .corner_radius(egui::CornerRadius { nw: radius, ne: radius, sw: bottom, se: bottom })
-                                                    .inner_margin(egui::Margin { left: 14, right: 10, top: 6, bottom: 6 })
-                                                    .show(ui, |ui| {
-                                                        ui.set_width(ui.available_width());
-                                                        ui.horizontal(|ui| {
-                                                            ui.spacing_mut().item_spacing.x = 8.0;
-                                                            super::dictbadge::badge(ui, &look, size * 1.55);
-                                                            let name = ui
-                                                                .add(egui::Label::new(RichText::new(&g.dict).size(size * 0.92).strong().color(ui.visuals().strong_text_color())).sense(egui::Sense::click()).truncate())
-                                                                .on_hover_text(look.tooltip())
-                                                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                                                            if name.clicked() {
-                                                                state.toggle(ui);
+                                                ui.horizontal(|ui| {
+                                                    ui.spacing_mut().item_spacing.x = 6.0;
+                                                    super::dictbadge::badge(ui, &look, size * 1.05);
+                                                    let name = ui
+                                                        .add(egui::Label::new(RichText::new(&g.dict).size(size * 0.82).strong().color(ui.visuals().strong_text_color())).sense(egui::Sense::click()).truncate())
+                                                        .on_hover_text(look.tooltip())
+                                                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                                                    if name.clicked() {
+                                                        state.toggle(ui);
+                                                    }
+                                                    if scroll_to == Some(gi) {
+                                                        name.scroll_to_me(Some(egui::Align::TOP));
+                                                    }
+                                                    if let Some((a, b)) = &look.langs {
+                                                        ui.label(RichText::new(format!("{} → {}", a, b)).size(size * 0.72).color(look.ink(dark)));
+                                                    }
+                                                    if g.articles.len() > 1 {
+                                                        ui.label(RichText::new(tr_args("{n} madde", &[("n", &g.articles.len())])).size(size * 0.72).weak());
+                                                    }
+                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                        uiicons::flat(ui);
+                                                        ui.spacing_mut().item_spacing.x = 0.0;
+                                                        state.show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
+                                                        let tint = ui.visuals().weak_text_color();
+                                                        let small = size * 0.85;
+                                                        if let Some(img) = uiicons::image(ui.ctx(), "search", small, tint) {
+                                                            if ui.add(egui::Button::image(img)).on_hover_text(tr("Bu sözlükte yeni sekmede ara")).clicked() {
+                                                                actions.push(Action::OpenWordIn { word: tab.word.clone(), dicts: vec![g.dict.clone()] });
                                                             }
-                                                            if scroll_to == Some(gi) {
-                                                                name.scroll_to_me(Some(egui::Align::TOP));
+                                                        }
+                                                        if let Some(img) = uiicons::image(ui.ctx(), "copy", small, tint) {
+                                                            if ui.add(egui::Button::image(img)).on_hover_text(tr("Bu makaleyi metin olarak kopyala")).clicked() {
+                                                                actions.push(Action::CopyArticle(Some(gi)));
                                                             }
-                                                            if let Some((a, b)) = &look.langs {
-                                                                super::dictbadge::chip(ui, &format!("{} → {}", a, b), look.ink(dark), size * 0.66);
-                                                            }
-                                                            if !look.fmt.is_empty() {
-                                                                super::dictbadge::chip(ui, &look.fmt, ui.visuals().weak_text_color(), size * 0.66);
-                                                            }
-                                                            if g.articles.len() > 1 {
-                                                                ui.label(RichText::new(format!("{} madde", g.articles.len())).size(size * 0.78).weak());
-                                                            }
-                                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                                state.show_toggle_button(ui, egui::collapsing_header::paint_default_icon);
-                                                                if ui.small_button(format!("◎ {}", tr("yalnızca bu"))).on_hover_text(tr("Bu sözlükte yeni sekmede ara")).clicked() {
-                                                                    actions.push(Action::OpenWordIn { word: tab.word.clone(), dicts: vec![g.dict.clone()] });
-                                                                }
-                                                                if ui.small_button(format!("📋 {}", tr("kopyala"))).on_hover_text(tr("Bu makaleyi metin olarak kopyala")).clicked() {
-                                                                    actions.push(Action::CopyArticle(Some(gi)));
-                                                                }
-                                                            });
-                                                        });
+                                                        }
                                                     });
-                                                let r = hdr.response.rect;
-                                                let cr = egui::CornerRadius { nw: radius, ne: 0, sw: bottom, se: 0 };
-                                                ui.painter().rect_filled(egui::Rect::from_min_size(r.min, egui::vec2(4.0, r.height())), cr, look.color);
-                                                state.show_body_unindented(ui, |ui| {
-                                                    egui::Frame::NONE
-                                                        .inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 4 })
-                                                        .show(ui, |ui| {
-                                                            ui.set_width(ui.available_width());
-                                                            body(ui, &mut find);
-                                                        });
                                                 });
                                             });
+                                        let r = hdr.response.rect;
+                                        ui.painter().rect_filled(egui::Rect::from_min_size(r.min, egui::vec2(3.0, r.height())), 0.0, look.color);
+                                        ui.painter().line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0_f32, border));
+                                        ui.painter().line_segment([r.left_top(), r.right_top()], egui::Stroke::new(1.0_f32, border));
+                                        state.show_body_unindented(ui, |ui| {
+                                            egui::Frame::NONE
+                                                .inner_margin(egui::Margin { left: 14, right: 12, top: 4, bottom: 6 })
+                                                .show(ui, |ui| {
+                                                    ui.set_width(ui.available_width());
+                                                    body(ui, &mut find);
+                                                });
+                                        });
                                         if !open && !opts.find.is_empty() {
                                             // still count hidden matches so n/m stays right
                                             find.counter += g.articles.iter().map(|a| render::count_matches(&a.lines, &opts.find) + render::find_ranges(&a.headword, &opts.find).len()).sum::<usize>();
                                         }
-                                        ui.add_space(12.0);
                                     } else {
                                         body(ui, &mut find);
                                     }
@@ -3186,17 +3248,23 @@ impl DictzApp {
                     "Sözlükler yükleniyor ({i}/{n}): {name}",
                     &[("i", i), ("n", n), ("name", name)],
                 ));
-            } else if let Some((msg, at, secs)) = &self.status {
-                if at.elapsed() < Duration::from_secs(*secs) {
-                    ui.label(msg);
-                }
+            } else if let Some((msg, at, secs)) = self
+                .status
+                .as_ref()
+                .filter(|(_, at, secs)| at.elapsed() < Duration::from_secs(*secs))
+            {
+                let _ = (at, secs);
+                ui.label(msg);
+            } else if !self.timing.is_empty() {
+                // left: the last search
+                ui.weak(&self.timing);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(format!(
+                ui.spacing_mut().item_spacing.x = 10.0;
+                ui.weak(format!(
                     "{}%",
                     (self.prefs.float("article.zoom") * 100.0).round() as i32
                 ));
-                ui.label("·");
                 let names: Vec<String> = self
                     .qm
                     .loaded_names()
@@ -3204,16 +3272,12 @@ impl DictzApp {
                     .filter(|n| self.qm.is_enabled(n))
                     .collect();
                 if names.is_empty() {
-                    ui.label(tr("0 sözlük etkin"));
+                    ui.weak(tr("0 sözlük etkin"));
                 } else {
-                    ui.label(tr_args(
+                    ui.weak(tr_args(
                         "{n} sözlük · {w} kelime",
                         &[("n", &names.len()), ("w", &group(self.qm.word_count()))],
                     ));
-                }
-                if !self.timing.is_empty() {
-                    ui.label("·");
-                    ui.weak(&self.timing);
                 }
             });
         });
@@ -3733,22 +3797,20 @@ impl eframe::App for DictzApp {
         }
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui, &mut actions));
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui.add_space(4.0);
-            self.toolbar(ui, &mut actions);
-            ui.add_space(4.0);
-        });
-        if self.prefs.bool("appearance.show_dictionary_bar") {
-            egui::TopBottomPanel::top("dictbar").show(ctx, |ui| {
-                ui.add_space(2.0);
-                self.dictionary_bar(ui, &mut actions);
-                ui.add_space(2.0);
-            });
-        }
+        egui::TopBottomPanel::top("toolbar")
+            .frame(
+                egui::Frame::side_top_panel(&ctx.style())
+                    .inner_margin(egui::Margin::symmetric(4, 1)),
+            )
+            .show(ctx, |ui| self.toolbar(ui, &mut actions));
         if self.prefs.bool("appearance.show_statusbar") || self.load_progress.is_some() {
             egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status_bar(ui));
         }
         let right_sidebar = self.prefs.str("appearance.sidebar_side") == "right";
+        if self.focus_search && !self.prefs.bool("appearance.show_sidebar") {
+            // Ctrl+F brings the search pane back
+            let _ = self.prefs.set("appearance.show_sidebar", Value::from(true));
+        }
         if self.prefs.bool("appearance.show_sidebar") {
             let width = self.prefs.float("state.sidebar_width") as f32;
             let panel = if right_sidebar {
@@ -3759,7 +3821,7 @@ impl eframe::App for DictzApp {
             let r = panel
                 .resizable(true)
                 .default_width(width)
-                .width_range(200.0..=560.0)
+                .width_range(150.0..=560.0)
                 .show(ctx, |ui| self.sidebar(ui, &mut actions));
             let w = r.response.rect.width().round();
             if (w as f64 - self.prefs.float("state.sidebar_width")).abs() > 1.0 {
@@ -3775,16 +3837,22 @@ impl eframe::App for DictzApp {
             panel
                 .resizable(true)
                 .default_width(190.0)
-                .width_range(140.0..=400.0)
+                .width_range(120.0..=400.0)
                 .show(ctx, |ui| self.found_in(ui, &mut actions));
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            self.tab_bar(ui, &mut actions);
-            if self.find_open {
-                self.find_bar(ui, &mut actions);
-            }
-            self.content(ui, &mut actions);
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::central_panel(&ctx.style())
+                    .inner_margin(0)
+                    .fill(ctx.style().visuals.extreme_bg_color),
+            )
+            .show(ctx, |ui| {
+                self.tab_bar(ui, &mut actions);
+                if self.find_open {
+                    self.find_bar(ui, &mut actions);
+                }
+                self.content(ui, &mut actions);
+            });
         self.windows(ctx, &mut actions);
         self.popup_viewport(ctx);
 
@@ -3811,6 +3879,72 @@ impl eframe::App for DictzApp {
             }
         }
     }
+}
+
+/// The compact, GoldenDict-like look: small paddings, square-ish corners,
+/// the same colours as the Python edition (`dictz/ui/themes.py: palette`).
+fn compact_style(style: &mut egui::Style) {
+    let dark = style.visuals.dark_mode;
+    let hex = |s: &str| Color32::from_hex(s).unwrap_or(Color32::GRAY);
+    let (bg, panel, border, text, muted, hover, header) = if dark {
+        (
+            "#1e2127", "#25282f", "#363a43", "#e3e5e9", "#9aa1ac", "#2f333b", "#2a2e36",
+        )
+    } else {
+        (
+            "#f5f6f8", "#ffffff", "#d7dbe0", "#1f2328", "#5f6670", "#e8ecf1", "#eef1f4",
+        )
+    };
+    let v = &mut style.visuals;
+    v.panel_fill = hex(bg);
+    v.window_fill = hex(panel);
+    v.extreme_bg_color = hex(panel);
+    v.faint_bg_color = hex(header);
+    v.code_bg_color = hex(header);
+    v.window_stroke = egui::Stroke::new(1.0_f32, hex(border));
+    v.override_text_color = None;
+    v.window_corner_radius = egui::CornerRadius::same(4);
+    v.menu_corner_radius = egui::CornerRadius::same(3);
+    v.window_shadow = egui::Shadow {
+        offset: [0, 2],
+        blur: 8,
+        spread: 0,
+        color: Color32::from_black_alpha(if dark { 90 } else { 30 }),
+    };
+    v.popup_shadow = v.window_shadow;
+    let w = &mut v.widgets;
+    for wv in [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ] {
+        wv.corner_radius = egui::CornerRadius::same(3);
+        wv.expansion = 0.0;
+    }
+    w.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, hex(border));
+    w.noninteractive.bg_fill = hex(bg);
+    w.noninteractive.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    w.inactive.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    w.inactive.weak_bg_fill = hex(header);
+    w.inactive.bg_fill = hex(header);
+    w.inactive.bg_stroke = egui::Stroke::new(1.0_f32, hex(border));
+    w.hovered.weak_bg_fill = hex(hover);
+    w.hovered.bg_fill = hex(hover);
+    w.hovered.bg_stroke = egui::Stroke::new(1.0_f32, hex(border));
+    w.hovered.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    w.active.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    let _ = muted;
+    let sp = &mut style.spacing;
+    sp.item_spacing = egui::vec2(6.0, 3.0);
+    sp.button_padding = egui::vec2(5.0, 2.0);
+    sp.interact_size.y = 20.0;
+    sp.menu_margin = egui::Margin::symmetric(4, 3);
+    sp.window_margin = egui::Margin::same(8);
+    sp.indent = 14.0;
+    sp.scroll = egui::style::ScrollStyle::thin();
+    sp.scroll.bar_width = 8.0;
 }
 
 fn lighten(c: Color32) -> Color32 {

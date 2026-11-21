@@ -198,19 +198,3 @@ pub fn badge(ui: &mut egui::Ui, look: &DictLook, size: f32) -> egui::Response {
     }
     resp
 }
-
-/// A small rounded label (`EN → TR`, `DSL`).
-pub fn chip(ui: &mut egui::Ui, text: &str, color: Color32, size: f32) {
-    egui::Frame::NONE
-        .stroke(Stroke::new(1.0_f32, color.gamma_multiply(0.8)))
-        .corner_radius(9.0)
-        .inner_margin(egui::Margin::symmetric(7, 0))
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new(text)
-                    .size(size)
-                    .color(color)
-                    .family(FontFamily::Name(fonts::BOLD.into())),
-            );
-        });
-}

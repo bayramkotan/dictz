@@ -79,7 +79,10 @@ SCHEMA: list[Setting] = [
             "Bağlantılar, sözlük başlıkları ve seçimler bu renkle gösterilir."),
     Setting("appearance.ui_font_family", "str", "", "Arayüz yazı tipi",
             "Boş = sistem yazı tipi. Rust sürümünde yazı tipi adı veya .ttf/.otf dosya yolu."),
-    Setting("appearance.ui_font_size", "int", 14, "Arayüz yazı boyutu", min=8, max=32),
+    Setting("appearance.ui_font_size", "int", 13, "Arayüz yazı boyutu", min=8, max=32),
+    Setting("appearance.ui_scale", "int", 100, "Arayüz ölçeği",
+            "Yüzde: tüm pencereyi büyütür ya da küçültür (yüksek çözünürlüklü ekranlar). Python sürümünde yeniden başlatınca uygulanır.",
+            min=50, max=250),
     Setting("appearance.show_toolbar", "bool", True, "Araç çubuğunu göster"),
     Setting("appearance.show_dictionary_bar", "bool", True, "Sözlük çubuğunu göster",
             "Her sözlük için tek tıkla aç/kapat düğmesi."),
@@ -93,9 +96,9 @@ SCHEMA: list[Setting] = [
     # ------------------------------------------------------------- article
     Setting("article.font_family", "str", "", "Makale yazı tipi",
             "Boş = arayüz yazı tipi. Rust sürümünde yazı tipi adı veya dosya yolu."),
-    Setting("article.font_size", "int", 16, "Makale yazı boyutu", min=8, max=48),
-    Setting("article.line_spacing", "float", 1.6, "Satır aralığı", min=1.0, max=3.0),
-    Setting("article.headword_scale", "float", 1.4, "Başlık kelime büyüklüğü",
+    Setting("article.font_size", "int", 15, "Makale yazı boyutu", min=8, max=48),
+    Setting("article.line_spacing", "float", 1.45, "Satır aralığı", min=1.0, max=3.0),
+    Setting("article.headword_scale", "float", 1.2, "Başlık kelime büyüklüğü",
             "Makale yazı boyutunun katı.", min=1.0, max=3.0),
     Setting("article.zoom", "float", 1.0, "Yakınlaştırma", min=0.5, max=3.0),
     Setting("article.max_width", "int", 0, "Makale en fazla genişliği", "piksel; 0 = tam genişlik",
@@ -178,9 +181,21 @@ SCHEMA_BY_KEY: dict[str, Setting] = {s.key: s for s in SCHEMA}
 # Window / session state (not shown in Preferences).
 STATE_DEFAULTS: dict[str, Any] = {
     "state.last_search": "",
-    "state.sidebar_width": 280,
+    "state.sidebar_width": 230,
     "state.open_tabs": [],
     "state.current_tab": 0,
+    "state.layout_version": 0,
+}
+
+# v0.1.4: the compact layout. Settings still at the old (larger) defaults move to
+# the new ones once; values the user chose are kept. Same table in the Rust edition.
+LAYOUT_VERSION = 2
+OLD_DEFAULTS: dict[str, tuple[Any, Any]] = {
+    "appearance.ui_font_size": (14, 13),
+    "article.font_size": (16, 15),
+    "article.line_spacing": (1.6, 1.45),
+    "article.headword_scale": (1.4, 1.2),
+    "state.sidebar_width": (280, 230),
 }
 
 
@@ -278,6 +293,13 @@ class Preferences:
                 setting = SCHEMA_BY_KEY.get(key)
                 with contextlib.suppress(ValueError):
                     p.values[key] = coerce(setting, sec[name]) if setting else sec[name]
+        if raw and int(p.values.get("state.layout_version") or 0) < LAYOUT_VERSION:
+            for key, (old, new) in OLD_DEFAULTS.items():
+                if p.values.get(key) == old:
+                    p.values[key] = new
+            p.values["state.layout_version"] = LAYOUT_VERSION
+        elif not raw:
+            p.values["state.layout_version"] = LAYOUT_VERSION
         return p
 
     def exists(self) -> bool:

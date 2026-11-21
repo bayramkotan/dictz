@@ -134,5 +134,6 @@ pyinstaller packaging\pyinstaller\dictz.spec --noconfirm --clean
 - Entry point is `packaging/pyinstaller/launch_dictz.py` (absolute import). `dictz/__main__.py` uses a relative import and cannot be a PyInstaller entry script.
 - PyGlossary discovers plugins by scanning `.py` files on disk, so the spec ships PyGlossary's sources as data (`collect_data_files("pyglossary", include_py_files=True)`), and `dictz.parsers.pyglossary_base` makes PyGlossary resolve its paths from the bundle.
 - The macOS bundle version comes from `dictz/__init__.py`.
+- The interface icons are `dictz/resources/icons/*.svg` (shipped by `MANIFEST.in` and the spec's `resources/**/*`); the Rust binary carries the same pictures as PNGs built in (`dictz-rs/src/uiicons`, `include_bytes!`), so neither edition needs icon files next to it.
 - QtMultimedia is bundled (DSL sounds play in-app); without a multimedia backend sounds open in the system player.
 - Binaries are unsigned: Windows SmartScreen and macOS Gatekeeper warn on first launch.

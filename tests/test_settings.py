@@ -78,3 +78,19 @@ def test_autostart_flag_is_not_a_cli_command(monkeypatch) -> None:
     monkeypatch.setattr(app, "run_gui", lambda files, autostart=False: seen.update(f=files, a=autostart) or 0)
     assert app.main(["--autostart"]) == 0
     assert seen == {"f": [], "a": True}
+
+
+def test_old_default_sizes_move_to_the_compact_ones_once(tmp_path) -> None:
+    import json
+
+    from dictz.storage.settings import Preferences
+
+    f = tmp_path / "settings.json"
+    f.write_text(json.dumps({"appearance": {"ui_font_size": 14}, "article": {"font_size": 18, "line_spacing": 1.6}}))
+    p = Preferences.load(f)
+    assert p["appearance.ui_font_size"] == 13  # old default → new default
+    assert p["article.font_size"] == 18  # the user's own value stays
+    assert p["article.line_spacing"] == 1.45
+    p.save()
+    p.set("appearance.ui_font_size", 14, save=True)
+    assert Preferences.load(f)["appearance.ui_font_size"] == 14  # chosen again: kept

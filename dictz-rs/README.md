@@ -8,11 +8,11 @@ Cross-platform, multi-format **offline dictionary** — a GoldenDict-style deskt
 
 This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder (`dictionaries.json`, `settings.json`, `dictz_index.db`, `dictz_history.db`), so dictionaries, history and favorites added in one edition show up in the other.
 
-<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, dark theme: five dictionaries answer “apple”, each article a card with the dictionary's icon, language pair and format" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, dark theme: the search pane on the left, five dictionaries answer “apple”, each under a thin strip with the dictionary's icon and language pair" width="100%"></p>
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/rust-light.png" alt="Rust edition, light theme"><br><sub><b>Light theme</b> — articles as cards, one colour per dictionary</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/rust-light.png" alt="Rust edition, light theme"><br><sub><b>Light theme</b> — compact like GoldenDict, one colour per dictionary</sub></td>
 <td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic-rust.png" alt="Rust edition in Arabic"><br><sub><b>25 interface languages</b> — here Arabic, shaped right to left</sub></td>
 </tr>
 </table>
@@ -104,7 +104,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-78 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+79 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 

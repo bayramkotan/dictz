@@ -114,7 +114,7 @@ class DefinitionView(QWidget):
             )
             did_you_mean = f'<h3>{html.escape(t("Bunu mu demek istediniz?"))}</h3><ul class="did-you-mean">{items}</ul>'
         body = f"""
-        <div style="padding: 36px 8px;">
+        <div class="page">
             <h2>{html.escape(t("Sonuç yok"))}</h2>
             <p class="muted">{t("“{word}” için hiçbir sözlükte eşleşme bulunamadı.", word=html.escape(query))}</p>
             {did_you_mean}
@@ -146,8 +146,8 @@ class DefinitionView(QWidget):
                 f'<summary title="{html.escape(lk.tooltip())}">'
                 f'{dicticons.badge_html(dict_name)}<span class="dname">{html.escape(dict_name)}</span>'
                 f'{langs}{fmt}{count}'
-                f'<span class="actions"><a href="dictz-action:copy:{i}" title="{t("Makaleyi kopyala")}">⧉ {t("kopyala")}</a>'
-                f'<a href="dictz-action:only:{i}" title="{t("Yalnızca bu sözlükte ara")}">◎ {t("yalnızca bu")}</a></span>'
+                f'<span class="actions"><a href="dictz-action:copy:{i}" title="{t("Makaleyi kopyala")}">⧉</a>'
+                f'<a href="dictz-action:only:{i}" title="{t("Yalnızca bu sözlükte ara")}">◎</a></span>'
                 f'<span class="chev">▾</span></summary><div class="dbody">'
             )
             for e in items:

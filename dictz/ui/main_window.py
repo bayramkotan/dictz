@@ -60,7 +60,7 @@ from ..core.query_manager import (
 from ..parsers.base import DictionaryEntry
 from ..storage.history import HistoryStore
 from ..storage.settings import Preferences
-from . import dicticons, themes
+from . import dicticons, icons, themes
 from .definition_tabs import DefinitionTabs
 from .definition_view import group_by_dictionary
 from .dictionary_manager import DictionaryManagerDialog, file_filter, info_html
@@ -169,10 +169,10 @@ class MainWindow(QMainWindow):
         self._scan_on = bool(self.prefs["scan.enabled"])
         self.setWindowIcon(app_icon())
 
+        self._iconed: list[tuple[QAction, str]] = []
         self._build_center()
+        self._build_sidebar()  # holds the search box and word list (like GoldenDict's search pane)
         self._build_toolbar()
-        self._build_dictionary_bar()
-        self._build_sidebar()
         self._build_found_in()
         self._build_statusbar()
         self._build_menus()
@@ -216,13 +216,6 @@ class MainWindow(QMainWindow):
         self.tabs.link_activated.connect(self._on_definition_link)
         self.tabs.current_word_changed.connect(self._on_current_tab_word_changed)
         self.tabs.find_result.connect(self._on_find_result)
-        self.suggestions = QListWidget()
-        self.suggestions.setMaximumHeight(160)
-        self.suggestions.setFrameShape(QListWidget.Shape.NoFrame)
-        self.suggestions.itemActivated.connect(self._on_suggestion_activated)
-        self.suggestions.itemClicked.connect(self._on_suggestion_activated)
-        self.suggestions.hide()
-        layout.addWidget(self.suggestions)
         layout.addWidget(self.tabs, 1)
         # find bar
         self.find_bar = QWidget()
@@ -256,6 +249,8 @@ class MainWindow(QMainWindow):
     def _act(self, text: str, slot, shortcut: str | None = None, icon_name: str | None = None,
              checkable: bool = False, tip: str | None = None) -> QAction:
         a = QAction(icon(icon_name), text, self) if icon_name else QAction(text, self)
+        if icon_name and hasattr(self, "_iconed"):
+            self._iconed.append((a, icon_name))
         if shortcut:
             a.setShortcut(QKeySequence(shortcut))
         a.setCheckable(checkable)
@@ -266,36 +261,42 @@ class MainWindow(QMainWindow):
         return a
 
     def _build_toolbar(self) -> None:
+        # One compact row like GoldenDict: navigation · the dictionary bar (icons
+        # only) · tools on the right. The search box lives in the left pane.
         tb = QToolBar(t("Araç çubuğu"))
         tb.setMovable(False)
         tb.setObjectName("main_toolbar")
+        tb.setIconSize(QSize(18, 18))
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(tb)
         self.toolbar = tb
-        self.back_action = self._act(t("Geri"), self._nav_back, "Alt+Left", "back")
-        self.fwd_action = self._act(t("İleri"), self._nav_forward, "Alt+Right", "forward")
+        self.back_action = self._act(t("Geri"), self._nav_back, "Alt+Left", "back", tip=t("Geri (Alt+←)"))
+        self.fwd_action = self._act(t("İleri"), self._nav_forward, "Alt+Right", "forward", tip=t("İleri (Alt+→)"))
         tb.addAction(self.back_action)
         tb.addAction(self.fwd_action)
         tb.addSeparator()
-        self.search_box = QLineEdit()
-        self.search_box.setObjectName("search_box")
-        self.search_box.setPlaceholderText(t("Bir kelime ara…   (Ctrl+F)"))
-        self.search_box.setClearButtonEnabled(True)
-        self.search_box.setMinimumWidth(320)
-        self.search_box.textChanged.connect(self._on_search_text_changed)
-        self.search_box.returnPressed.connect(self._run_search_explicit)
-        self.search_box.installEventFilter(self)
-        tb.addWidget(self.search_box)
+        # the dictionary bar: one small toggle per dictionary
+        self.dict_strip = QWidget()
+        self.dict_strip.setObjectName("dictionary_bar")
+        self.dict_strip_layout = QHBoxLayout(self.dict_strip)
+        self.dict_strip_layout.setContentsMargins(0, 0, 0, 0)
+        self.dict_strip_layout.setSpacing(1)
+        self.dictionary_bar = tb.addWidget(self.dict_strip)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
-        self.random_action = self._act(t("Rastgele"), self._random_word, "Ctrl+R", "refresh", tip=t("Rastgele kelime (Ctrl+R)"))
+        self.random_action = self._act(t("Rastgele"), self._random_word, "Ctrl+R", "random", tip=t("Rastgele kelime (Ctrl+R)"))
         tb.addAction(self.random_action)
-        self.favorite_action = self._act(t("Favori"), self._toggle_favorite_current, "Ctrl+D", "star", checkable=True)
+        self.favorite_action = self._act(t("Favori"), self._toggle_favorite_current, "Ctrl+D", "star", checkable=True,
+                                         tip=t("Favori (Ctrl+D)"))
         tb.addAction(self.favorite_action)
         tb.addSeparator()
-        self.zoom_out_action = self._act(t("Küçült"), self._zoom_out, "Ctrl+-", "zoom-out")
-        self.zoom_in_action = self._act(t("Büyüt"), self._zoom_in, "Ctrl+=", "zoom-in")
+        self.zoom_out_action = self._act(t("Küçült"), self._zoom_out, "Ctrl+-", "zoom-out", tip=t("Küçült (Ctrl+-)"))
+        self.zoom_reset_action = self._act(t("Normal boyut"), self._zoom_reset, "Ctrl+0", "zoom-reset",
+                                           tip=t("Normal boyut (Ctrl+0)"))
+        self.zoom_in_action = self._act(t("Büyüt"), self._zoom_in, "Ctrl+=", "zoom-in", tip=t("Büyüt (Ctrl+=)"))
         tb.addAction(self.zoom_out_action)
+        tb.addAction(self.zoom_reset_action)
         tb.addAction(self.zoom_in_action)
         self.theme_action = self._act(t("Tema"), self._cycle_theme, None, "theme", tip=t("Tema: Otomatik → Açık → Koyu"))
         tb.addAction(self.theme_action)
@@ -303,52 +304,66 @@ class MainWindow(QMainWindow):
         self.scan_action = self._act(t("Tarama"), self.set_scan, None, "scan", checkable=True,
                                      tip=t("Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir"))
         tb.addAction(self.scan_action)
-        self.prefs_action = self._act(t("Tercihler"), self._open_preferences, "Ctrl+,", "settings")
+        self.prefs_action = self._act(t("Tercihler"), self._open_preferences, "Ctrl+,", "settings",
+                                      tip=t("Tercihler (Ctrl+,)"))
         tb.addAction(self.prefs_action)
-        tb.addSeparator()
         self._build_language_button(tb)
 
-    def _build_dictionary_bar(self) -> None:
-        bar = QToolBar(t("Sözlük çubuğu"))
-        bar.setObjectName("dictionary_bar")
-        bar.setIconSize(QSize(18, 18))
-        bar.setMovable(True)
-        self.addToolBarBreak()
-        self.addToolBar(bar)
-        self.dictionary_bar = bar
+    def _restyle_icons(self) -> None:
+        """Draw every toolbar icon again in the theme's colour."""
+        icons.set_color(themes.icon_color(self.prefs))
+        for a, name in self._iconed:
+            a.setIcon(icons.icon(name))
+        if getattr(self, "favorite_action", None) is not None:
+            self.favorite_action.setIcon(icons.icon("star-filled" if self.favorite_action.isChecked() else "star"))
+        self.sidebar.restyle_icons()
 
     def _refresh_dictionary_bar(self) -> None:
-        bar = self.dictionary_bar
-        bar.clear()
+        lay = self.dict_strip_layout
+        while lay.count():
+            w = lay.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
         qm = self.query_manager
         names = qm.loaded_names()
         if not names:
-            lab = QLabel("  " + t("Sözlük yok — Ctrl+O ile ekleyin"))
+            lab = QLabel(" " + t("Sözlük yok — Ctrl+O ile ekleyin"))
             lab.setObjectName("hint")
-            bar.addWidget(lab)
+            lay.addWidget(lab)
             return
         for name in names:
             b = QToolButton()
-            short = name if len(name) <= 22 else name[:21] + "…"
-            b.setText(short)
+            b.setObjectName("dict_toggle")
             b.setIcon(dicticons.qicon(name))
-            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            b.setIconSize(QSize(20, 20))
+            b.setAutoRaise(True)
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             b.setCheckable(True)
             b.setChecked(qm.is_enabled(name))
             b.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Tıkla: aç/kapat · Sağ tık: yalnızca bu"))
             b.toggled.connect(lambda on, n=name: self._set_dictionary_enabled(n, on))
             b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             b.customContextMenuRequested.connect(lambda _p, n=name: self._solo_dictionary(n))
-            bar.addWidget(b)
-        bar.addSeparator()
+            lay.addWidget(b)
         all_b = QToolButton()
-        all_b.setText(t("Tümü"))
+        all_b.setObjectName("dict_toggle")
+        all_b.setAutoRaise(True)
+        all_b.setIcon(icons.icon("all"))
+        all_b.setIconSize(QSize(16, 16))
         all_b.setToolTip(t("Tüm sözlükleri etkinleştir"))
         all_b.clicked.connect(lambda: self._enable_all(True))
-        bar.addWidget(all_b)
+        lay.addWidget(all_b)
 
     def _build_sidebar(self) -> None:
         self.sidebar = Sidebar(self)
+        self.search_box = self.sidebar.search_pane.box
+        self.search_box.setPlaceholderText(t("Bir kelime ara…   (Ctrl+F)"))
+        self.search_box.textChanged.connect(self._on_search_text_changed)
+        self.search_box.returnPressed.connect(self._run_search_explicit)
+        self.search_box.installEventFilter(self)
+        self.suggestions = self.sidebar.search_pane.list
+        self.suggestions.itemActivated.connect(self._on_suggestion_activated)
+        self.suggestions.itemClicked.connect(self._on_suggestion_activated)
         self.sidebar.setObjectName("sidebar_dock")
         self.sidebar.word_selected.connect(self._open_word)
         self.sidebar.dictionary_toggled.connect(self._set_dictionary_enabled)
@@ -359,32 +374,38 @@ class MainWindow(QMainWindow):
         self.sidebar.favorite_remove_requested.connect(self._remove_favorite)
         self.sidebar.export_favorites_requested.connect(self._export_favorites)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar)
-        self.sidebar.setMinimumWidth(220)
+        self.sidebar.setMinimumWidth(170)
+        self.resizeDocks([self.sidebar], [230], Qt.Orientation.Horizontal)
 
     def _build_found_in(self) -> None:
         dock = QDockWidget(t("Bulunduğu sözlükler"), self)
         dock.setObjectName("found_in_dock")
         self.found_list = QListWidget()
+        self.found_list.setObjectName("compact_list")
+        self.found_list.setIconSize(QSize(16, 16))
+        self.found_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.found_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.found_list.itemClicked.connect(self._on_found_in_clicked)
         dock.setWidget(self.found_list)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        dock.setMinimumWidth(180)
+        dock.setMinimumWidth(140)
+        self.resizeDocks([dock], [200], Qt.Orientation.Horizontal)
         self.found_dock = dock
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
         self.progress = QProgressBar()
         self.progress.setMaximumWidth(180)
-        self.progress.setMaximumHeight(14)
+        self.progress.setMaximumHeight(10)
         self.progress.setTextVisible(False)
         self.progress.hide()
         self.timing_label = QLabel("")
         self.dict_count_label = QLabel(t("0 sözlük"))
         self.zoom_label = QLabel("100%")
+        sb.setSizeGripEnabled(False)
+        sb.addWidget(self.timing_label)  # left: the last search
         sb.addPermanentWidget(self.progress)
-        sb.addPermanentWidget(self.timing_label)
-        sb.addPermanentWidget(self.dict_count_label)
-        sb.addPermanentWidget(QLabel("·"))
+        sb.addPermanentWidget(self.dict_count_label)  # right: the list and the zoom
         sb.addPermanentWidget(self.zoom_label)
 
     def _build_menus(self) -> None:
@@ -477,13 +498,13 @@ class MainWindow(QMainWindow):
 
         if obj is self.search_box and event.type() == QEvent.Type.FocusIn and self.prefs["search.select_all_on_focus"]:
             QTimer.singleShot(0, self.search_box.selectAll)
-        if obj is self.search_box and event.type() == QEvent.Type.KeyPress and self.suggestions.isVisible():
+        if obj is self.search_box and event.type() == QEvent.Type.KeyPress and self.suggestions.count():
             if event.key() == Qt.Key.Key_Down:
                 self.suggestions.setFocus()
                 self.suggestions.setCurrentRow(0)
                 return True
             if event.key() == Qt.Key.Key_Escape:
-                self.suggestions.hide()
+                self.suggestions.clearSelection()
                 return True
         return super().eventFilter(obj, event)
 
@@ -620,6 +641,7 @@ class MainWindow(QMainWindow):
             if p["appearance.ui_font_family"]:
                 app.setFont(QFont(p["appearance.ui_font_family"], int(p["appearance.ui_font_size"])))
         self.tabs.apply_prefs()
+        self._restyle_icons()
         self.toolbar.setVisible(p["appearance.show_toolbar"])
         self.dictionary_bar.setVisible(p["appearance.show_dictionary_bar"])
         self.sidebar.setVisible(p["appearance.show_sidebar"])
@@ -714,8 +736,7 @@ class MainWindow(QMainWindow):
         query = self.search_box.text().strip()
         p = self.prefs
         if len(query) < int(p["search.min_chars"]):
-            self.suggestions.clear()
-            self.suggestions.hide()
+            self._show_recent_in_word_list()
             return
         fill = int(p["search.fuzzy_fill_below"]) if p["search.fuzzy"] else 0
         suggestions = self.query_manager.suggest(
@@ -742,7 +763,6 @@ class MainWindow(QMainWindow):
         entries, fuzzy = self._search_with_fallback(query)
         self._display_in_current(query, entries, fuzzy, started)
         self._push_nav(query)
-        self.suggestions.hide()
 
     def _run_search_new_tab(self) -> None:
         query = self.search_box.text().strip()
@@ -753,7 +773,6 @@ class MainWindow(QMainWindow):
         self.tabs.show_in_new_tab(query, self._with_media(entries), fuzzy)
         self._after_display(query, entries, started)
         self._push_nav(query)
-        self.suggestions.hide()
 
     def _populate_suggestions(self, items: list[Suggestion]) -> None:
         self.suggestions.clear()
@@ -765,7 +784,13 @@ class MainWindow(QMainWindow):
                 font.setItalic(True)
                 it.setFont(font)
                 it.setToolTip(t("Benzer kelime (bulanık eşleşme)"))
-        self.suggestions.setVisible(bool(items))
+
+    def _show_recent_in_word_list(self) -> None:
+        """An empty search box: the word list shows the last searched words."""
+        self.suggestions.clear()
+        for w in self.history.recent(30):
+            it = QListWidgetItem(icons.icon("history"), w, self.suggestions)
+            it.setData(Qt.ItemDataRole.UserRole, w)
 
     def _on_suggestion_activated(self, item: QListWidgetItem) -> None:
         word = item.data(Qt.ItemDataRole.UserRole) or item.text()
@@ -773,7 +798,6 @@ class MainWindow(QMainWindow):
         self.search_box.setText(word)
         self.search_box.blockSignals(False)
         self._open_word(word)
-        self.suggestions.hide()
 
     def _with_media(self, entries: list[DictionaryEntry]) -> list[DictionaryEntry]:
         out = []
@@ -908,7 +932,9 @@ class MainWindow(QMainWindow):
         self._refresh_favorites_pane()
 
     def _update_favorite_button(self, word: str) -> None:
-        self.favorite_action.setChecked(bool(word) and self.history.is_favorite(word))
+        on = bool(word) and self.history.is_favorite(word)
+        self.favorite_action.setChecked(on)
+        self.favorite_action.setIcon(icons.icon("star-filled" if on else "star"))
 
     def _refresh_favorites_pane(self) -> None:
         self.sidebar.set_favorites(self.history.favorites(int(self.prefs["history.favorites_limit"])))
@@ -1098,6 +1124,7 @@ class MainWindow(QMainWindow):
             v.set_all_open(opened)
 
     def _focus_search(self) -> None:
+        self.sidebar.show_search()
         self.search_box.setFocus()
         self.search_box.selectAll()
 

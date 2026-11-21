@@ -19,9 +19,9 @@ StarDict · ABBYY Lingvo DSL · Babylon — many dictionaries, one search, no ne
 
 <br>
 
-<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-light.png" alt="dictz main window: five dictionaries answer “apple” — each article is a card with the dictionary's icon, language pair and format; the DSL article shows its picture and sound" width="100%">
+<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-light.png" alt="dictz main window, compact like GoldenDict: the search box and word list on the left, five dictionaries answer “apple” — each under a thin strip with the dictionary's icon and language pair; the DSL article shows its picture and sound" width="100%">
 
-<sub>Five dictionaries, one search. Every article is a card with the dictionary's own icon, colour, language pair and format; DSL pictures and sounds show inline.</sub>
+<sub>Five dictionaries, one search, in a compact GoldenDict-like window: the search box and word list on the left, the dictionary bar as small icons on top, every article under a thin strip with the dictionary's icon, colour and language pair; DSL pictures and sounds show inline.</sub>
 
 </div>
 
@@ -51,7 +51,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 78 settings, searchable, per-setting reset</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 79 settings, searchable, per-setting reset</sub></td>
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
@@ -68,7 +68,8 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
 - **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first.
 - **Pictures and sounds:** DSL `[s]` media from `*.dsl.files/` or `*.dsl.files.zip`.
-- **Dictionary icons and article cards:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
+- **Compact, GoldenDict-like window:** search box and word list in the left pane (with Dictionaries, Favourites and History as icon tabs), one toolbar row with the dictionary bar as small toggles, thin article headers, no tab row while there is one tab, dictz's own line icons, and an **interface scale** setting (50–250 %) for high-resolution screens.
+- **Dictionary icons:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
 - **Scan popup:** copy a word in any program and its articles pop up next to the mouse. Also a tray icon, global hotkeys and a single running instance.
 - **Modern window:**
   - tabs, back/forward, a dictionary bar and a "found in" panel
@@ -76,7 +77,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - favorites and history
   - light and dark themes, accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
-- **78 settings** in 9 pages with search and per-setting reset.
+- **79 settings** in 9 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
 - **Offline and private:** no telemetry. The only network use is `dct update` / the update check, and only when you ask.
 - **Portable:** each release ships standalone builds of both editions, and CI self-tests every build before publishing.
@@ -331,12 +332,12 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 
 ## Settings
 
-**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 78 settings, stored in `settings.json` in the data folder and shared by both editions:
+**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 79 settings, stored in `settings.json` in the data folder and shared by both editions:
 
 | Page | Examples |
 |---|---|
 | Genel | interface language, restore tabs / last search, check updates on start, confirm quit, remember window, always on top, load in background, tray icon, close to tray, start in tray, **start with the system** (Windows, Linux, macOS — in the tray), single instance |
-| Görünüm | theme, accent color, UI font and size, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
+| Görünüm | theme, accent color, UI font and size, **interface scale (50–250 %)**, toolbar / dictionary bar / found-in / sidebar / status bar, sidebar side, tab title length |
 | Makale | font, size, line spacing, headword size, zoom, max width, dictionary headers, open collapsed, pictures, picture height, find highlight color |
 | Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
 | Tarama penceresi | scanning on/off, Ctrl+C+C, every copy, selection (Linux), Ctrl+C+C interval, max text length, open near the mouse, always on top, hide when the mouse leaves + delay, size, record in history |
@@ -370,7 +371,7 @@ To use another folder, pass `--data-dir DIR` or set `DICTZ_DATA_DIR`. A USB stic
 | `articles/<id>.db` | each dictionary's articles, saved once when it is added, so dictz starts at once (rebuilt by itself when the file changes) |
 | `scan_cache.json` | what the dictionary folders held at the last scan (unchanged folders are not listed again) |
 | `icons/` | dictionary icons, looked for once |
-| `settings.json` | the 78 settings |
+| `settings.json` | the 79 settings |
 | `dictz_index.db` | the headword index (SQLite FTS5) |
 | `dictz_history.db` | history and favorites |
 
@@ -469,7 +470,7 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
 - **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
-- **Ayarlar:** 9 sayfada 78 ayar, arama kutusu ve ayar başına sıfırlama.
+- **Ayarlar:** 9 sayfada 79 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
 
 ### Lisans

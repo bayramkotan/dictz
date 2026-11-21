@@ -5,6 +5,23 @@ All notable changes to dictz are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.4] — 2026-11-21
+
+A compact window like GoldenDict, with dictz's own icons and an interface scale — in **both editions**.
+
+### Changed
+- **A new, compact window like GoldenDict** (both editions).
+  - The **search box and the word list** are in the left pane (GoldenDict's search pane); Dictionaries, Favourites and History are icon tabs next to it. An empty search box lists the last searched words. Ctrl+F always brings the search pane back.
+  - **One toolbar row**: back / forward, the **dictionary bar as small icon toggles** (click: on/off, right click: only this one), then random word, favourite, zoom out / normal / in, theme, scan popup, preferences and the language flag.
+  - **dictz's own line icons** (`dictz/resources/icons/*.svg`, drawn in the theme's colour; the Rust edition uses the same pictures), instead of the system's mixed icons.
+  - **Articles without cards**: a thin strip per dictionary (icon, name, language pair; copy and "search only here" appear on hover), the text right under it, small paddings. The tab row is hidden while there is only one tab.
+  - Smaller paddings, square corners and thin lines everywhere; the same colours in both editions. The status bar shows the last search on the left and the dictionary count and zoom on the right.
+  - Smaller default sizes: interface font 13, article font 15, line spacing 1.45, headword 1.2×, side pane 230 px. Settings that were still at the old defaults move to the new ones once; values you chose yourself are kept.
+- **Interface scale** (Preferences → Appearance, `appearance.ui_scale`, 50–250 %, 79 settings): makes the whole window larger or smaller on high-resolution screens; on top of the system's own scale. The Python edition applies it after a restart and keeps fractional system scales (125 %, 150 %) sharp.
+- README screenshots retaken with the new window.
+
 ## [0.1.3] — 2026-11-17
 
 A start reads only the JSON files, and dictz can start with the system in the tray — in **both editions**.

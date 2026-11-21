@@ -15,6 +15,7 @@ mod prefs_window;
 mod render;
 mod services;
 pub mod system;
+mod uiicons;
 mod window;
 
 use std::path::PathBuf;

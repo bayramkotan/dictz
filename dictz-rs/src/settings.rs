@@ -274,11 +274,21 @@ pub static SCHEMA: &[Setting] = &[
     Setting {
         key: "appearance.ui_font_size",
         kind: Kind::Int,
-        default: Def::Int(14),
+        default: Def::Int(13),
         label: "Arayüz yazı boyutu",
         help: "",
         min: Some(8.0),
         max: Some(32.0),
+        choices: &[],
+    },
+    Setting {
+        key: "appearance.ui_scale",
+        kind: Kind::Int,
+        default: Def::Int(100),
+        label: "Arayüz ölçeği",
+        help: "Yüzde: tüm pencereyi büyütür ya da küçültür (yüksek çözünürlüklü ekranlar). Python sürümünde yeniden başlatınca uygulanır.",
+        min: Some(50.0),
+        max: Some(250.0),
         choices: &[],
     },
     Setting {
@@ -364,7 +374,7 @@ pub static SCHEMA: &[Setting] = &[
     Setting {
         key: "article.font_size",
         kind: Kind::Int,
-        default: Def::Int(16),
+        default: Def::Int(15),
         label: "Makale yazı boyutu",
         help: "",
         min: Some(8.0),
@@ -374,7 +384,7 @@ pub static SCHEMA: &[Setting] = &[
     Setting {
         key: "article.line_spacing",
         kind: Kind::Float,
-        default: Def::Float(1.6),
+        default: Def::Float(1.45),
         label: "Satır aralığı",
         help: "",
         min: Some(1.0),
@@ -384,7 +394,7 @@ pub static SCHEMA: &[Setting] = &[
     Setting {
         key: "article.headword_scale",
         kind: Kind::Float,
-        default: Def::Float(1.4),
+        default: Def::Float(1.2),
         label: "Başlık kelime büyüklüğü",
         help: "Makale yazı boyutunun katı.",
         min: Some(1.0),
@@ -898,11 +908,24 @@ pub static SCHEMA: &[Setting] = &[
 pub fn state_defaults() -> Vec<(&'static str, Value)> {
     vec![
         ("state.last_search", Value::from("")),
-        ("state.sidebar_width", Value::from(280)),
+        ("state.sidebar_width", Value::from(230)),
         ("state.open_tabs", Value::Array(Vec::new())),
         ("state.current_tab", Value::from(0)),
+        ("state.layout_version", Value::from(0)),
     ]
 }
+
+/// v0.1.4: the compact layout. Settings still at the old (larger) defaults
+/// move to the new ones once; values the user chose are kept (same table as
+/// the Python edition's `OLD_DEFAULTS`).
+pub const LAYOUT_VERSION: i64 = 2;
+const OLD_DEFAULTS: &[(&str, f64, f64)] = &[
+    ("appearance.ui_font_size", 14.0, 13.0),
+    ("article.font_size", 16.0, 15.0),
+    ("article.line_spacing", 1.6, 1.45),
+    ("article.headword_scale", 1.4, 1.2),
+    ("state.sidebar_width", 280.0, 230.0),
+];
 
 /// Look a setting up by key.
 pub fn setting(key: &str) -> Option<&'static Setting> {
@@ -1117,6 +1140,27 @@ impl Preferences {
                 }
             }
         }
+        let has_file = !raw.is_empty();
+        let version = p
+            .values
+            .get("state.layout_version")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        if has_file && version < LAYOUT_VERSION {
+            for (key, old, new) in OLD_DEFAULTS {
+                let cur = p.values.get(*key).and_then(Value::as_f64);
+                if cur.map(|c| (c - old).abs() < 1e-9).unwrap_or(false) {
+                    let v = if key.ends_with("font_size") || key.ends_with("_width") {
+                        Value::from(*new as i64)
+                    } else {
+                        Value::from(*new)
+                    };
+                    p.values.insert(key.to_string(), v);
+                }
+            }
+        }
+        p.values
+            .insert("state.layout_version".into(), Value::from(LAYOUT_VERSION));
         p.raw = raw;
         p
     }
@@ -1305,6 +1349,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn old_default_sizes_move_to_the_compact_ones_once() {
+        let f = std::env::temp_dir().join(format!("dictz-layout-{}.json", std::process::id()));
+        std::fs::write(
+            &f,
+            "{\"appearance\": {\"ui_font_size\": 14}, \"article\": {\"font_size\": 18, \"line_spacing\": 1.6}}",
+        )
+        .unwrap();
+        let mut p = Preferences::load(&f);
+        assert_eq!(
+            p.int("appearance.ui_font_size"),
+            13,
+            "old default → new default"
+        );
+        assert_eq!(p.int("article.font_size"), 18, "the user's own value stays");
+        assert!((p.float("article.line_spacing") - 1.45).abs() < 1e-9);
+        p.save().unwrap();
+        p.set("appearance.ui_font_size", Value::from(14)).unwrap();
+        p.save().unwrap();
+        // chosen again after the move: kept
+        assert_eq!(Preferences::load(&f).int("appearance.ui_font_size"), 14);
+        let _ = std::fs::remove_file(&f);
+    }
+
+    #[test]
     fn defaults_and_roundtrip() {
         let f = std::env::temp_dir().join(format!("dictz-settings-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&f);
@@ -1319,7 +1387,7 @@ mod tests {
             "auto",
             "invalid value falls back to default"
         );
-        assert_eq!(p.int("article.font_size"), 16);
+        assert_eq!(p.int("article.font_size"), 15);
         p.set("appearance.theme", Value::from("dark")).unwrap();
         assert_eq!(
             p.set("article.font_size", Value::from(500)).unwrap(),

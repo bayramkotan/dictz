@@ -90,6 +90,16 @@ def run_gui(files: list[str] | None = None, popup: str | None = None, autostart:
     from .storage.settings import SETTINGS_FILE, Preferences, migrate_from_qsettings
     from .ui.main_window import MainWindow
 
+    # Interface scale (Preferences → Appearance): Qt reads it before the window exists.
+    scale = int(Preferences.load(user_data_dir() / SETTINGS_FILE)["appearance.ui_scale"])
+    if scale != 100 and "QT_SCALE_FACTOR" not in os.environ and QApplication.instance() is None:
+        os.environ["QT_SCALE_FACTOR"] = f"{scale / 100:.2f}"
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtGui import QGuiApplication
+
+    if QApplication.instance() is None:
+        # fractional Windows/Linux scales (125 %, 150 %) stay sharp and exact
+        QGuiApplication.setHighDpiScaleFactorRoundingPolicy(_Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)

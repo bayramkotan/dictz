@@ -23,6 +23,7 @@ class DefinitionTabs(QTabWidget):
         self.setMovable(True)
         self.setTabsClosable(True)
         self.setDocumentMode(True)
+        self.setTabBarAutoHide(True)  # one tab: no tab row (like GoldenDict)
         self.tabCloseRequested.connect(self._on_tab_close_requested)
         self.currentChanged.connect(self._on_current_changed)
 
