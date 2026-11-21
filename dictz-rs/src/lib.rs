@@ -55,6 +55,7 @@ pub mod i18n;
 pub mod icon;
 pub mod index;
 pub mod instance;
+pub mod loading;
 pub mod media;
 pub mod paths;
 pub mod query;
@@ -164,6 +165,13 @@ pub trait Dictionary: Send {
 
     /// Release the in-memory data.
     fn close(&mut self);
+
+    /// Close and answer nothing until replaced: its files are being rebuilt
+    /// by a worker (on Windows an open file cannot be replaced). Only the
+    /// article store needs more than [`Dictionary::close`].
+    fn suspend(&mut self) {
+        self.close();
+    }
 
     /// Look up a headword. Returns an empty vector when nothing matches.
     fn lookup(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {

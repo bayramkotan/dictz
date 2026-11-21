@@ -173,6 +173,15 @@ pub fn is_fresh(store: &Path, source: &Path) -> bool {
 /// Written to a temporary file first and renamed, so a half-written store is
 /// never used.
 pub fn build(dict: &dyn Dictionary, store: &Path) -> Result<usize, DictzError> {
+    build_with(dict, store, &mut |_, _| {})
+}
+
+/// [`build`] that calls `progress(done, total)` every few thousand articles.
+pub fn build_with(
+    dict: &dyn Dictionary,
+    store: &Path,
+    progress: &mut dyn FnMut(usize, usize),
+) -> Result<usize, DictzError> {
     let dir = store.parent().map(Path::to_path_buf).unwrap_or_default();
     std::fs::create_dir_all(&dir)?;
     let name = store
@@ -187,6 +196,7 @@ pub fn build(dict: &dyn Dictionary, store: &Path) -> Result<usize, DictzError> {
         con.execute_batch(SCHEMA)?;
         let tx = con.transaction()?;
         let mut count = 0usize;
+        let total = dict.words().len();
         {
             let mut ins =
                 tx.prepare("INSERT INTO articles (word, folded, z, body) VALUES (?1, ?2, ?3, ?4)")?;
@@ -197,6 +207,9 @@ pub fn build(dict: &dyn Dictionary, store: &Path) -> Result<usize, DictzError> {
                 let (z, body) = pack(&defi);
                 ins.execute(params![w, w.to_lowercase(), z, body])?;
                 count += 1;
+                if count % 5000 == 0 {
+                    progress(count, total.max(count));
+                }
             }
         }
         tx.execute_batch(INDEXES)?;
@@ -236,6 +249,30 @@ pub fn build(dict: &dyn Dictionary, store: &Path) -> Result<usize, DictzError> {
     }
 }
 
+/// Remove temp files of stores whose writer was stopped (the program quit
+/// while a dictionary was being read). Only files older than an hour: a
+/// younger one may belong to the other edition, writing right now.
+pub fn remove_stale_temp(data_dir: &Path) {
+    let Ok(dir) = std::fs::read_dir(data_dir.join(STORE_DIR)) else {
+        return;
+    };
+    for e in dir.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !(name.starts_with('.') && name.ends_with(".tmp")) {
+            continue;
+        }
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age.as_secs() >= 3600);
+        if old {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
 /// A dictionary served from its article store (nothing parsed).
 pub struct StoredDictionary {
     store: PathBuf,
@@ -245,6 +282,8 @@ pub struct StoredDictionary {
     meta: DictionaryMetadata,
     words: OnceLock<WordTable>,
     empty: WordTable,
+    // being rebuilt by a worker: closed, answers nothing until replaced
+    suspended: bool,
 }
 
 impl StoredDictionary {
@@ -277,6 +316,7 @@ impl StoredDictionary {
             meta,
             words: OnceLock::new(),
             empty: WordTable::new(),
+            suspended: false,
         })
     }
 
@@ -289,10 +329,14 @@ impl StoredDictionary {
             meta,
             words: OnceLock::new(),
             empty: WordTable::new(),
+            suspended: false,
         }
     }
 
     fn con(&self) -> Option<&Connection> {
+        if self.suspended {
+            return None;
+        }
         self.con.get_or_init(|| open_ro(&self.store).ok()).as_ref()
     }
 
@@ -375,6 +419,11 @@ impl Dictionary for StoredDictionary {
     fn close(&mut self) {
         self.con = std::cell::OnceCell::new();
         self.words = OnceLock::new();
+    }
+
+    fn suspend(&mut self) {
+        self.suspended = true;
+        self.close();
     }
 
     fn lookup(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {

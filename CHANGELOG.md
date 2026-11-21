@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Adding dictionaries froze the window** (both editions): "Sözlük ekle", the dictionary manager's add, dropped files and "Reindex" read every file in the window's own thread — with big dictionaries the window stood still for minutes with no progress shown. Now all of it runs in the background:
+  - new or changed dictionaries are read by **several workers at once** — separate processes in the Python edition (no waiting on Python's GIL), threads in the Rust edition; one coordinating thread writes `dictionaries.json` and the headword index;
+  - folders are listed in the background too (adding a big folder tree, the scan at start, "Rescan");
+  - work added while a load runs joins it instead of starting a second one;
+  - "Reindex" (one dictionary or all) runs in the background; each dictionary keeps its place in the list.
+  - Measured with 9 large dictionaries (1.5 million headwords): before, the window was frozen for the whole 36 s; now the longest pause is 0.4 s, and with 2 workers it is done in 21 s.
+- **Progress in the status bar**: "Loading dictionaries (3/9): a.dsl, b.bgl", a bar with the share done (the dictionaries being read count with their part), a tooltip with each running dictionary's share, and a **stop** button (adds no more new dictionaries; the ones being read finish).
+
+### Added
+- Setting **Dictionaries prepared at once** (`dictionaries.build_workers`, Preferences → Dictionaries, 80 settings): 0 = automatic (processors − 1, at most 4).
+
 ## [0.1.4] — 2026-11-21
 
 A compact window like GoldenDict, with dictz's own icons and an interface scale — in **both editions**.

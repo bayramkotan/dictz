@@ -56,6 +56,7 @@ def info_html(qm: QueryManager, name: str) -> str:
 class DictionaryManagerDialog(QDialog):
     dictionaries_changed = Signal()
     add_paths_requested = Signal(list)
+    rebuild_requested = Signal(list)  # list names; read again in the background
     add_folder_requested = Signal(str)
     rescan_requested = Signal()
 
@@ -232,8 +233,8 @@ class DictionaryManagerDialog(QDialog):
         qm = self.query_manager
         if not name or qm.index_store is None or name not in qm.dictionaries:
             return
-        n = qm.rebuild(name)  # reads the file again (article store + index)
-        QMessageBox.information(self, t("Yeniden indeksle"), t("{name}: {n} kelime indekslendi.", name=name, n=f"{n:,}"))
+        # the window reads it again in the background (progress in its status bar)
+        self.rebuild_requested.emit([name])
 
     def _info(self) -> None:
         name = self._selected_name()

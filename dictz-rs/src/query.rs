@@ -470,16 +470,30 @@ impl QueryManager {
     pub fn attach(&mut self, dict: Box<dyn Dictionary>, path: &Path, enabled: bool) {
         let name = dict.metadata().name.clone();
         self.failed.remove(&name);
-        if let Some(i) = self.position(&name) {
-            self.dicts.remove(i);
-        }
         let media = MediaResolver::for_dictionary(path);
-        self.dicts.push(Loaded {
+        let loaded = Loaded {
             dict,
             enabled,
             media,
-        });
+        };
+        // a rebuilt dictionary (same name) keeps its place
+        match self.position(&name) {
+            Some(i) => {
+                self.dicts[i].dict.close();
+                self.dicts[i] = loaded;
+            }
+            None => self.dicts.push(loaded),
+        }
         self.headword_cache = None;
+    }
+
+    /// Close a dictionary that a worker is about to rebuild: it answers
+    /// nothing until [`QueryManager::attach`] replaces it. Returns its file.
+    pub fn suspend(&mut self, name: &str) -> Option<std::path::PathBuf> {
+        let i = self.position(name)?;
+        self.dicts[i].dict.suspend();
+        self.headword_cache = None;
+        Some(self.dicts[i].dict.metadata().file_path.clone())
     }
 
     /// Write list positions and enabled flags to the index.

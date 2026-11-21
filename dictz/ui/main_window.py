@@ -72,53 +72,73 @@ from .sidebar import Sidebar
 
 
 class DictionaryLoader(QThread):
-    """Opens dictionaries off the GUI thread; indexes new / changed files with
-    its own SQLite connection."""
+    """Runs a :class:`~dictz.core.loading.LoadJob` (worker processes read the
+    files, several at once); the window's thread only attaches the results."""
 
-    loaded = Signal(object, str, bool)  # Dictionary, path, enabled
+    loaded = Signal(object, str, bool, str)  # Dictionary, path, enabled, replaced name
     failed = Signal(str, str)
-    progress = Signal(int, int, str)
+    progress = Signal(object)  # LoadState
 
-    def __init__(self, db_path: Path, rows: list[dict], new_files: list[Path], reindex_changed: bool, parent=None):
+    def __init__(self, job, parent=None):
         super().__init__(parent)
-        self.db_path = db_path
-        self.rows = rows
-        self.new_files = new_files
-        self.reindex_changed = reindex_changed
+        self.job = job
+        job.on_loaded = lambda d, path, enabled, replaced: self.loaded.emit(d, path, enabled, replaced)
+        job.on_failed = lambda path, err: self.failed.emit(path, err)
+        job.on_progress = lambda state: self.progress.emit(state)
 
     def run(self) -> None:
-        from ..core.query_manager import _changed
-        from ..storage.indexer import IndexStore
+        self.job.run()
 
-        store = IndexStore(self.db_path)
-        store.open()
-        total = len(self.rows) + len(self.new_files)
-        i = 0
-        try:
-            for row in self.rows:
-                i += 1
-                self.progress.emit(i, total, Path(row["path"]).name)
-                try:
-                    # from dictionaries.json: nothing is read unless the files changed
-                    d, built = QueryManager.open_row(row, self.db_path.parent, store)
-                    if _changed(row, Path(row["path"])) and (built or self.reindex_changed):
-                        store.index_dictionary(d)
-                    self.loaded.emit(d, row["path"], bool(row["enabled"]))
-                except Exception as exc:  # noqa: BLE001
-                    self.failed.emit(row["path"], str(exc))
-            for f in self.new_files:
-                i += 1
-                self.progress.emit(i, total, f.name)
-                try:
-                    d, _built = QueryManager.open_cached(f, self.db_path.parent)
-                    name = store.register_dictionary(d)  # unique name: "X (2)" for a second "X"
-                    if not store.is_indexed(name):
-                        store.index_dictionary(d)
-                    self.loaded.emit(d, str(f), True)
-                except Exception as exc:  # noqa: BLE001
-                    self.failed.emit(str(f), str(exc))
-        finally:
-            store.close()
+
+class LoadProgress(QWidget):
+    """The status bar's progress: "Loading dictionaries (3/12): a.dsl, b.bgl",
+    a bar with the share done (the running dictionaries' parts counted), and a
+    stop button."""
+
+    stop_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.label = QLabel("")
+        self.label.setMinimumWidth(120)
+        self.label.setMaximumWidth(520)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setFixedWidth(220)
+        self.bar.setFixedHeight(14)
+        self.bar.setTextVisible(True)
+        self.bar.setFormat("%p%")
+        self.stop = QToolButton()
+        self.stop.setObjectName("load_stop")
+        self.stop.setIcon(icon("close"))
+        self.stop.setIconSize(QSize(12, 12))
+        self.stop.setAutoRaise(True)
+        self.stop.setToolTip(t("Durdur"))
+        self.stop.clicked.connect(self.stop_requested)
+        lay.addWidget(self.label, 1)
+        lay.addWidget(self.bar)
+        lay.addWidget(self.stop)
+        self.hide()
+
+    def show_state(self, st) -> None:
+        if st.phase == "scan" and not st.total:
+            self.bar.setRange(0, 0)  # busy: the folders are being listed
+            text = t("Klasörler taranıyor…")
+        else:
+            self.bar.setRange(0, 1000)
+            self.bar.setValue(int(st.fraction * 1000))
+            text = t("Sözlükler yükleniyor ({i}/{n}): {name}", i=st.done, n=st.total, name=st.names or "…")
+        if st.cancelling:
+            text = t("Durduruluyor…") + " " + text
+        self.stop.setEnabled(not st.cancelling)
+        fm = self.label.fontMetrics()
+        self.label.setText(fm.elidedText(text, Qt.TextElideMode.ElideRight, self.label.maximumWidth()))
+        tip = "\n".join(f"{n} — " + (f"{int(f * 100)}%" if f else t("okunuyor")) for n, f in st.running)
+        self.label.setToolTip(text + ("\n\n" + tip if tip else ""))
+        self.show()
 
 
 class UpdateChecker(QThread):
@@ -394,11 +414,8 @@ class MainWindow(QMainWindow):
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
-        self.progress = QProgressBar()
-        self.progress.setMaximumWidth(180)
-        self.progress.setMaximumHeight(10)
-        self.progress.setTextVisible(False)
-        self.progress.hide()
+        self.progress = LoadProgress()
+        self.progress.stop_requested.connect(self._stop_loading)
         self.timing_label = QLabel("")
         self.dict_count_label = QLabel(t("0 sözlük"))
         self.zoom_label = QLabel("100%")
@@ -510,36 +527,65 @@ class MainWindow(QMainWindow):
 
     # ================================================================ loading
     def start_loading(self) -> None:
-        """Open dictionaries from the index, scan dictionary folders and add
-        files given on the command line — in the background."""
+        """Open dictionaries from the list, scan the dictionary folders and add
+        files given on the command line — all in the background (worker
+        processes read new or changed files, several at once)."""
         qm = self.query_manager
         store = qm.index_store
         rows = [dict(r) for r in store.list_dictionaries(enabled_only=False)] if store else []
-        from ..storage.registry import norm_path
-
-        known = {norm_path(r["path"]) for r in rows}
-        new_files: list[Path] = []
+        scans = []
         if self.prefs["dictionaries.scan_on_startup"]:
             # every folder with its own "subfolders" box; unchanged folders come
             # from scan_cache.json (not listed again)
-            new_files += scan_sources(self.prefs, Path(store.db_path).parent if store else None)
-        new_files += [f for f in self.startup_files if is_dictionary_file(f)]
-        seen: set[str] = set()
-        new_files = [f for f in new_files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
-        if not rows and not new_files:
+            prefs = self.prefs
+            data = Path(store.db_path).parent if store else None
+            scans.append(lambda: scan_sources(prefs, data))
+        files = [f for f in self.startup_files if is_dictionary_file(f)]
+        if store is None or (not rows and not scans and not files):
             self._loading_finished()
             return
-        db = Path(store.db_path) if store else Path()
-        self._loader = DictionaryLoader(db, rows, new_files, bool(self.prefs["dictionaries.reindex_on_change"]), self)
+        self._start_job(rows=rows, files=files, scans=scans, finished=self._loading_finished,
+                        background=bool(self.prefs["general.load_in_background"]))
+
+    def _start_job(self, *, rows=(), files=(), scans=(), rebuild=(), finished=None, background=True) -> None:
+        from ..core.loading import LoadJob
+
+        store = self.query_manager.index_store
+        job = LoadJob(Path(store.db_path), rows=rows, files=files, scans=scans,
+                      reindex_changed=bool(self.prefs["dictionaries.reindex_on_change"]),
+                      workers=int(self.prefs["dictionaries.build_workers"]))
+        job.add(rebuild=rebuild)
+        self._loaded_count = 0
+        self._load_errors = []
+        self._loader = DictionaryLoader(job, self)
         self._loader.loaded.connect(self._on_dictionary_loaded)
         self._loader.failed.connect(self._on_load_failed)
-        self._loader.progress.connect(self._on_load_progress)
-        self._loader.finished.connect(self._loading_finished)
-        self.progress.show()
-        if self.prefs["general.load_in_background"]:
+        self._loader.progress.connect(self.progress.show_state)
+        if getattr(self, "_manager_dialog", None) is not None:
+            dlg = self._manager_dialog
+            self._loader.loaded.connect(lambda *_a: dlg.refresh())
+            self._loader.failed.connect(lambda *_a: dlg.refresh())
+        self._loader.finished.connect(finished or self._extra_loading_finished)
+        if background:
             self._loader.start()
         else:
             self._loader.run()
+            (finished or self._extra_loading_finished)()
+
+    def _job_running(self) -> bool:
+        return self._loader is not None and self._loader.isRunning()
+
+    def _queue_work(self, files=(), scans=(), rebuild=()) -> None:
+        """More work: the running job takes it, else a new job starts."""
+        if self.query_manager.index_store is None:
+            return
+        if self._job_running() and self._loader.job.add(files=files, scans=scans, rebuild=rebuild):
+            return
+        self._start_job(files=files, scans=scans, rebuild=rebuild)
+
+    def _stop_loading(self) -> None:
+        if self._job_running():
+            self._loader.job.cancel()
 
     def _on_load_failed(self, path: str, error: str) -> None:
         """A dictionary of the list could not be opened: it stays in the list
@@ -549,33 +595,19 @@ class MainWindow(QMainWindow):
         row = store.registry.by_path(path) if store is not None else None
         if row is not None:
             self.query_manager.note_failed(row["name"], error)
-        self._refresh_dictionaries()
+        self._refresh_soon()
 
     def load_new_files(self, files: list[Path]) -> None:
         """Add dictionary files that are not in the list yet, in the background."""
         from ..storage.registry import norm_path
 
-        qm = self.query_manager
-        store = qm.index_store
+        store = self.query_manager.index_store
         known = {norm_path(r["path"]) for r in store.list_dictionaries(enabled_only=False)} if store else set()
-        seen: set[str] = set()
-        new = [f for f in files if (r := norm_path(f)) not in known and not (r in seen or seen.add(r))]
+        new = [f for f in files if norm_path(f) not in known]
         if not new:
             self.statusBar().showMessage(t("Yeni sözlük yok"), 4000)
             return
-        if store is None or (self._loader is not None and self._loader.isRunning()):
-            self.add_paths(new)
-            return
-        self._loaded_count = 0
-        self._load_errors = []
-        self._loader = DictionaryLoader(Path(store.db_path), [], new,
-                                        bool(self.prefs["dictionaries.reindex_on_change"]), self)
-        self._loader.loaded.connect(self._on_dictionary_loaded)
-        self._loader.failed.connect(self._on_load_failed)
-        self._loader.progress.connect(self._on_load_progress)
-        self._loader.finished.connect(self._extra_loading_finished)
-        self.progress.show()
-        self._loader.start()
+        self._queue_work(files=new)
 
     def _extra_loading_finished(self) -> None:
         self.progress.hide()
@@ -583,23 +615,46 @@ class MainWindow(QMainWindow):
         if self._load_errors:
             self.statusBar().showMessage(t("{n} sözlük açılamadı:", n=len(self._load_errors)) + " "
                                          + "; ".join(self._load_errors), 12000)
-        else:
+        elif self._loaded_count:
             self.statusBar().showMessage(t("{n} sözlük eklendi", n=self._loaded_count), 4000)
+        else:
+            self.statusBar().showMessage(t("Yeni sözlük yok"), 4000)
 
     def rescan_folders(self, prefs=None) -> None:
-        """Scan every dictionary folder now and add the new files."""
+        """Scan every dictionary folder now (in the background) and add the new files."""
         store = self.query_manager.index_store
-        self.load_new_files(scan_sources(prefs or self.prefs, Path(store.db_path).parent if store else None))
+        p = prefs or self.prefs
+        data = Path(store.db_path).parent if store else None
+        self._queue_work(scans=[lambda: scan_sources(p, data)])
 
-    def _on_load_progress(self, i: int, total: int, name: str) -> None:
-        self.progress.setMaximum(total)
-        self.progress.setValue(i)
-        self.statusBar().showMessage(t("Sözlükler yükleniyor ({i}/{n}): {name}", i=i, n=total, name=name))
+    def rebuild_dictionaries(self, names: list[str]) -> None:
+        """Read dictionaries' files again (new article store + headword index),
+        in the background; each keeps its place and stays usable after."""
+        qm = self.query_manager
+        work = []
+        for n in names:
+            d = qm.dictionaries.get(n)
+            if d is None:
+                continue
+            if hasattr(d, "suspend"):
+                d.suspend()  # Windows: the store file must be closed to be replaced
+            work.append((n, str(d.metadata.file_path), qm.is_enabled(n)))
+        if work:
+            self._queue_work(rebuild=work)
 
-    def _on_dictionary_loaded(self, dictionary, path: str, enabled: bool) -> None:
+    def _on_dictionary_loaded(self, dictionary, path: str, enabled: bool, replaced: str = "") -> None:
         self.query_manager.attach(dictionary, path, enabled)
         self._loaded_count += 1
-        self._refresh_dictionaries()
+        self._refresh_soon()
+
+    def _refresh_soon(self) -> None:
+        """Many dictionaries arrive at once: rebuild the lists at most ~3× a second."""
+        if not hasattr(self, "_refresh_timer"):
+            self._refresh_timer = QTimer(self)
+            self._refresh_timer.setSingleShot(True)
+            self._refresh_timer.timeout.connect(self._refresh_dictionaries)
+        if not self._refresh_timer.isActive():
+            self._refresh_timer.start(300)
 
     def _loading_finished(self) -> None:
         # the order comes from dictionaries.json; nothing to write back here
@@ -692,11 +747,8 @@ class MainWindow(QMainWindow):
         elif action == "open_data":
             self._open_data_dir()
         elif action == "reindex":
-            qm = self.query_manager
-            if qm.index_store is not None:
-                for n in qm.loaded_names():
-                    qm.rebuild(n)
-                QMessageBox.information(self, t("İndeks"), t("{n} sözlük yeniden indekslendi.", n=len(qm.loaded_names())))
+            # every dictionary read again, in the background (progress in the status bar)
+            self.rebuild_dictionaries(list(self.query_manager.dictionaries))
         elif action == "check_updates":
             self._check_updates(silent=False)
         elif action == "clear_history":
@@ -1022,17 +1074,27 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, name, info_html(self.query_manager, name))
 
     def add_paths(self, paths: list[Path]) -> None:
-        added = 0
+        """Add dictionary files (and folders' dictionaries) — in the background."""
+        files, scans = [], []
+        rec = bool(self.prefs["dictionaries.recursive"])
         for p in paths:
-            try:
-                d = self.query_manager.add_dictionary(Path(p))
-                added += 1
-                self.statusBar().showMessage(t("Yüklendi: {name} ({n} kelime)", name=d.metadata.name, n=f"{d.metadata.word_count:,}"), 4000)
-            except Exception as e:  # noqa: BLE001
-                QMessageBox.critical(self, t("Yüklenemedi"), f"<b>{p}</b><br><br>{type(e).__name__}: {e}")
-        if added > 1:
-            self.statusBar().showMessage(t("{n} sözlük eklendi", n=added), 4000)
-        self._refresh_dictionaries()
+            p = Path(p).expanduser().absolute()
+            if p.is_dir():
+                scans.append(lambda folder=p: scan_folder(folder, rec))
+            else:
+                files.append(p)
+        if self.query_manager.index_store is None:  # no data folder: read here (rare)
+            for f in files:
+                try:
+                    self.query_manager.add_dictionary(f)
+                except Exception as e:  # noqa: BLE001
+                    QMessageBox.critical(self, t("Yüklenemedi"), f"<b>{f}</b><br><br>{type(e).__name__}: {e}")
+            self._refresh_dictionaries()
+            return
+        if files:
+            self.load_new_files(files)
+        if scans:
+            self._queue_work(scans=scans)
 
     def _add_dictionary_dialog(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(self, t("Sözlük dosyası seçin"), "", file_filter())
@@ -1049,12 +1111,10 @@ class MainWindow(QMainWindow):
         scanned at every start) and add its dictionaries now."""
         if add_folder_source(self.prefs, folder):
             self.prefs.save()
-        files = scan_folder(folder, dict(self._folder_sources()).get(str(Path(folder).expanduser().absolute()),
-                                         bool(self.prefs["dictionaries.recursive"])))
-        if not files:
-            QMessageBox.information(self, t("Klasör ekle"), t("Bu klasörde sözlük dosyası bulunamadı."))
-            return
-        self.load_new_files(files)
+        rec = dict(self._folder_sources()).get(str(Path(folder).expanduser().absolute()),
+                                               bool(self.prefs["dictionaries.recursive"]))
+        # listed in the background too: a big folder tree must not stop the window
+        self._queue_work(scans=[lambda: scan_folder(folder, rec)])
 
     def _folder_sources(self) -> list[tuple[str, bool]]:
         from ..core.query_manager import folder_sources
@@ -1065,11 +1125,14 @@ class MainWindow(QMainWindow):
         dlg = DictionaryManagerDialog(self.query_manager, self, prefs=self.prefs)
         dlg.dictionaries_changed.connect(self._refresh_dictionaries)
         dlg.add_paths_requested.connect(lambda paths: (self.add_paths(paths), dlg.refresh()))
+        dlg.rebuild_requested.connect(lambda names: self.rebuild_dictionaries(names))
         dlg.add_folder_requested.connect(lambda folder: (self.add_folder(Path(folder)), dlg.refresh()))
         dlg.rescan_requested.connect(lambda: self.rescan_folders())
         if self._loader is not None:
             self._loader.loaded.connect(lambda *_a: dlg.refresh())
+        self._manager_dialog = dlg  # new loaders refresh it too
         dlg.exec()
+        self._manager_dialog = None
 
     def dragEnterEvent(self, event):  # noqa: N802
         if event.mimeData().hasUrls():
@@ -1330,9 +1393,9 @@ class MainWindow(QMainWindow):
                 self, t("Çıkış"), t("dictz kapatılsın mı?")) != QMessageBox.StandardButton.Yes:
             event.ignore()
             return
-        if self._loader is not None and self._loader.isRunning():
-            self._loader.requestInterruption()
-            self._loader.wait(3000)
+        if self._job_running():
+            self._loader.job.stop()  # worker processes too; half-written stores are removed
+            self._loader.wait(5000)
         qs = QSettings()
         qs.setValue("window/geometry", self.saveGeometry())
         qs.setValue("window/state", self.saveState())

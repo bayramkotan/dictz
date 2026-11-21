@@ -4,7 +4,7 @@
 use crate::i18n::{self, tr, tr_args};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,7 +22,7 @@ use crate::query::{
 };
 use crate::settings::{state_defaults, Preferences};
 use crate::shortcuts::SHORTCUTS;
-use crate::{Dictionary, DictionaryEntry, VERSION};
+use crate::{DictionaryEntry, VERSION};
 
 use super::prefs_window::{self, Advanced, PrefsWindow};
 use super::render::{self, Click, MediaSource};
@@ -165,13 +165,6 @@ enum Action {
     RemoveFavorite(String),
 }
 
-enum LoadMsg {
-    Progress(usize, usize, String),
-    Loaded(Box<dyn Dictionary>, PathBuf, bool),
-    Failed(PathBuf, String),
-    Done,
-}
-
 /// Media cache shared by the renderer: (dictionary, file) → bytes.
 struct MediaCache<'a> {
     qm: &'a QueryManager,
@@ -238,8 +231,10 @@ pub struct DictzApp {
     prefs: Preferences,
     data_dir: PathBuf,
 
-    loader: Option<Receiver<LoadMsg>>,
-    load_progress: Option<(usize, usize, String)>,
+    loader: Option<Receiver<crate::loading::Event>>,
+    /// The running job: more work goes to it (see `queue_work`).
+    job: Option<crate::loading::JobHandle>,
+    load_progress: Option<crate::loading::LoadState>,
     load_errors: Vec<String>,
     loaded_count: usize,
     /// The running load only adds new files (not the start-up load).
@@ -350,6 +345,7 @@ impl DictzApp {
             history,
             data_dir,
             loader: None,
+            job: None,
             load_progress: None,
             load_errors: Vec::new(),
             loaded_count: 0,
@@ -477,8 +473,8 @@ impl DictzApp {
                 }
             }
         }
-        if self.loader.is_some() {
-            self.pending_popup = Some(word);
+        if self.loader.is_some() && !self.extra_load {
+            self.pending_popup = Some(word); // the start-up load is still running
             return;
         }
         let (entries, fz) = self.search_with_fallback(&word, None);
@@ -621,7 +617,7 @@ impl DictzApp {
                                 .unwrap_or_default();
                             self.show_main(ctx);
                             if !files.is_empty() {
-                                self.add_paths(files);
+                                self.add_paths(ctx, files);
                             }
                         }
                         "quit" => self.quit(ctx),
@@ -998,74 +994,174 @@ impl DictzApp {
             .as_ref()
             .and_then(|i| i.list_dictionaries(false).ok())
             .unwrap_or_default();
-        let canon = |p: &Path| crate::registry::norm_path(p);
-        let mut known: std::collections::HashSet<String> =
-            rows.iter().map(|r| canon(&r.path)).collect();
-        let mut new_files: Vec<PathBuf> = Vec::new();
+        let mut scans: Vec<crate::loading::Scan> = Vec::new();
         if self.prefs.bool("dictionaries.scan_on_startup") {
-            // every folder with its own "subfolders" box
-            new_files.extend(scan_sources(&self.prefs, Some(&self.data_dir)));
+            // every folder with its own "subfolders" box; listed in the job's
+            // thread (unchanged folders come from scan_cache.json)
+            let prefs = self.prefs.clone();
+            let dir = self.data_dir.clone();
+            scans.push(Box::new(move || scan_sources(&prefs, Some(&dir))));
         }
-        new_files.extend(files.into_iter().filter(|f| is_dictionary_file(f)));
-        new_files.retain(|f| known.insert(canon(f)));
-        if rows.is_empty() && new_files.is_empty() {
+        let files: Vec<PathBuf> = files
+            .into_iter()
+            .filter(|f| is_dictionary_file(f))
+            .collect();
+        if self.qm.index.is_none() || (rows.is_empty() && scans.is_empty() && files.is_empty()) {
             self.loading_finished(ctx);
             return;
         }
-        let db = self.data_dir.join(INDEX_DB);
-        let reindex = self.prefs.bool("dictionaries.reindex_on_change");
+        let background = self.prefs.bool("general.load_in_background");
+        self.start_job(ctx, rows, files, scans, Vec::new(), background);
+    }
+
+    /// A background job (worker threads read new or changed files, several
+    /// at once); its events arrive in `poll_loader`.
+    fn start_job(
+        &mut self,
+        ctx: &egui::Context,
+        rows: Vec<crate::index::DictionaryRow>,
+        files: Vec<PathBuf>,
+        scans: Vec<crate::loading::Scan>,
+        rebuild: Vec<(String, PathBuf, bool)>,
+        background: bool,
+    ) {
+        let job = crate::loading::LoadJob::new(
+            &self.data_dir.join(INDEX_DB),
+            self.prefs.bool("dictionaries.reindex_on_change"),
+            self.prefs.int("dictionaries.build_workers"),
+        );
+        let h = job.handle();
+        job.add_rows(rows);
+        h.add_files(files);
+        for sc in scans {
+            h.add_scan(sc);
+        }
+        h.add_rebuild(rebuild);
+        self.loaded_count = 0;
+        self.load_errors.clear();
         let (tx, rx) = channel();
         let c = ctx.clone();
-        let job = move || load_job(db, rows, new_files, reindex, tx, c);
-        if self.prefs.bool("general.load_in_background") {
-            std::thread::spawn(job);
+        let work = move || {
+            job.run(&mut |e| {
+                let _ = tx.send(e);
+                c.request_repaint();
+            })
+        };
+        if background {
+            std::thread::spawn(work);
         } else {
-            job();
+            work();
         }
+        self.job = Some(h);
         self.loader = Some(rx);
         self.poll_loader(ctx);
     }
 
+    /// More work: the running job takes it, else a new job starts.
+    fn queue_work(
+        &mut self,
+        ctx: &egui::Context,
+        files: Vec<PathBuf>,
+        scans: Vec<crate::loading::Scan>,
+        rebuild: Vec<(String, PathBuf, bool)>,
+    ) {
+        if self.qm.index.is_none() {
+            return;
+        }
+        let (files, scans, rebuild) = match self.job.as_ref().filter(|_| self.loader.is_some()) {
+            Some(h) => match h.add_all(files, scans, rebuild) {
+                None => return, // the running job takes it
+                Some(back) => {
+                    // it has just finished: take its last events first
+                    self.poll_loader_until_done(ctx);
+                    back
+                }
+            },
+            None => (files, scans, rebuild),
+        };
+        if self.loader.is_none() {
+            self.extra_load = true;
+        }
+        self.start_job(ctx, Vec::new(), files, scans, rebuild, true);
+    }
+
     fn poll_loader(&mut self, ctx: &egui::Context) {
+        self.poll_loader_with(ctx, false);
+    }
+
+    /// The job has closed its inbox: wait for its last few events.
+    fn poll_loader_until_done(&mut self, ctx: &egui::Context) {
+        self.poll_loader_with(ctx, true);
+    }
+
+    fn poll_loader_with(&mut self, ctx: &egui::Context, block: bool) {
         let Some(rx) = self.loader.take() else { return };
         let mut done = false;
         let mut changed = false;
-        while let Ok(msg) = rx.try_recv() {
-            match msg {
-                LoadMsg::Progress(i, n, name) => self.load_progress = Some((i, n, name)),
-                LoadMsg::Loaded(d, path, enabled) => {
-                    self.qm.attach(d, &path, enabled);
-                    self.loaded_count += 1;
-                    changed = true;
+        loop {
+            let ev = if block {
+                rx.recv()
+                    .map_err(|_| std::sync::mpsc::TryRecvError::Disconnected)
+            } else {
+                rx.try_recv()
+            };
+            match ev {
+                Ok(ev) => changed |= self.on_load_event(ev),
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    done = true; // the job's thread has ended
+                    break;
                 }
-                LoadMsg::Failed(path, e) => {
-                    // stays in the list, shown with ⚠ (never dropped)
-                    self.load_errors.push(format!("{}: {}", path.display(), e));
-                    let me = crate::registry::norm_path(&path);
-                    let name = self
-                        .qm
-                        .index
-                        .as_ref()
-                        .and_then(|i| i.list_dictionaries(false).ok())
-                        .and_then(|rows| {
-                            rows.into_iter()
-                                .find(|r| crate::registry::norm_path(&r.path) == me)
-                                .map(|r| r.name)
-                        });
-                    if let Some(n) = name {
-                        self.qm.note_failed(&n, &e);
-                    }
-                }
-                LoadMsg::Done => done = true,
             }
         }
         if changed {
             self.media_cache.clear();
         }
         if done {
+            self.job = None;
             self.loading_finished(ctx);
         } else {
             self.loader = Some(rx);
+        }
+    }
+
+    /// `true` when a dictionary arrived.
+    fn on_load_event(&mut self, ev: crate::loading::Event) -> bool {
+        use crate::loading::Event;
+        match ev {
+            Event::Progress(st) => {
+                self.load_progress = Some(st);
+                false
+            }
+            Event::Loaded {
+                dict,
+                path,
+                enabled,
+                ..
+            } => {
+                self.qm.attach(dict, &path, enabled);
+                self.loaded_count += 1;
+                true
+            }
+            Event::Failed(path, e) => {
+                // stays in the list, shown with ⚠ (never dropped)
+                self.load_errors.push(format!("{}: {}", path.display(), e));
+                let me = crate::registry::norm_path(&path);
+                let name = self
+                    .qm
+                    .index
+                    .as_ref()
+                    .and_then(|i| i.list_dictionaries(false).ok())
+                    .and_then(|rows| {
+                        rows.into_iter()
+                            .find(|r| crate::registry::norm_path(&r.path) == me)
+                            .map(|r| r.name)
+                    });
+                if let Some(n) = name {
+                    self.qm.note_failed(&n, &e);
+                }
+                false
+            }
         }
     }
 
@@ -1456,45 +1552,40 @@ impl DictzApp {
 
     // ------------------------------------------------------------ dictionaries
 
-    fn add_paths(&mut self, paths: Vec<PathBuf>) {
-        let mut added = 0;
+    /// Add dictionary files (and folders' dictionaries) — in the background.
+    fn add_paths(&mut self, ctx: &egui::Context, paths: Vec<PathBuf>) {
+        let rec = self.prefs.bool("dictionaries.recursive");
+        let mut files = Vec::new();
+        let mut scans: Vec<crate::loading::Scan> = Vec::new();
         for p in paths {
             let p = std::path::absolute(&p).unwrap_or(p);
             if p.is_dir() {
-                let files = scan_folder(&p, self.prefs.bool("dictionaries.recursive"));
-                self.add_paths(files);
-                continue;
-            }
-            match self.qm.add_dictionary(&p, false) {
-                Ok(name) => {
-                    added += 1;
-                    let n = self
-                        .qm
-                        .dictionary(&name)
-                        .map(|d| d.metadata().word_count)
-                        .unwrap_or(0);
-                    self.set_status(
-                        tr_args(
-                            "Yüklendi: {name} ({n} kelime)",
-                            &[("name", &name), ("n", &group(n))],
-                        ),
-                        4,
-                    );
-                }
-                Err(e) => {
-                    self.error = Some((tr("Yüklenemedi"), format!("{}\n\n{}", p.display(), e)))
-                }
+                scans.push(Box::new(move || scan_folder(&p, rec)));
+            } else {
+                files.push(p);
             }
         }
-        if added > 1 {
-            self.set_status(tr_args("{n} sözlük eklendi", &[("n", &added)]), 4);
+        if self.qm.index.is_none() {
+            // no data folder: read here (rare)
+            for p in files {
+                if let Err(e) = self.qm.add_dictionary(&p, false) {
+                    self.error = Some((tr("Yüklenemedi"), format!("{}\n\n{}", p.display(), e)));
+                }
+            }
+            self.media_cache.clear();
+            return;
         }
-        self.media_cache.clear();
+        if !files.is_empty() {
+            self.load_new_files(ctx, files);
+        }
+        if !scans.is_empty() {
+            self.queue_work(ctx, Vec::new(), scans, Vec::new());
+        }
     }
 
     /// Add dictionary files that are not in the list yet, in the background.
     fn load_new_files(&mut self, ctx: &egui::Context, files: Vec<PathBuf>) {
-        let mut known: std::collections::HashSet<String> = self
+        let known: std::collections::HashSet<String> = self
             .qm
             .index
             .as_ref()
@@ -1505,29 +1596,47 @@ impl DictzApp {
             .collect();
         let new: Vec<PathBuf> = files
             .into_iter()
-            .filter(|f| known.insert(crate::registry::norm_path(f)))
+            .filter(|f| !known.contains(&crate::registry::norm_path(f)))
             .collect();
         if new.is_empty() {
             self.set_status(tr("Yeni sözlük yok"), 4);
             return;
         }
-        if self.loader.is_some() || self.qm.index.is_none() {
-            self.add_paths(new);
-            return;
+        self.queue_work(ctx, new, Vec::new(), Vec::new());
+    }
+
+    /// Read dictionaries' files again (new article store + headword index) in
+    /// the background; each keeps its place.
+    fn rebuild_dictionaries(&mut self, ctx: &egui::Context, names: Vec<String>) {
+        let mut work = Vec::new();
+        for n in names {
+            let enabled = self.qm.is_enabled(&n);
+            // Windows: the store file must be closed to be replaced
+            if let Some(path) = self.qm.suspend(&n) {
+                work.push((n, path, enabled));
+            }
         }
-        self.loaded_count = 0;
-        self.load_errors.clear();
-        self.extra_load = true;
-        let db = self.data_dir.join(INDEX_DB);
-        let reindex = self.prefs.bool("dictionaries.reindex_on_change");
-        let (tx, rx) = channel();
-        let c = ctx.clone();
-        std::thread::spawn(move || load_job(db, Vec::new(), new, reindex, tx, c));
-        self.loader = Some(rx);
+        self.media_cache.clear();
+        if !work.is_empty() {
+            self.queue_work(ctx, Vec::new(), Vec::new(), work);
+        }
+    }
+
+    /// Scan every dictionary folder now (in the background) and add the new files.
+    fn rescan_folders(&mut self, ctx: &egui::Context) {
+        let prefs = self.prefs.clone();
+        let dir = self.data_dir.clone();
+        self.queue_work(
+            ctx,
+            Vec::new(),
+            vec![Box::new(move || scan_sources(&prefs, Some(&dir)))],
+            Vec::new(),
+        );
     }
 
     /// Keep `folder` in the dictionary folders (Preferences → Dictionaries;
-    /// scanned at every start) and add its dictionaries now.
+    /// scanned at every start) and add its dictionaries now (listed in the
+    /// background: a big folder tree must not stop the window).
     fn add_folder(&mut self, ctx: &egui::Context, folder: &Path) {
         if add_folder_source(&mut self.prefs, folder, None) {
             self.save_prefs();
@@ -1538,15 +1647,13 @@ impl DictzApp {
             .find(|(f, _)| *f == me)
             .map(|(_, r)| r)
             .unwrap_or(true);
-        let files = scan_folder(folder, rec);
-        if files.is_empty() {
-            self.error = Some((
-                tr("Klasör ekle"),
-                tr("Bu klasörde sözlük dosyası bulunamadı."),
-            ));
-            return;
-        }
-        self.load_new_files(ctx, files);
+        let folder = folder.to_path_buf();
+        self.queue_work(
+            ctx,
+            Vec::new(),
+            vec![Box::new(move || scan_folder(&folder, rec))],
+            Vec::new(),
+        );
     }
 
     fn play_audio(&mut self, dict: &str, name: &str) {
@@ -1767,7 +1874,7 @@ impl DictzApp {
                     .add_filter(tr("Tüm dosyalar"), &["*"])
                     .pick_files();
                 if let Some(p) = picked {
-                    self.add_paths(p);
+                    self.add_paths(ctx, p);
                 }
             }
             Action::AddFolderDialog => {
@@ -1786,14 +1893,11 @@ impl DictzApp {
                     self.add_folder(ctx, &d);
                 }
                 if !files.is_empty() {
-                    self.add_paths(files);
+                    self.add_paths(ctx, files);
                 }
             }
             Action::OpenManager => self.show_manager = true,
-            Action::RescanFolders => {
-                let files = scan_sources(&self.prefs, Some(&self.data_dir));
-                self.load_new_files(ctx, files);
-            }
+            Action::RescanFolders => self.rescan_folders(ctx),
             Action::OpenPreferences => self.prefs_win = Some(PrefsWindow::new(&self.prefs)),
             Action::About => self.show_about = true,
             Action::Shortcuts => self.show_shortcuts = true,
@@ -1981,23 +2085,8 @@ impl DictzApp {
                 }
                 self.media_cache.retain(|k, _| k.0 != name);
             }
-            Action::Reindex(names) => {
-                let mut n = 0;
-                let mut errors = Vec::new();
-                for name in names {
-                    // reads the file again: new article store + headword index
-                    match self.qm.rebuild(&name) {
-                        Ok(_) => n += 1,
-                        Err(e) => errors.push(format!("{}: {}", name, e)),
-                    }
-                }
-                self.media_cache.clear();
-                if errors.is_empty() {
-                    self.set_status(tr_args("{n} sözlük yeniden indekslendi.", &[("n", &n)]), 4);
-                } else {
-                    self.error = Some((tr("İndeks"), errors.join("\n")));
-                }
-            }
+            // read again in the background (progress in the status bar)
+            Action::Reindex(names) => self.rebuild_dictionaries(ctx, names),
             Action::Info(name) => self.info = Some(name),
             Action::RemoveHistory(w) => {
                 if let Some(h) = &self.history {
@@ -2018,11 +2107,17 @@ impl DictzApp {
         match a {
             Advanced::OpenData => self.apply(ctx, Action::OpenDataDir),
             Advanced::Rescan => {
-                let files = match self.prefs_win.as_ref() {
-                    Some(w) => scan_sources(&w.draft, Some(&self.data_dir)),
-                    None => scan_sources(&self.prefs, Some(&self.data_dir)),
+                let prefs = match self.prefs_win.as_ref() {
+                    Some(w) => w.draft.clone(),
+                    None => self.prefs.clone(),
                 };
-                self.load_new_files(ctx, files);
+                let dir = self.data_dir.clone();
+                self.queue_work(
+                    ctx,
+                    Vec::new(),
+                    vec![Box::new(move || scan_sources(&prefs, Some(&dir)))],
+                    Vec::new(),
+                );
             }
             Advanced::Reindex => {
                 let names = self.qm.loaded_names();
@@ -3238,16 +3333,52 @@ impl DictzApp {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if let Some((i, n, name)) = &self.load_progress {
-                ui.add(
-                    egui::ProgressBar::new(*i as f32 / (*n).max(1) as f32)
-                        .desired_width(140.0)
-                        .show_percentage(),
-                );
-                ui.label(tr_args(
-                    "Sözlükler yükleniyor ({i}/{n}): {name}",
-                    &[("i", i), ("n", n), ("name", name)],
-                ));
+            if let Some(st) = self.load_progress.clone().filter(|_| self.loader.is_some()) {
+                // the load: text, a bar with the share done (the running
+                // dictionaries' parts counted) and a stop button
+                use crate::loading::Phase;
+                let scanning = st.phase == Phase::Scan && st.total == 0;
+                let mut text = if scanning {
+                    tr("Klasörler taranıyor…").to_string()
+                } else {
+                    let names = if st.running.is_empty() {
+                        "…".to_string()
+                    } else {
+                        st.names()
+                    };
+                    tr_args(
+                        "Sözlükler yükleniyor ({i}/{n}): {name}",
+                        &[("i", &st.done), ("n", &st.total), ("name", &names)],
+                    )
+                };
+                if st.cancelling {
+                    text = format!("{} {}", tr("Durduruluyor…"), text);
+                }
+                let bar = if scanning {
+                    egui::ProgressBar::new(0.0).animate(true)
+                } else {
+                    egui::ProgressBar::new(st.fraction()).show_percentage()
+                };
+                ui.add(bar.desired_width(220.0).desired_height(14.0));
+                if super::uiicons::button(ui, "close", &tr("Durdur"), false, !st.cancelling)
+                    .clicked()
+                {
+                    if let Some(h) = &self.job {
+                        h.cancel();
+                    }
+                }
+                let tip: Vec<String> = st
+                    .running
+                    .iter()
+                    .map(|(n, f)| match f {
+                        Some(f) => format!("{} — {}%", n, (f * 100.0) as u32),
+                        None => format!("{} — {}", n, tr("okunuyor")),
+                    })
+                    .collect();
+                let label = ui.add(egui::Label::new(&text).truncate());
+                if !tip.is_empty() {
+                    label.on_hover_text(format!("{}\n\n{}", text, tip.join("\n")));
+                }
             } else if let Some((msg, at, secs)) = self
                 .status
                 .as_ref()
@@ -3457,8 +3588,7 @@ impl DictzApp {
                         }
                         if folder_sources(&self.prefs) != before {
                             // new folders: their dictionaries are added now
-                            let files = scan_sources(&self.prefs, Some(&self.data_dir));
-                            self.load_new_files(ctx, files);
+                            self.rescan_folders(ctx);
                         }
                         if matches!(e, prefs_window::Event::Ok) {
                             keep = false;
@@ -3695,66 +3825,6 @@ impl DictzApp {
     }
 }
 
-fn load_job(
-    db: PathBuf,
-    rows: Vec<crate::index::DictionaryRow>,
-    new_files: Vec<PathBuf>,
-    reindex: bool,
-    tx: Sender<LoadMsg>,
-    ctx: egui::Context,
-) {
-    let mut store = IndexStore::open(&db).ok();
-    let data_dir = db.parent().map(Path::to_path_buf).unwrap_or_default();
-    // from the article store: nothing is parsed unless the file changed
-    let open = |p: &Path| crate::articles::open_cached(p, &data_dir, false);
-    let open_row = |r: &crate::index::DictionaryRow, s: Option<&IndexStore>| {
-        QueryManager::open_row(r, &data_dir, s)
-    };
-    let total = rows.len() + new_files.len();
-    let mut i = 0;
-    let send = |m: LoadMsg| {
-        let _ = tx.send(m);
-        ctx.request_repaint();
-    };
-    for row in rows {
-        i += 1;
-        send(LoadMsg::Progress(i, total, file_name(&row.path)));
-        // from dictionaries.json: nothing is read unless the files changed
-        match open_row(&row, store.as_ref()) {
-            Ok((mut d, built)) => {
-                d.metadata_mut().name = row.name.clone();
-                if row.changed() && (built || reindex) {
-                    if let Some(s) = store.as_mut() {
-                        let _ = s.index_dictionary(d.as_ref());
-                    }
-                }
-                send(LoadMsg::Loaded(d, row.path.clone(), row.enabled));
-            }
-            Err(e) => send(LoadMsg::Failed(row.path.clone(), e.to_string())),
-        }
-    }
-    for f in new_files {
-        i += 1;
-        send(LoadMsg::Progress(i, total, file_name(&f)));
-        match open(&f) {
-            Ok((mut d, _built)) => {
-                if let Some(s) = store.as_mut() {
-                    // a unique name in the list ("Name (2)")
-                    if let Ok(name) = s.register_dictionary(d.as_ref()) {
-                        d.metadata_mut().name = name;
-                    }
-                    if !s.is_indexed(&d.metadata().name).unwrap_or(false) {
-                        let _ = s.index_dictionary(d.as_ref());
-                    }
-                }
-                send(LoadMsg::Loaded(d, f.clone(), true));
-            }
-            Err(e) => send(LoadMsg::Failed(f.clone(), e.to_string())),
-        }
-    }
-    send(LoadMsg::Done);
-}
-
 impl eframe::App for DictzApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_no += 1;
@@ -3870,6 +3940,9 @@ impl eframe::App for DictzApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some(h) = &self.job {
+            h.stop(); // workers end with the program; their temp files go later
+        }
         self.close_popup();
         self.services.stop();
         self.save_state();
@@ -3966,12 +4039,6 @@ fn or_dash(s: &str) -> String {
     } else {
         s.to_string()
     }
-}
-
-fn file_name(p: &Path) -> String {
-    p.file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default()
 }
 
 /// 12345 → "12,345" (same grouping as the Python edition's `{:,}`).

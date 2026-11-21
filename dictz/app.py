@@ -34,6 +34,10 @@ def user_data_dir() -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     """``dictz`` entry point: no arguments (or only files) → window, else CLI."""
+    import multiprocessing
+
+    # a frozen (PyInstaller) build starts its worker processes through this exe
+    multiprocessing.freeze_support()
     args = list(sys.argv[1:] if argv is None else argv)
     from .cli import is_cli_invocation
     from .cli import main as cli_main

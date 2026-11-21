@@ -822,6 +822,16 @@ pub static SCHEMA: &[Setting] = &[
         choices: &[],
     },
     Setting {
+        key: "dictionaries.build_workers",
+        kind: Kind::Int,
+        default: Def::Int(0),
+        label: "Aynı anda hazırlanan sözlük",
+        help: "Yeni ya da değişmiş sözlükler ayrı işlemlerde, bu kadarı aynı anda okunur. 0 = otomatik (işlemci sayısı − 1, en çok 4). Her biri ayrıca bellek kullanır.",
+        min: Some(0.0),
+        max: Some(16.0),
+        choices: &[],
+    },
+    Setting {
         key: "audio.auto_play",
         kind: Kind::Bool,
         default: Def::Bool(false),

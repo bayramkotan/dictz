@@ -309,13 +309,16 @@ class QueryManager:
         return self.index_store.index_dictionary(d) if self.index_store is not None else d.metadata.word_count
 
     def attach(self, dictionary: Dictionary, path: Path | str, enabled: bool = True) -> None:
-        """Add an already-loaded dictionary at the end of the list (no indexing)."""
+        """Add an already-loaded dictionary at the end of the list (no indexing);
+        one with a name already there (a rebuilt dictionary) keeps its place."""
         name = dictionary.metadata.name
         self.failed.pop(name, None)
-        if name in self.dictionaries:
-            self._order.remove(name)
+        old = self.dictionaries.get(name)
+        if old is not None and old is not dictionary:
+            old.close()
         self.dictionaries[name] = dictionary
-        self._order.append(name)
+        if name not in self._order:
+            self._order.append(name)
         self._media[name] = MediaResolver(path)
         if enabled:
             self.enabled_names.add(name)

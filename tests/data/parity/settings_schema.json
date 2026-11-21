@@ -669,6 +669,15 @@
   "help": "Dosya değiştiyse açılışta indeksi yeniden oluşturur."
  },
  {
+  "key": "dictionaries.build_workers",
+  "kind": "int",
+  "default": 0,
+  "label": "Aynı anda hazırlanan sözlük",
+  "help": "Yeni ya da değişmiş sözlükler ayrı işlemlerde, bu kadarı aynı anda okunur. 0 = otomatik (işlemci sayısı − 1, en çok 4). Her biri ayrıca bellek kullanır.",
+  "min": 0,
+  "max": 16
+ },
+ {
   "key": "audio.auto_play",
   "kind": "bool",
   "default": false,

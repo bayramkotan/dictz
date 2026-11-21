@@ -162,6 +162,10 @@ SCHEMA: list[Setting] = [
     Setting("dictionaries.scan_on_startup", "bool", True, "Açılışta klasörleri tara"),
     Setting("dictionaries.reindex_on_change", "bool", True, "Değişen sözlüğün indeksini yenile",
             "Dosya değiştiyse açılışta indeksi yeniden oluşturur."),
+    Setting("dictionaries.build_workers", "int", 0, "Aynı anda hazırlanan sözlük",
+            "Yeni ya da değişmiş sözlükler ayrı işlemlerde, bu kadarı aynı anda okunur. "
+            "0 = otomatik (işlemci sayısı − 1, en çok 4). Her biri ayrıca bellek kullanır.",
+            min=0, max=16),
     # --------------------------------------------------------------- audio
     Setting("audio.auto_play", "bool", False, "Aramada ilk sesi otomatik çal"),
     Setting("audio.volume", "int", 80, "Ses düzeyi", "%", min=0, max=100),

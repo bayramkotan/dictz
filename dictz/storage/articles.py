@@ -31,7 +31,7 @@ import os
 import sqlite3
 import zlib
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from ..parsers.base import Dictionary, DictionaryEntry
 
@@ -124,8 +124,11 @@ def is_fresh(store: Path | str, source: Path | str) -> bool:
     return bool(meta) and meta.get("version") == STORE_VERSION and meta.get("stamp") == source_stamp(source)
 
 
-def build(dictionary: Dictionary, store: Path | str, builder: str = "python") -> int:
+def build(dictionary: Dictionary, store: Path | str, builder: str = "python",
+          progress: Callable[[int, int], None] | None = None) -> int:
     """Write every article of a loaded ``dictionary`` to ``store``; returns the count.
+
+    ``progress(done, total)`` is called every few thousand articles.
 
     Written to a temporary file first and renamed, so a half-written store is
     never used.
@@ -138,6 +141,7 @@ def build(dictionary: Dictionary, store: Path | str, builder: str = "python") ->
     with contextlib.suppress(OSError):
         tmp.unlink()
     m = dictionary.metadata
+    total = m.word_count or 0
     count = 0
     con = sqlite3.connect(str(tmp))
     try:
@@ -152,6 +156,8 @@ def build(dictionary: Dictionary, store: Path | str, builder: str = "python") ->
                 con.executemany("INSERT INTO articles (word, folded, z, body) VALUES (?, ?, ?, ?)", rows)
                 count += len(rows)
                 rows.clear()
+                if progress is not None:
+                    progress(count, max(total, count))
         if rows:
             con.executemany("INSERT INTO articles (word, folded, z, body) VALUES (?, ?, ?, ?)", rows)
             count += len(rows)
@@ -180,6 +186,18 @@ def build(dictionary: Dictionary, store: Path | str, builder: str = "python") ->
     return count
 
 
+def remove_stale_temp(data_dir: Path | str) -> None:
+    """Remove temp files of stores whose writer was stopped (the program quit
+    while a dictionary was being read). Only files older than an hour: a
+    younger one may belong to the other edition, writing right now."""
+    import time
+
+    for tmp in (Path(data_dir) / STORE_DIR).glob(".*.tmp"):
+        with contextlib.suppress(OSError):
+            if time.time() - tmp.stat().st_mtime >= 3600:
+                tmp.unlink()
+
+
 class StoredDictionary(Dictionary):
     """A dictionary served from its article store (nothing parsed)."""
 
@@ -191,6 +209,7 @@ class StoredDictionary(Dictionary):
         self._con: sqlite3.Connection | None = None
         self._words: list[str] | None = None
         self.lazy = meta is not None  # opened from the list alone
+        self.suspended = False  # being rebuilt: closed, answers nothing
         if meta is None:
             meta = read_meta(self.store) or {}
         m = self.metadata
@@ -212,7 +231,15 @@ class StoredDictionary(Dictionary):
         self._con = sqlite3.connect(f"file:{self.store.as_posix()}?mode=ro", uri=True, check_same_thread=False)
         self._loaded = True
 
+    def suspend(self) -> None:
+        """Close the store and answer nothing until replaced (its file is being
+        rebuilt by a worker; on Windows an open file cannot be replaced)."""
+        self.suspended = True
+        self.close()
+
     def _rows(self, sql: str, args: tuple) -> list[tuple[str, int, bytes]]:
+        if self.suspended:
+            return []
         if not self._loaded:
             self.load()
         assert self._con is not None
@@ -241,6 +268,8 @@ class StoredDictionary(Dictionary):
         return list(self._words)
 
     def iter_entries(self) -> Iterator[DictionaryEntry]:
+        if self.suspended:
+            return
         if not self._loaded:
             self.load()
         assert self._con is not None
