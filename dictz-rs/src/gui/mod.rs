@@ -62,7 +62,31 @@ pub fn run(
 ) -> Result<(), String> {
     let _ = std::fs::create_dir_all(&data_dir);
     let mut prefs = Preferences::load(&data_dir.join(SETTINGS_FILE));
+    // held until the window closes (this function blocks until then)
+    let mut _lock = None;
     if prefs.bool("general.single_instance") {
+        match crate::instance::InstanceLock::acquire(&data_dir) {
+            Some(l) => _lock = Some(l),
+            None => {
+                // another dictz (either edition) runs — maybe still starting or
+                // busy: hand the request over when it answers, never open a
+                // second window
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+                while std::time::Instant::now() < deadline {
+                    let ping = crate::instance::send(
+                        &data_dir,
+                        &serde_json::json!({"cmd": "ping"}),
+                        std::time::Duration::from_secs(1),
+                    );
+                    if ping.is_some() && (autostart || hand_over(&data_dir, &files, &popup)) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+                return Ok(());
+            }
+        }
+        // an older dictz without the lock may still run
         if autostart {
             // already running: a log-in start changes nothing
             if crate::instance::send(

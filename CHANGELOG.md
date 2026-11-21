@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-11-21
+
+Speaker-only sound buttons, one dictz window ever, and a tray icon from the start — in **both editions**.
+
+### Changed
+- **Sound buttons show only a speaker icon** (dictz's own `sound` icon, in the link colour); the file name is in the tooltip ("Sesi çal — house_gb.wav") instead of next to every sound in the article.
+
+### Fixed
+- **Only one dictz runs.** A second start — by hand, at log-in, or of the other edition — no longer opens a second window: both editions take an operating-system lock on `instance.lock` in the data folder, and a second start hands its request (show the window, add files, open the popup) to the running one, even while that one is still starting or busy. Before, a window that did not answer within a second (still loading) let a second one open.
+- **Tray icon from the start:** when the desktop's tray is not ready yet (at log-in), the Python edition tries again every 2 seconds for a minute instead of giving up.
+- Start with the system, the tray icon, close / start to tray and single instance are all in **Preferences → General**.
+
+### Changed (Rust edition)
+- Minimum Rust version 1.89 (`File::try_lock`).
+
 ## [0.1.5] — 2026-11-21
 
 Dictionaries are added in the background, several at once, and the pictures and sounds of GoldenDict packs are found — in **both editions**.

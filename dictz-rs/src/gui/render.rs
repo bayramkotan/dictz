@@ -279,14 +279,24 @@ pub fn lines(
                     }
                     Inline::Audio(src) => {
                         let id = egui::Id::new(("audio", dict_key, li, ii, src));
-                        let b = egui::Button::new(
-                            RichText::new(format!("🔊 {}", short(src))).size(size * 0.85),
-                        )
-                        .small();
-                        if ui
-                            .push_id(id, |ui| ui.add(b))
-                            .inner
-                            .on_hover_text(tr("Sesi çal"))
+                        // only the speaker; the file name is in the tooltip
+                        let tint = ui.visuals().hyperlink_color;
+                        let tip = format!("{} — {}", tr("Sesi çal"), short(src));
+                        let resp = ui
+                            .push_id(id, |ui| {
+                                match super::uiicons::image(ui.ctx(), "sound", size * 1.3, tint) {
+                                    Some(img) => ui.add(
+                                        egui::Button::image(img)
+                                            .frame(false)
+                                            .min_size(egui::vec2(size * 1.4, size)),
+                                    ),
+                                    None => ui.add(egui::Button::new("🔊").small()),
+                                }
+                            })
+                            .inner;
+                        if resp
+                            .on_hover_cursor(CursorIcon::PointingHand)
+                            .on_hover_text(tip)
                             .clicked()
                         {
                             clicks.push(Click::Audio(src.clone()));

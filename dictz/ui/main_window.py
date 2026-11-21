@@ -1502,11 +1502,20 @@ class MainWindow(QMainWindow):
         self.scan_action.blockSignals(True)
         self.scan_action.setChecked(self._scan_on)
         self.scan_action.blockSignals(False)
-        # tray (always there when dictz starts with the system)
-        if (p["general.tray_icon"] or p["general.autostart"]) and QSystemTrayIcon.isSystemTrayAvailable():
+        # tray: from the start, however dictz was started (always there when it
+        # starts with the system)
+        want_tray = bool(p["general.tray_icon"] or p["general.autostart"])
+        if want_tray and QSystemTrayIcon.isSystemTrayAvailable():
             if self.tray is None:
                 self._build_tray()
             self.tray.show()
+        elif want_tray:
+            # at log-in the panel's tray often comes up after dictz: try again
+            # every 2 s for a minute
+            tries = getattr(self, "_tray_tries", 0)
+            if tries < 30:
+                self._tray_tries = tries + 1
+                QTimer.singleShot(2000, self._apply_scan_prefs)
         elif self.tray is not None:
             self.tray.hide()
         if self.tray is not None:

@@ -16,6 +16,41 @@ use serde_json::{json, Value};
 
 /// File in the data folder.
 pub const INSTANCE_FILE: &str = "instance.json";
+/// The single-instance lock file in the data folder.
+pub const LOCK_FILE: &str = "instance.lock";
+
+/// Only one dictz window per data folder — of either edition.
+///
+/// An operating-system lock on `instance.lock` ([`std::fs::File::try_lock`]:
+/// `flock` on Linux / macOS, `LockFileEx` on Windows — the same locks the
+/// Python edition takes), held until the program ends; the system drops it
+/// when the process dies, so it is never stale. Unlike the port in
+/// `instance.json` it also holds while the first window is starting or busy.
+pub struct InstanceLock {
+    _file: Option<std::fs::File>,
+}
+
+impl InstanceLock {
+    /// `Some` = this process is the one; `None` = another dictz runs.
+    pub fn acquire(data_dir: &Path) -> Option<Self> {
+        let _ = std::fs::create_dir_all(data_dir);
+        let file = match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(data_dir.join(LOCK_FILE))
+        {
+            Ok(f) => f,
+            // cannot lock (read-only folder): do not stop dictz
+            Err(_) => return Some(Self { _file: None }),
+        };
+        match file.try_lock() {
+            Ok(()) => Some(Self { _file: Some(file) }),
+            Err(std::fs::TryLockError::WouldBlock) => None,
+            Err(std::fs::TryLockError::Error(_)) => Some(Self { _file: None }),
+        }
+    }
+}
 const MAX_REQUEST: u64 = 1 << 20;
 
 /// Path of `instance.json`.
@@ -186,6 +221,23 @@ mod tests {
         assert!(is_running(&d));
         s.stop();
         assert!(!info_path(&d).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn the_lock_is_exclusive_until_dropped() {
+        let d = std::env::temp_dir().join(format!("dictz-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let first = InstanceLock::acquire(&d).expect("first");
+        assert!(first._file.is_some());
+        assert!(InstanceLock::acquire(&d).is_none()); // a second one is refused
+        drop(first);
+        assert!(InstanceLock::acquire(&d).is_some());
         let _ = std::fs::remove_dir_all(&d);
     }
 }

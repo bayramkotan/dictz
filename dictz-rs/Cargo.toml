@@ -1,8 +1,8 @@
 [package]
 name = "dictz"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.89"
 authors = ["Bayram Kotan"]
 description = "dictz — cross-platform, multi-format offline dictionary (StarDict, DSL, Babylon) with a desktop GUI. Rust edition of github.com/bayramkotan/dictz"
 documentation = "https://docs.rs/dictz"

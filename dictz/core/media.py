@@ -25,6 +25,8 @@ import re
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from .i18n import t
+
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp"}
 AUDIO_EXTENSIONS = {"wav", "mp3", "ogg", "oga", "flac"}
 
@@ -174,6 +176,11 @@ _SOUND_LINK = re.compile(r'(<a\b[^>]*?\bhref\s*=\s*)(["\'])sound://(.*?)\2', re.
 
 AUDIO_SCHEME = "dictz-audio"
 
+# the "sound" icon of dictz's own set (dictz/resources/icons/sound.svg), in the text colour
+SPEAKER_SVG = ('<svg class="dz-speaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+               'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+               '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>')
+
 
 def audio_url(dictionary: str, name: str) -> str:
     from urllib.parse import quote
@@ -215,9 +222,10 @@ def rewrite_media_html(definition: str, dictionary: str, resolver: MediaResolver
         return f'{m.group(1)}{m.group(2)}data:{mime};base64,{base64.b64encode(data).decode()}{m.group(2)}'
 
     def obj(m: re.Match) -> str:
+        # only the speaker; the file name is in the tooltip
         name = html.unescape(m.group(2))
-        label = html.escape(name.rsplit("/", 1)[-1])
-        return f'<a class="dz-audio" href="{html.escape(audio_url(dictionary, name))}" title="Sesi çal">🔊 {label}</a>'
+        tip = html.escape(f"{t('Sesi çal')} — {name.rsplit('/', 1)[-1]}")
+        return f'<a class="dz-audio" href="{html.escape(audio_url(dictionary, name))}" title="{tip}">{SPEAKER_SVG}</a>'
 
     def sound(m: re.Match) -> str:
         name = html.unescape(m.group(3))

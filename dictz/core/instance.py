@@ -26,7 +26,53 @@ from pathlib import Path
 from typing import Any
 
 INSTANCE_FILE = "instance.json"
+LOCK_FILE = "instance.lock"
 MAX_REQUEST = 1 << 20
+
+
+class InstanceLock:
+    """Only one dictz window per data folder — of either edition.
+
+    An operating-system lock on ``instance.lock`` (POSIX ``flock``, Windows
+    ``LockFileEx`` through ``msvcrt.locking``), held until the program ends;
+    the system drops it when the process dies, so it is never stale. The Rust
+    edition takes the same lock (``std::fs::File::try_lock``), which is the
+    same kind of lock on every system. Unlike the port in ``instance.json``
+    it also holds while the first window is still starting or busy.
+    """
+
+    def __init__(self, data_dir: Path):
+        self.path = Path(data_dir) / LOCK_FILE
+        self._f = None
+
+    def acquire(self) -> bool:
+        """``True`` = this process is the one; ``False`` = another dictz runs."""
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            f = open(self.path, "a+b")  # noqa: SIM115 — held for the program's life
+        except OSError:
+            return True  # cannot lock (read-only folder): do not stop dictz
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.close()
+            return False
+        self._f = f
+        return True
+
+    def release(self) -> None:
+        if self._f is not None:
+            with contextlib.suppress(OSError):
+                self._f.close()  # closing drops the lock
+            self._f = None
 
 
 def info_path(data_dir: Path) -> Path:

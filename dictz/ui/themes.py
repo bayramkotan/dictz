@@ -191,8 +191,10 @@ details.dict[open] > summary .chev {{ transform: none; }}
 .definition img {{ max-width: 100%; max-height: {img_h}px; vertical-align: middle; }}
 .definition p {{ margin: .25em 0; }}
 .definition ul, .definition ol {{ margin: .2em 0; padding-left: 1.4em; }}
-a.dz-audio {{ display: inline-block; padding: 0 6px; margin: 0 2px; border-radius: 3px; background: {card};
-        border: 1px solid {border}; font-size: 0.85em; }}
+a.dz-audio {{ display: inline-block; padding: 0 2px; margin: 0 1px; border-radius: 3px;
+        vertical-align: -0.25em; line-height: 1; text-decoration: none; }}
+a.dz-audio:hover {{ background: {card}; }}
+a.dz-audio svg.dz-speaker {{ width: 1.3em; height: 1.3em; display: block; }}
 ul.did-you-mean {{ list-style: none; padding-left: 0; }}
 ul.did-you-mean li {{ margin: 3px 0; }}
 .score {{ color: {muted}; font-size: 0.8em; margin-left: 6px; }}

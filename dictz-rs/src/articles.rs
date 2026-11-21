@@ -207,7 +207,7 @@ pub fn build_with(
                 let (z, body) = pack(&defi);
                 ins.execute(params![w, w.to_lowercase(), z, body])?;
                 count += 1;
-                if count % 5000 == 0 {
+                if count.is_multiple_of(5000) {
                     progress(count, total.max(count));
                 }
             }

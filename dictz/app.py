@@ -85,6 +85,9 @@ def _hand_over(data_dir: Path, files: list[str], popup: str | None, autostart: b
     return True
 
 
+_instance_lock = None  # the single-instance lock, kept for the program's life
+
+
 def run_gui(files: list[str] | None = None, popup: str | None = None, autostart: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
@@ -115,9 +118,23 @@ def run_gui(files: list[str] | None = None, popup: str | None = None, autostart:
 
     data_dir = user_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    if Preferences.load(data_dir / SETTINGS_FILE)["general.single_instance"] and _hand_over(
-            data_dir, files or [], popup, autostart):
-        return 0
+    global _instance_lock
+    if Preferences.load(data_dir / SETTINGS_FILE)["general.single_instance"]:
+        from .core.instance import InstanceLock
+
+        lock = InstanceLock(data_dir)
+        if not lock.acquire():
+            # another dictz (either edition) runs — maybe still starting or busy:
+            # hand the request over when it answers, never open a second window
+            import time
+
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and not _hand_over(data_dir, files or [], popup, autostart):
+                time.sleep(0.3)
+            return 0
+        _instance_lock = lock  # held until the program ends
+        if _hand_over(data_dir, files or [], popup, autostart):  # an older dictz without the lock
+            return 0
 
     index_store = IndexStore(data_dir / "dictz_index.db")
     index_store.open()
