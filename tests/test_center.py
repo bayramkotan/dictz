@@ -329,3 +329,12 @@ def test_build_and_check_catalog(tmp_path: Path) -> None:
     n, problems = check_catalog({"dictionaries": [{"id": "a"}, {"id": "a"}]})
     assert any("twice" in p for p in problems) and any("no files" in p for p in problems)
     assert ifo.exists()
+
+
+def test_file_links_same_in_both_editions() -> None:
+    from dictz.center.net import local_path_text
+
+    golden = json.loads((Path(__file__).parent / "data" / "parity" / "filelinks_golden.json").read_text("utf-8"))
+    for g in golden:
+        assert local_path_text(g["url"], False) == g["posix"], g["url"]
+        assert local_path_text(g["url"], True) == g["windows"], g["url"]

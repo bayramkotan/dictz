@@ -25,12 +25,11 @@ import time
 import zipfile
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlsplit
 
 from . import adapters
 from .catalog import now_iso
 from .model import archive_of
-from .net import Cancelled, Http, auth_headers
+from .net import Cancelled, Http, auth_headers, local_path
 from .sources import Sources, center_dir, slug
 from .store import JsonFile
 
@@ -202,10 +201,8 @@ class Installer:
     def fetch(self, f: dict, headers: dict, progress: Callable[[int, int], None] | None,
               cancelled: Callable[[], bool] | None) -> Path:
         url = f["url"]
-        if url.startswith("file:"):
-            from urllib.request import url2pathname
-
-            p = Path(url2pathname(unquote(urlsplit(url).path)))
+        p = local_path(url)
+        if p is not None:
             if not p.is_file():
                 raise InstallError(f"no such file: {p}")
             return p

@@ -1,0 +1,72 @@
+[
+ {
+  "url": "file:///home/x/a%20b.zip",
+  "posix": "/home/x/a b.zip",
+  "windows": "\\home\\x\\a b.zip"
+ },
+ {
+  "url": "file:/home/x",
+  "posix": "/home/x",
+  "windows": "\\home\\x"
+ },
+ {
+  "url": "file://localhost/home/x",
+  "posix": "/home/x",
+  "windows": "\\home\\x"
+ },
+ {
+  "url": "FILE:///tmp/y",
+  "posix": "/tmp/y",
+  "windows": "\\tmp\\y"
+ },
+ {
+  "url": "file:///C:/d/x.zip",
+  "posix": "C:/d/x.zip",
+  "windows": "C:\\d\\x.zip"
+ },
+ {
+  "url": "file://C:/d/x.zip",
+  "posix": "C:/d/x.zip",
+  "windows": "C:\\d\\x.zip"
+ },
+ {
+  "url": "file://C:\\d\\x.zip",
+  "posix": "C:\\d\\x.zip",
+  "windows": "C:\\d\\x.zip"
+ },
+ {
+  "url": "file:C:\\d\\x.zip",
+  "posix": "C:\\d\\x.zip",
+  "windows": "C:\\d\\x.zip"
+ },
+ {
+  "url": "file:///C|/d/x",
+  "posix": "C:/d/x",
+  "windows": "C:\\d\\x"
+ },
+ {
+  "url": "file://srv/share/x",
+  "posix": "//srv/share/x",
+  "windows": "\\\\srv\\share\\x"
+ },
+ {
+  "url": "file:///x?y#z",
+  "posix": "/x",
+  "windows": "\\x"
+ },
+ {
+  "url": "file:///D:/S%C3%B6zl%C3%BCk/a.dsl",
+  "posix": "D:/Sözlük/a.dsl",
+  "windows": "D:\\Sözlük\\a.dsl"
+ },
+ {
+  "url": "https://a/b",
+  "posix": null,
+  "windows": null
+ },
+ {
+  "url": "file",
+  "posix": null,
+  "windows": null
+ }
+]

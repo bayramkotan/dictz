@@ -319,3 +319,18 @@ fn download_queue_installs_in_the_background() {
     assert_eq!(q.snapshot()[0].state, "done");
     assert_eq!(q.active(), 0);
 }
+
+#[test]
+fn file_links_same_as_python() {
+    use dictz::center::net::local_path_text;
+    let golden: Value = serde_json::from_str(
+        &std::fs::read_to_string(root().join("parity/filelinks_golden.json")).unwrap(),
+    )
+    .unwrap();
+    for g in golden.as_array().unwrap() {
+        let url = g["url"].as_str().unwrap();
+        let want = |k: &str| g[k].as_str().map(String::from);
+        assert_eq!(local_path_text(url, false), want("posix"), "{}", url);
+        assert_eq!(local_path_text(url, true), want("windows"), "{}", url);
+    }
+}

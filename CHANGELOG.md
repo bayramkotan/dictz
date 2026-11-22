@@ -28,6 +28,9 @@ The **Dictionary Center**: find, download, install, update and remove free dicti
 - `docs/CATALOG.md` — the catalog format, sidecar `<file>.json`, licences, source types; `docs/dictz-data/` — the starting point of the dictz-data server repository.
 - Six new interface icons (download, upload, link, server, center, license); 211 new texts in all 25 interface languages.
 
+### Fixed
+- `file:` links are read the same way in both editions and on every system: `file:///C:/x`, `file://C:/x`, `file://C:\x`, `file:C:\x`, `file:///C|/x`, `file://localhost/x` and UNC `file://host/share/x` (the Rust edition read `file://C:\…` as a host name on Windows).
+
 ### Changed
 - dictz now goes online also for the Dictionary Center's sources, only when it is used; `center.online` switches it off.
 

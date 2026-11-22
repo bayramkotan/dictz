@@ -67,17 +67,51 @@ pub fn auth_headers(src: &Source, password: &str, token: &str) -> Vec<(String, S
     }
 }
 
-/// The path of a `file:` link (`file:///x`, `file:/x`; `/C:/x` → `C:/x` on
-/// Windows); `None` for other links.
-pub fn local_path(url: &str) -> Option<std::path::PathBuf> {
-    if !url.starts_with("file:") {
+/// The path of a `file:` link as text — the same rules as the Python
+/// edition's `local_path_text`: `file:///home/x`, `file:/home/x`,
+/// `file://localhost/x` → `/home/x`; `file:///C:/x`, `file://C:/x`,
+/// `file://C:\x`, `file:C:\x`, `file:///C|/x` → `C:/x` (`C:\x` with
+/// `windows`); `file://host/share/x` → `//host/share/x`. Query and fragment
+/// are dropped, `%xx` decoded. `None` for other links.
+pub fn local_path_text(url: &str, windows: bool) -> Option<String> {
+    if url.len() < 5 || !url.is_char_boundary(5) || !url[..5].eq_ignore_ascii_case("file:") {
         return None;
     }
-    let mut p = crate::center::util::unquote(&crate::center::util::urlsplit(url).2);
-    if cfg!(windows) && p.len() > 2 && p.as_bytes()[2] == b':' {
-        p.remove(0);
+    let rest = &url[5..];
+    let rest = rest.split('#').next().unwrap_or("");
+    let rest = rest.split('?').next().unwrap_or("");
+    let drive = |t: &str| {
+        let b = t.as_bytes();
+        b.len() >= 2 && b[0].is_ascii_alphabetic() && (b[1] == b':' || b[1] == b'|')
+    };
+    let path = match rest.strip_prefix("//") {
+        Some(r) if r.starts_with('/') || drive(r) => r.to_string(),
+        Some(r) => {
+            let (host, tail) = r.split_once('/').unwrap_or((r, ""));
+            if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
+                format!("/{}", tail)
+            } else {
+                format!("//{}/{}", host, tail)
+            }
+        }
+        None => rest.to_string(),
+    };
+    let mut path = crate::center::util::unquote(&path);
+    if path.len() >= 3 && (path.starts_with('/') || path.starts_with('\\')) && drive(&path[1..]) {
+        path.remove(0);
     }
-    Some(std::path::PathBuf::from(p))
+    if drive(&path) && path.as_bytes()[1] == b'|' {
+        path.replace_range(1..2, ":");
+    }
+    if windows {
+        path = path.replace('/', "\\");
+    }
+    Some(path)
+}
+
+/// [`local_path_text`] as a path on this system.
+pub fn local_path(url: &str) -> Option<std::path::PathBuf> {
+    local_path_text(url, cfg!(windows)).map(std::path::PathBuf::from)
 }
 
 /// Anything adapters can read through (tests answer from files).

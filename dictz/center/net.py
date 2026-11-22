@@ -24,6 +24,45 @@ USER_AGENT = f"dictz/{__version__} (+https://github.com/bayramkotan/dictz)"
 CHUNK = 256 * 1024
 
 
+def local_path_text(url: str, windows: bool | None = None) -> str | None:
+    """The path of a ``file:`` link as text, the same in both editions:
+    ``file:///home/x``, ``file:/home/x``, ``file://localhost/x`` → ``/home/x``;
+    ``file:///C:/x``, ``file://C:/x``, ``file://C:\\x``, ``file:C:\\x``,
+    ``file:///C|/x`` → ``C:/x`` (``C:\\x`` with ``windows``); ``file://host/share/x``
+    → ``//host/share/x``. Query and fragment are dropped, ``%xx`` decoded.
+    ``None`` for other links."""
+    from urllib.parse import unquote
+
+    if url[:5].lower() != "file:":
+        return None
+    if windows is None:
+        windows = os.name == "nt"
+    rest = url[5:].split("#", 1)[0].split("?", 1)[0]
+    if rest.startswith("//"):
+        r = rest[2:]
+        if r.startswith("/") or (len(r) >= 2 and r[0].isascii() and r[0].isalpha() and r[1] in ":|"):
+            path = r
+        else:
+            host, _, tail = r.partition("/")
+            path = "/" + tail if host.lower() in ("", "localhost") else "//" + host + "/" + tail
+    else:
+        path = rest
+    path = unquote(path)
+    if len(path) >= 3 and path[0] in "/\\" and path[1].isascii() and path[1].isalpha() and path[2] in ":|":
+        path = path[1:]
+    if len(path) >= 2 and path[0].isascii() and path[0].isalpha() and path[1] == "|":
+        path = path[0] + ":" + path[2:]
+    if windows:
+        path = path.replace("/", "\\")
+    return path
+
+
+def local_path(url: str) -> Path | None:
+    """:func:`local_path_text` as a ``Path`` on this system."""
+    t = local_path_text(url)
+    return None if t is None else Path(t)
+
+
 class NetError(Exception):
     """A request failed; ``status`` is the HTTP status (0 = no answer)."""
 
@@ -67,6 +106,12 @@ class Http:
         return urllib.request.Request(url, data=body, headers=h, method=method)
 
     def request(self, method: str, url: str, body: bytes | None = None, headers: dict | None = None) -> bytes:
+        local = local_path(url)
+        if local is not None:  # a catalog on this computer
+            try:
+                return local.read_bytes()
+            except OSError as e:
+                raise NetError(f"{e.strerror or e}: {local}") from e
         try:
             with self._opener.open(self._req(method, url, body, headers), timeout=self.timeout) as r:
                 return r.read()
