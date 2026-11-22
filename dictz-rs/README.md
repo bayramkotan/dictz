@@ -1,19 +1,17 @@
 # dictz — Rust edition
 
-[![crates.io](https://img.shields.io/crates/v/dictz.svg)](https://crates.io/crates/dictz)
-[![docs.rs](https://img.shields.io/docsrs/dictz)](https://docs.rs/dictz)
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 Cross-platform, multi-format **offline dictionary** — a GoldenDict-style desktop app and library written in Rust.
 
-This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder (`dictionaries.json`, `settings.json`, `dictz_index.db`, `dictz_history.db`), so dictionaries, history and favorites added in one edition show up in the other.
+This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder (`dictionaries.json`, `settings.json`, `dictz_index.db`, `dictz_history.db`), so dictionaries, history and favorites added in one edition show up in the other.
 
-<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, Dracula theme (one of 27): the search pane on the left, five dictionaries answer “apple”, each under a thin strip with the dictionary's icon and language pair" width="100%"></p>
+<p align="center"><img src="../docs/screenshots/main-dark.png" alt="dictz Rust edition, Dracula theme (one of 27): the search pane on the left, five dictionaries answer “apple”, each under a thin strip with the dictionary's icon and language pair" width="100%"></p>
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/rust-light.png" alt="Rust edition, light theme"><br><sub><b>Light theme</b> — compact like GoldenDict, one colour per dictionary</sub></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic-rust.png" alt="Rust edition in Arabic"><br><sub><b>25 interface languages</b> — here Arabic, shaped right to left</sub></td>
+<td width="50%"><img src="../docs/screenshots/rust-light.png" alt="Rust edition, light theme"><br><sub><b>Light theme</b> — compact like GoldenDict, one colour per dictionary</sub></td>
+<td width="50%"><img src="../docs/screenshots/arabic-rust.png" alt="Rust edition in Arabic"><br><sub><b>25 interface languages</b> — here Arabic, shaped right to left</sub></td>
 </tr>
 </table>
 
@@ -25,13 +23,15 @@ This crate is also the core of the phone edition ([`dictz-mobile/`](https://gith
 
 Both commands get installed: **`dictz`** and its short name **`dct`**. They are the same program.
 
-| Platform | From crates.io | Portable, no Rust needed ([latest release](https://github.com/bayramkotan/dictz/releases/latest)) |
+| Platform | From the source (`cargo install --path dictz-rs`) | Portable, no Rust needed ([latest release](https://github.com/bayramkotan/dictz/releases/latest)) |
 |---|---|---|
-| 🐧 **Linux** | `sudo apt install build-essential pkg-config libasound2-dev` then `cargo install dictz` | `tar xzf dictz-rs-linux-x86_64.tar.gz` → `./dictz-rs/dct` |
-| 🪟 **Windows 10/11** | `cargo install dictz` ([rustup](https://rustup.rs) with the MSVC build tools) | unzip `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe` (or `dct.exe`) |
-| 🍎 **macOS** | `cargo install dictz` | `tar xzf dictz-rs-macos-arm64.tar.gz` → `./dictz-rs/dct` (Apple Silicon) |
+| 🐧 **Linux** | `sudo apt install build-essential pkg-config libasound2-dev` then `cargo install --path dictz-rs` | `tar xzf dictz-rs-linux-x86_64.tar.gz` → `./dictz-rs/dct` |
+| 🪟 **Windows 10/11** | `cargo install --path dictz-rs` ([rustup](https://rustup.rs) with the MSVC build tools) | unzip `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe` (or `dct.exe`) |
+| 🍎 **macOS** | `cargo install --path dictz-rs` | `tar xzf dictz-rs-macos-arm64.tar.gz` → `./dictz-rs/dct` (Apple Silicon) |
 
-ALSA headers on other distros: `alsa-lib-devel` (Fedora), `alsa-lib` (Arch/CachyOS, usually already installed). To build without in-app sound, use `cargo install dictz --no-default-features --features cli,gui,update,scan`; sounds then open in the system player.
+**Since v0.2.1 dictz is no longer published to crates.io** (the last version there is 0.2.0): take the portable binary from the release or build from the source.
+
+ALSA headers on other distros: `alsa-lib-devel` (Fedora), `alsa-lib` (Arch/CachyOS, usually already installed). To build without in-app sound, use `cargo install --path dictz-rs --no-default-features --features cli,gui,update,scan`; sounds then open in the system player.
 
 Then:
 
@@ -122,7 +122,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ```toml
 [dependencies]
-dictz = { version = "0.1.0", default-features = false }   # no GUI / audio deps
+dictz = { path = "../dictz-rs", default-features = false }   # no GUI / audio deps
 ```
 
 ```rust

@@ -1,9 +1,13 @@
 name: CI
 
 # One workflow, one run per release.
-#   push a v* tag   -> lint + test + rust + install-smoke, then publish to
-#                      PyPI (Python edition), crates.io (Rust edition) and
-#                      GitHub Releases (portable binaries of BOTH editions)
+#   push a v* tag   -> lint + test + rust + install-smoke, then a GitHub
+#                      Release with the portable binaries of BOTH editions,
+#                      the Python wheel and the Android APK
+#
+# Since v0.2.1 the repository is private and dictz is not published to PyPI or
+# crates.io any more: a tag must never upload the source anywhere public. The
+# Python wheel and the Rust crate are only built (and checked) here.
 #   pull request    -> lint + test + rust + install-smoke
 #   manual          -> Actions -> CI -> "Run workflow" (tests only, plus the
 #                      phone apps: their APK / unsigned iOS app as artifacts)
@@ -17,10 +21,7 @@ name: CI
 # main and a tag, which GitHub reports as two separate push events — reacting
 # to both produced two runs for every release.
 #
-# Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   PYPI_API_TOKEN        PyPI API token (pypi-...)
-#   CARGO_REGISTRY_TOKEN  crates.io API token
-# A tag release fails within seconds with a clear message if either is missing.
+# No repository secrets are needed (the release uses the built-in GITHUB_TOKEN).
 
 # The Actions list shows each run under the tagged commit's TITLE (its first
 # line only), so the list reads version by version: "v0.0.9: <short title>".
@@ -62,21 +63,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Check secrets
-        env:
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          missing=0
-          if [ -z "$PYPI_API_TOKEN" ]; then
-            echo "::error::PYPI_API_TOKEN secret is not set. Create a token at https://pypi.org/manage/account/token/ and add it under Settings -> Secrets and variables -> Actions."
-            missing=1
-          fi
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "::error::CARGO_REGISTRY_TOKEN secret is not set. Create a token at https://crates.io/settings/tokens and add it under Settings -> Secrets and variables -> Actions."
-            missing=1
-          fi
-          exit $missing
       - name: Check tag matches source versions
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -255,10 +241,12 @@ jobs:
           dictz --selftest
 
   # ===================================================================
-  # 5) Publish to PyPI — tag only, API token
+  # 5) Python package (sdist + wheel) — tag only, built and checked, NOT
+  #    uploaded to PyPI (private since v0.2.1); the wheel goes into the
+  #    GitHub Release
   # ===================================================================
-  publish-pypi:
-    name: Publish to PyPI
+  python-dist:
+    name: Python package
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [preflight, test, install-smoke]
     runs-on: ubuntu-latest
@@ -273,12 +261,6 @@ jobs:
           python -m pip install --upgrade build twine
           python -m build
           twine check dist/*
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          skip-existing: true
-          print-hash: true
       - uses: actions/upload-artifact@v4
         with:
           name: python-dist
@@ -286,37 +268,28 @@ jobs:
           retention-days: 7
 
   # ===================================================================
-  # 6) Publish to crates.io — tag only, API token
+  # 6) Rust crate — tag only, packaged and checked (cargo package), NOT
+  #    uploaded to crates.io (private since v0.2.1)
   # ===================================================================
-  publish-crates:
-    name: Publish to crates.io
+  rust-package:
+    name: Rust crate
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [preflight, rust]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: dictz-rs
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Linux audio headers (cargo publish builds the crate)
+      - name: Linux audio headers (cargo package builds the crate)
         working-directory: .
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
-      - name: Publish (skip if this version is already on crates.io)
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          version=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n1)
-          status=$(curl -s -o /dev/null -w "%{http_code}" -A "dictz-ci" \
-            "https://crates.io/api/v1/crates/dictz/$version")
-          if [ "$status" = "200" ]; then
-            echo "dictz $version already on crates.io — nothing to do."
-            exit 0
-          fi
-          cargo publish --locked
+      - name: Package (no upload)
+        run: cargo package --locked --allow-dirty
 
   # ===================================================================
   # 7) Portable binaries — tag only
@@ -479,10 +452,10 @@ jobs:
   # ===================================================================
   github-release:
     name: Publish GitHub Release
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.publish-pypi.result == 'success' }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.python-dist.result == 'success' && needs.rust-package.result == 'success' }}
     # mobile-android: its APK goes into the release too; when it fails the
     # release still goes out (the condition above does not ask for it)
-    needs: [publish-pypi, publish-crates, build-binaries, build-rust-binaries, mobile-android]
+    needs: [python-dist, rust-package, build-binaries, build-rust-binaries, mobile-android]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -504,7 +477,7 @@ jobs:
             dictz ships as two editions with the same features: **Python** (Qt) and **Rust** (egui).
 
             ## Python edition
-            - **PyPI:** `pip install dictz` (or `pipx install dictz`)
+            - **Wheel:** `pipx install ./dictz-<version>-py3-none-any.whl` (or `pip install`)
             - **Portable:**
               - Linux: `dictz-linux-x86_64.AppImage` (`chmod +x` then run) or `.tar.gz`
               - Windows: `dictz-windows-x86_64.zip` → run `dictz.exe`
@@ -514,7 +487,6 @@ jobs:
             - `dictz-<version>-android.apk` → open it on the phone to install (allow "install unknown apps" for the browser / file manager once). iOS needs an Apple developer account and comes later.
 
             ## Rust edition
-            - **crates.io:** `cargo install dictz` (app) · `cargo add dictz` (library)
             - **Portable (single binary):**
               - Linux: `dictz-rs-linux-x86_64.tar.gz` → `dictz-rs/dictz`
               - Windows: `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe`
@@ -523,7 +495,7 @@ jobs:
             Both editions install the short name **`dct`** too (`dct -V`, `dct update`, `dct shortcut`).
             Both editions share the dictionary list, history and favorites (same data folder).
 
-            See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md).
+            Since v0.2.1 dictz is no longer published to PyPI or crates.io. See CHANGELOG.md.
 
   # ------------------------------------------------------------ phone apps
   mobile-core:

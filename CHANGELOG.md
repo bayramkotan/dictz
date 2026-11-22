@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-11-22
+
+**The phone apps** (Android, iOS) with one dictionary folder and catalog downloads, sounds to the very end with a player of your choice, and dictz moves to a **private repository**: releases only on GitHub, no more PyPI / crates.io.
+
+### Changed
+- **No longer published to PyPI or crates.io.** The repository is private; a tag builds and checks the Python wheel (`python-dist`) and the Rust crate (`rust-package`, `cargo package`) but uploads nothing public. The wheel, the portable binaries of both editions and the Android APK are the files of the GitHub Release. Both packages refuse a public upload even by hand (`Private :: Do Not Upload` classifier, `publish = false`). The CI needs no `PYPI_API_TOKEN` / `CARGO_REGISTRY_TOKEN` any more. PyPI and crates.io keep 0.2.0 as the last public version.
+- **dictz-data is no longer a built-in source**, in both editions: its catalog was empty and was read from this (now private) repository, so it could only show an error. A stored copy on its built-in address goes (with its cache) and **FreeDict is the default server**; a copy pointed at another address stays as the user's own source.
+- README pictures use relative paths (absolute `raw.githubusercontent.com` links do not load from a private repository); install sections describe the release files (`pipx install ./dictz-<version>-py3-none-any.whl`, `cargo install --path dictz-rs`).
+
 ### Fixed
 - **Sounds lost their last syllable** (both editions). The players closed the audio device as soon as the data ended, before its buffer had been heard. Now every sound of the built-in players ends with 350 ms of silence: Python pads a WAV (`core/audio.pad_wav`) and decodes MP3 / Ogg / … with `QAudioDecoder` into such a WAV (kept in the media cache); Rust appends silence to the rodio sink and keeps the stream open until the device has drained. FFplay gets the same tail (`apad`).
 

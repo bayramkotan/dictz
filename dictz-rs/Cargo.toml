@@ -1,15 +1,16 @@
 [package]
 name = "dictz"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Bayram Kotan"]
 description = "dictz — cross-platform, multi-format offline dictionary (StarDict, DSL, Babylon) with a desktop GUI. Rust edition of github.com/bayramkotan/dictz"
-documentation = "https://docs.rs/dictz"
 repository = "https://github.com/bayramkotan/dictz"
 homepage = "https://github.com/bayramkotan/dictz"
 license = "GPL-3.0-or-later"
 readme = "README.md"
+# private since v0.2.1: never uploaded to crates.io (CI only runs cargo package)
+publish = false
 keywords = ["dictionary", "stardict", "dsl", "babylon", "offline"]
 categories = ["text-processing", "gui", "command-line-utilities"]
 include = [

@@ -2,7 +2,7 @@
 
 ``DATA/center/sources.json``::
 
-    {"version": 1, "default": "dictz-data", "removed": [...built-in ids...],
+    {"version": 1, "default": "freedict", "removed": [...built-in ids...],
      "sources": [{...SOURCE_KEYS...}, ...]}
 
 The list order is the catalog's order (the first source wins a duplicate).
@@ -32,7 +32,7 @@ TYPES = ("dictz-catalog", "freedict", "github-releases", "github-folder", "http-
 AUTH = ("none", "basic", "bearer", "header")
 SOURCE_KEYS = ("id", "name", "type", "url", "enabled", "builtin", "homepage", "description", "license",
                "source_lang", "target_lang", "filter", "name_pattern", "depth", "auth", "user", "notes")
-DEFAULT_SERVER = "dictz-data"
+DEFAULT_SERVER = "freedict"
 
 
 def _src(**kw: Any) -> dict:
@@ -42,14 +42,9 @@ def _src(**kw: Any) -> dict:
     return s
 
 
-# The built-in sources. Only the first is ours; the rest are other people's
-# servers, read the way they publish (their addresses may change: every one
+# The built-in sources: other people's servers, read the way they publish (their addresses may change: every one
 # can be edited in the Sources page).
 BUILTIN: tuple[dict, ...] = (
-    _src(id="dictz-data", name="dictz-data (default server)", type="dictz-catalog",
-         url="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
-         homepage="https://github.com/bayramkotan/dictz/tree/main/docs/dictz-data",
-         description="dictz's own dictionary server: every dictionary dictz offers, with its licence."),
     _src(id="freedict", name="FreeDict", type="freedict", url="https://freedict.org/freedict-database.json",
          homepage="https://freedict.org/", license="freedict",
          description="Free bilingual dictionaries, about 200 language pairs (StarDict, dictd, slob)."),
@@ -86,7 +81,6 @@ BUILTIN: tuple[dict, ...] = (
 # them is moved to today's address (and its cached answer dropped); an
 # address the user typed stays. Mirrored in ``sources.rs``.
 RETIRED_URLS: dict[str, tuple[str, ...]] = {
-    "dictz-data": ("https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",),
     "huzheng": ("https://download.huzheng.org/", "http://download.huzheng.org/"),
 }
 # Built-in sources that were dropped, with their built-in addresses. A stored
@@ -95,6 +89,10 @@ RETIRED_URLS: dict[str, tuple[str, ...]] = {
 RETIRED_BUILTINS: dict[str, tuple[str, ...]] = {
     # its server answers HTTP 500 to folder listings (v0.2.0)
     "freemdict": ("https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs",),
+    # dictz's own server: its catalog was empty, and the repository it was read
+    # from is private since v0.2.1, so it only showed an error (v0.2.1)
+    "dictz-data": ("https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
+                   "https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json"),
 }
 _RENEWED_KEYS = ("name", "type", "url", "homepage", "description", "filter", "depth", "license")
 

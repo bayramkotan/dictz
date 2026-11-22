@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.2.0", default-features = false }
+//! dictz = { path = "../dictz-rs", default-features = false }
 //! ```
 //!
 //! ```no_run

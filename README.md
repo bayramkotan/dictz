@@ -4,14 +4,9 @@
 
 **Offline dictionary for Windows, Linux and macOS: a modern, GoldenDict-style desktop app with a full command line.**
 
-[![PyPI version](https://img.shields.io/pypi/v/dictz.svg)](https://pypi.org/project/dictz/)
-[![crates.io](https://img.shields.io/crates/v/dictz.svg)](https://crates.io/crates/dictz)
-[![Python versions](https://img.shields.io/pypi/pyversions/dictz.svg)](https://pypi.org/project/dictz/)
 [![License: GPL v3+](https://img.shields.io/badge/License-GPLv3+-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/bayramkotan/dictz/releases)
 [![GitHub release](https://img.shields.io/github/v/release/bayramkotan/dictz?include_prereleases)](https://github.com/bayramkotan/dictz/releases)
-[![Downloads](https://img.shields.io/pypi/dm/dictz.svg)](https://pypi.org/project/dictz/)
-[![GitHub stars](https://img.shields.io/github/stars/bayramkotan/dictz?style=social)](https://github.com/bayramkotan/dictz)
 
 StarDict · ABBYY Lingvo DSL · Babylon — many dictionaries, one search, no network.
 
@@ -19,7 +14,7 @@ StarDict · ABBYY Lingvo DSL · Babylon — many dictionaries, one search, no ne
 
 <br>
 
-<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-light.png" alt="dictz main window, compact like GoldenDict: the search box and word list on the left, five dictionaries answer “apple” — each under a thin strip with the dictionary's icon and language pair; the DSL article shows its picture and sound" width="100%">
+<img src="docs/screenshots/main-light.png" alt="dictz main window, compact like GoldenDict: the search box and word list on the left, five dictionaries answer “apple” — each under a thin strip with the dictionary's icon and language pair; the DSL article shows its picture and sound" width="100%">
 
 <sub>Five dictionaries, one search, in a compact GoldenDict-like window: the search box and word list on the left, the dictionary bar as small icons on top, every article under a thin strip with the dictionary's icon, colour and language pair; DSL pictures and sounds show inline.</sub>
 
@@ -33,7 +28,7 @@ dictz comes in **two editions with the same features**. Both are released togeth
 
 | | 🐍 Python edition | 🦀 Rust edition |
 |---|---|---|
-| Install | `pipx install dictz` / `pip install dictz` | `cargo install dictz` |
+| Install | the wheel from the release: `pipx install ./dictz-<version>-py3-none-any.whl` | portable binary, or `cargo install --path dictz-rs` from the source |
 | Window | Qt (PySide6 + QtWebEngine) | egui: one native binary, no runtime |
 | Portable builds | AppImage, Windows zip, macOS `.app` | `dictz-rs-*` single-file archives |
 | Source | [`dictz/`](dictz/) | [`dictz-rs/`](dictz-rs/) ([README](dictz-rs/README.md)) |
@@ -48,20 +43,20 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="Rust edition, Dracula theme"><br><sub><b>Rust edition, Dracula theme</b> — one native binary, same features</sub></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/python-dark.png" alt="Python edition, Nord theme"><br><sub><b>Python edition, Nord theme</b> — 27 themes, or follow the system</sub></td>
+<td width="50%"><img src="docs/screenshots/main-dark.png" alt="Rust edition, Dracula theme"><br><sub><b>Rust edition, Dracula theme</b> — one native binary, same features</sub></td>
+<td width="50%"><img src="docs/screenshots/python-dark.png" alt="Python edition, Nord theme"><br><sub><b>Python edition, Nord theme</b> — 27 themes, or follow the system</sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/themes.png" alt="Four themes side by side"><br><sub><b>Themes</b> — Solarized Light, Dracula, Mint, Gruvbox Dark …</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/languages.png" alt="Language picker with flags"><br><sub><b>25 interface languages</b> — the flag at the top right</sub></td>
+<td><img src="docs/screenshots/themes.png" alt="Four themes side by side"><br><sub><b>Themes</b> — Solarized Light, Dracula, Mint, Gruvbox Dark …</sub></td>
+<td><img src="docs/screenshots/languages.png" alt="Language picker with flags"><br><sub><b>25 interface languages</b> — the flag at the top right</sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window, Sound page"><br><sub><b>Preferences → Sound</b> — pick the player (built-in, mpv, FFplay, VLC, MPlayer, system, own command) and the speed</sub></td>
+<td><img src="docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
+<td><img src="docs/screenshots/preferences.png" alt="Preferences window, Sound page"><br><sub><b>Preferences → Sound</b> — pick the player (built-in, mpv, FFplay, VLC, MPlayer, system, own command) and the speed</sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/dictionaries.png" alt="Dictionaries window"><br><sub><b>Dictionaries</b> — your list in search order, folders, catalog, sources, downloads</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
+<td><img src="docs/screenshots/dictionaries.png" alt="Dictionaries window"><br><sub><b>Dictionaries</b> — your list in search order, folders, catalog, sources, downloads</sub></td>
+<td><img src="docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
 </tr>
 </table>
 
@@ -96,7 +91,9 @@ Phone screenshots are made by CI from the app itself (`flutter test test_screens
 
 ## Install
 
-Pick your platform. Every method gives you both `dictz` and `dct`. Check the install with `dct doctor` and keep it current with `dct update`.
+Pick your platform. Every method gives you both `dictz` and `dct`. Check the install with `dct doctor`.
+
+> **Since v0.2.1 dictz is no longer published to PyPI or crates.io** — every file is in the [releases](https://github.com/bayramkotan/dictz/releases). `pipx install dictz` / `cargo install dictz` still give the last public version (0.2.0), and `dct update` does not see newer releases yet: install a new version from its release files.
 
 ### 🐧 Linux
 
@@ -114,23 +111,23 @@ tar xzf dictz-rs-linux-x86_64.tar.gz
 sudo install dictz-rs/dictz /usr/local/bin/ && sudo ln -sf dictz /usr/local/bin/dct   # optional: on PATH
 ```
 
-**From PyPI** (recommended: pipx keeps dictz in its own environment):
+**Python package** (the `.whl` of the release; pipx keeps dictz in its own environment):
 
 ```bash
 sudo apt install pipx            # Debian / Ubuntu / Mint   (Fedora: sudo dnf install pipx · Arch/CachyOS: sudo pacman -S python-pipx)
 pipx ensurepath                  # once, then open a new terminal
-pipx install dictz
+pipx install ./dictz-0.2.1-py3-none-any.whl
 dct -V
 dct shortcut                     # application menu + desktop icon
 ```
 
-Other ways that also work: a virtual environment (`python3 -m venv ~/.venvs/dictz && ~/.venvs/dictz/bin/pip install dictz`), `pip install --user dictz`, or a system install. `dct update` knows which one you used.
+Other ways that also work: a virtual environment (`python3 -m venv ~/.venvs/dictz && ~/.venvs/dictz/bin/pip install ./dictz-0.2.1-py3-none-any.whl`), `pip install --user`, or a system install.
 
-**From crates.io** (Rust edition):
+**Rust edition from the source:**
 
 ```bash
 sudo apt install build-essential pkg-config libasound2-dev   # Fedora: alsa-lib-devel · Arch: alsa-lib (already there)
-cargo install dictz              # installs ~/.cargo/bin/dictz and ~/.cargo/bin/dct
+cargo install --path dictz-rs    # in the source folder; installs ~/.cargo/bin/dictz and ~/.cargo/bin/dct
 dct shortcut
 ```
 
@@ -153,23 +150,23 @@ dct shortcut
 
 The builds are unsigned: on first launch, click **More info → Run anyway** in SmartScreen.
 
-**From PyPI** (PowerShell):
+**Python package** (the `.whl` of the release, PowerShell):
 
 ```powershell
 winget install Python.Python.3.12        # if Python is not installed yet
 py -m pip install --user pipx
 py -m pipx ensurepath                    # then open a new terminal
-pipx install dictz
+pipx install .\dictz-0.2.1-py3-none-any.whl
 dct -V
 dct shortcut                             # Desktop + Start menu
 ```
 
-If `dictz` / `dct` is "not recognized" after a plain `pip install dictz`, the Python *Scripts* folder is not on PATH. Use `py -m dictz …` (it works everywhere) or run `py -m pipx ensurepath`.
+If `dictz` / `dct` is "not recognized" after a plain `pip install`, the Python *Scripts* folder is not on PATH. Use `py -m dictz …` (it works everywhere) or run `py -m pipx ensurepath`.
 
-**From crates.io** (needs [Rust](https://rustup.rs) with the MSVC build tools):
+**Rust edition from the source** (needs [Rust](https://rustup.rs) with the MSVC build tools):
 
 ```powershell
-cargo install dictz                      # %USERPROFILE%\.cargo\bin\dictz.exe and dct.exe
+cargo install --path dictz-rs            # in the source folder; %USERPROFILE%\.cargo\bin\dictz.exe and dct.exe
 dct shortcut
 ```
 
@@ -182,15 +179,15 @@ dct shortcut
 
 If macOS says the app "is damaged", remove the download quarantine with `xattr -dr com.apple.quarantine dictz.app`.
 
-**From PyPI** (Apple Silicon and Intel):
+**Python package** (the `.whl` of the release; Apple Silicon and Intel):
 
 ```bash
 brew install pipx && pipx ensurepath     # then open a new terminal
-pipx install dictz
+pipx install ./dictz-0.2.1-py3-none-any.whl
 dct shortcut                             # ~/Applications/dictz.app (Launchpad, Spotlight) + desktop link
 ```
 
-**From crates.io:** `cargo install dictz && dct shortcut`.
+**Rust edition from the source:** `cargo install --path dictz-rs && dct shortcut`.
 
 Global hotkeys on macOS need **System Settings → Privacy & Security → Accessibility** permission for dictz (or for your terminal, when started from one).
 
@@ -525,19 +522,19 @@ See [`docs/PACKAGING.md`](docs/PACKAGING.md) for details. CI builds, self-tests 
 
 ## Türkçe
 
-<img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/turkish.png" alt="dictz Türkçe arayüz" width="100%">
+<img src="docs/screenshots/turkish.png" alt="dictz Türkçe arayüz" width="100%">
 
 dictz; Windows, Linux ve macOS için çevrimdışı çalışan, çoklu format destekli, GoldenDict tarzı modern bir sözlük uygulamasıdır. **Python** ve **Rust** olmak üzere iki sürümü vardır. İkisinin özellikleri ve sürüm numarası aynıdır, veri klasörünü de paylaşırlar: sözlükler, geçmiş, favoriler ve ayarlar ortaktır. İki sürüm de **`dictz`** ve kısa adı **`dct`** komutlarını kurar; ikisi aynı programdır.
 
 ### Kurulum
 
-| Platform | Portable (kurulumsuz) | Paket yöneticisi |
+| Platform | Portable (kurulumsuz) | Paket |
 |---|---|---|
-| **Linux** | `dictz-linux-x86_64.AppImage` → `chmod +x` ve çalıştır · Rust: `dictz-rs-linux-x86_64.tar.gz` | `pipx install dictz` · `cargo install dictz` |
-| **Windows 10/11** | `dictz-windows-x86_64.zip` veya `dictz-rs-windows-x86_64.zip` → aç, `dictz.exe` | `pipx install dictz` · `cargo install dictz` |
-| **macOS** | `dictz-macos-arm64.zip` → `dictz.app` (ilk açılışta sağ tık → Aç) · Rust: `dictz-rs-macos-arm64.tar.gz` | `pipx install dictz` (Intel dahil) · `cargo install dictz` |
+| **Linux** | `dictz-linux-x86_64.AppImage` → `chmod +x` ve çalıştır · Rust: `dictz-rs-linux-x86_64.tar.gz` | `pipx install ./dictz-<sürüm>-py3-none-any.whl` · `cargo install --path dictz-rs` |
+| **Windows 10/11** | `dictz-windows-x86_64.zip` veya `dictz-rs-windows-x86_64.zip` → aç, `dictz.exe` | `pipx install .\dictz-<sürüm>-py3-none-any.whl` · `cargo install --path dictz-rs` |
+| **macOS** | `dictz-macos-arm64.zip` → `dictz.app` (ilk açılışta sağ tık → Aç) · Rust: `dictz-rs-macos-arm64.tar.gz` | `pipx install ./dictz-<sürüm>-py3-none-any.whl` (Intel dahil) · `cargo install --path dictz-rs` |
 
-Hepsi [Releases](https://github.com/bayramkotan/dictz/releases/latest) sayfasında. Kurulumdan sonra:
+Hepsi [Releases](https://github.com/bayramkotan/dictz/releases/latest) sayfasında. **v0.2.1'den itibaren dictz PyPI ve crates.io'ya yüklenmiyor**; oradaki son sürüm 0.2.0'dır ve `dct update` yeni sürümleri henüz görmez, yeni sürümü Releases'taki dosyalarla kurun. Kurulumdan sonra:
 
 ```bash
 dct -V            # sürüm (-v, -V, --version, --Version, -version… hepsi çalışır)
