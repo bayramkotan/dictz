@@ -1,0 +1,87 @@
+{
+ "sources": [
+  {
+   "id": "dictz-data",
+   "name": "dictz-data",
+   "type": "dictz-catalog",
+   "url": "https://srv.example.org/data/catalog.json",
+   "license": ""
+  },
+  {
+   "id": "freedict",
+   "name": "FreeDict",
+   "type": "freedict",
+   "url": "https://freedict.org/freedict-database.json",
+   "license": "freedict"
+  },
+  {
+   "id": "wiktionary-xxyzz",
+   "name": "xxyzz",
+   "type": "github-releases",
+   "url": "https://github.com/xxyzz/wiktionary_stardict",
+   "license": "wiktionary",
+   "filter": "\\.(zip|tar\\.gz)$",
+   "name_pattern": "^(?P<src>[a-z]{2,3})_(?P<dst>[a-z]{2,3})$"
+  },
+  {
+   "id": "wiktionary-vuizur",
+   "name": "Vuizur",
+   "type": "github-folder",
+   "url": "https://github.com/Vuizur/Wiktionary-Dictionaries",
+   "license": "CC-BY-SA-3.0",
+   "filter": " stardict\\.tar\\.gz$",
+   "target_lang": "en",
+   "depth": 1,
+   "name_pattern": "^(?P<src>.+?)-(?P<dst>English) Wiktionary dictionary"
+  },
+  {
+   "id": "huzheng",
+   "name": "Huzheng",
+   "type": "http-index",
+   "url": "https://download.huzheng.org/",
+   "license": "unknown",
+   "filter": "",
+   "depth": 2
+  },
+  {
+   "id": "freemdict",
+   "name": "FreeMdict",
+   "type": "nextcloud-share",
+   "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs",
+   "license": "unknown",
+   "depth": 2
+  },
+  {
+   "id": "archive-org",
+   "name": "Internet Archive",
+   "type": "archive-org",
+   "url": "https://archive.org",
+   "license": "unknown",
+   "filter": "(stardict OR \"babylon bgl\") AND mediatype:(data)"
+  },
+  {
+   "id": "telegram",
+   "name": "Telegram",
+   "type": "telegram",
+   "url": "https://t.me/s/Dictionaries_GoldenDict",
+   "license": "unknown",
+   "depth": 2
+  }
+ ],
+ "responses": {
+  "GET https://srv.example.org/data/catalog.json": "catalog.json",
+  "GET https://srv.example.org/data/extra/catalog.json": "extra/catalog.json",
+  "GET https://freedict.org/freedict-database.json": "freedict.json",
+  "GET https://api.github.com/repos/xxyzz/wiktionary_stardict/releases?per_page=30": "gh-releases.json",
+  "GET https://api.github.com/repos/Vuizur/Wiktionary-Dictionaries/contents": "gh-contents.json",
+  "GET https://download.huzheng.org/": "index-root.html",
+  "GET https://download.huzheng.org/dict.org/": "index-dictorg.html",
+  "GET https://download.huzheng.org/zh_CN/": "index-zh.html",
+  "PROPFIND https://cloud.freemdict.com/public.php/webdav/": "webdav.xml",
+  "PROPFIND https://cloud.freemdict.com/public.php/webdav/English/": "webdav-english.xml",
+  "GET https://archive.org/advancedsearch.php?q=%28stardict+OR+%22babylon+bgl%22%29+AND+mediatype%3A%28data%29&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=description&fl%5B%5D=licenseurl&fl%5B%5D=date&fl%5B%5D=item_size&fl%5B%5D=language&sort%5B%5D=downloads+desc&rows=200&page=1&output=json": "archive-search.json",
+  "GET https://t.me/s/Dictionaries_GoldenDict": "telegram.html",
+  "GET https://t.me/s/Dictionaries_GoldenDict?before=120": "telegram-before.html",
+  "GET https://archive.org/metadata/stardict-en-ru": "archive-meta.json"
+ }
+}

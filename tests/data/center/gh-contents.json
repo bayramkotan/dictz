@@ -1,0 +1,7 @@
+[
+ {"type": "file", "path": "README.md", "size": 100, "download_url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/README.md"},
+ {"type": "file", "path": "Afrikaans-English Wiktionary dictionary stardict.tar.gz", "size": 3000, "download_url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/Afrikaans-English%20Wiktionary%20dictionary%20stardict.tar.gz"},
+ {"type": "file", "path": "Afrikaans-English Wiktionary dictionary.tsv", "size": 3000, "download_url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/Afrikaans-English%20Wiktionary%20dictionary.tsv"},
+ {"type": "file", "path": "Ancient Greek-English Wiktionary dictionary stardict.tar.gz", "size": 4000, "download_url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/Ancient%20Greek-English%20Wiktionary%20dictionary%20stardict.tar.gz"},
+ {"type": "dir", "path": "old", "size": 0, "download_url": null}
+]

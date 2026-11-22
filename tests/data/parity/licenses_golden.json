@@ -1,0 +1,236 @@
+[
+ {
+  "id": "GPL-2.0-or-later",
+  "name": "GNU GPL 2.0 or later",
+  "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "GPL-3.0-or-later",
+  "name": "GNU GPL 3.0 or later",
+  "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "GPL-2.0-only",
+  "name": "GNU GPL 2.0",
+  "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "GPL-3.0-only",
+  "name": "GNU GPL 3.0",
+  "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "LGPL-2.1-or-later",
+  "name": "GNU LGPL 2.1 or later",
+  "url": "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "AGPL-3.0-or-later",
+  "name": "GNU AGPL 3.0 or later",
+  "url": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "GFDL-1.3-or-later",
+  "name": "GNU Free Documentation License 1.3",
+  "url": "https://www.gnu.org/licenses/fdl-1.3.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "CC-BY-SA-3.0",
+  "name": "Creative Commons BY-SA 3.0",
+  "url": "https://creativecommons.org/licenses/by-sa/3.0/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "CC-BY-SA-4.0",
+  "name": "Creative Commons BY-SA 4.0",
+  "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "CC-BY-3.0",
+  "name": "Creative Commons BY 3.0",
+  "url": "https://creativecommons.org/licenses/by/3.0/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "CC-BY-4.0",
+  "name": "Creative Commons BY 4.0",
+  "url": "https://creativecommons.org/licenses/by/4.0/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "CC-BY-NC-SA-4.0",
+  "name": "Creative Commons BY-NC-SA 4.0",
+  "url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "status": "free",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": false
+ },
+ {
+  "id": "CC-BY-NC-4.0",
+  "name": "Creative Commons BY-NC 4.0",
+  "url": "https://creativecommons.org/licenses/by-nc/4.0/",
+  "status": "free",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": false
+ },
+ {
+  "id": "CC0-1.0",
+  "name": "Creative Commons Zero (public domain)",
+  "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "status": "open",
+  "attribution": false,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "public-domain",
+  "name": "Public domain",
+  "url": "https://en.wikipedia.org/wiki/Public_domain",
+  "status": "open",
+  "attribution": false,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "MIT",
+  "name": "MIT License",
+  "url": "https://opensource.org/license/mit",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "BSD-3-Clause",
+  "name": "BSD 3-Clause",
+  "url": "https://opensource.org/license/bsd-3-clause",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "Apache-2.0",
+  "name": "Apache License 2.0",
+  "url": "https://www.apache.org/licenses/LICENSE-2.0",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "ODbL-1.0",
+  "name": "Open Database License 1.0",
+  "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "WordNet",
+  "name": "WordNet License (Princeton)",
+  "url": "https://wordnet.princeton.edu/license-and-commercial-use",
+  "status": "open",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "EDRDG",
+  "name": "EDRDG Licence (JMdict, KANJIDIC)",
+  "url": "https://www.edrdg.org/edrdg/licence.html",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "freedict",
+  "name": "FreeDict (GPL, CC BY-SA … — each dictionary's own)",
+  "url": "https://freedict.org/",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "wiktionary",
+  "name": "Wiktionary (CC BY-SA 4.0 / GFDL)",
+  "url": "https://en.wiktionary.org/wiki/Wiktionary:Copyrights",
+  "status": "open",
+  "attribution": true,
+  "share_alike": true,
+  "commercial": true
+ },
+ {
+  "id": "free",
+  "name": "Free to use (terms not stated as a licence)",
+  "url": "",
+  "status": "free",
+  "attribution": false,
+  "share_alike": false,
+  "commercial": true
+ },
+ {
+  "id": "personal",
+  "name": "Free for personal use only",
+  "url": "",
+  "status": "nonfree",
+  "attribution": true,
+  "share_alike": false,
+  "commercial": false
+ },
+ {
+  "id": "unknown",
+  "name": "Unknown — the source does not say",
+  "url": "",
+  "status": "unknown",
+  "attribution": false,
+  "share_alike": false,
+  "commercial": true
+ }
+]

@@ -441,7 +441,29 @@ def write_i18n() -> None:
         shutil.copyfile(f, flags / f.name)
 
 
+def write_languages() -> None:
+    """``dictz/resources/languages.json`` (ISO 639-3 table: code, 639-1 code,
+    English name) from pycountry when installed; the Rust edition embeds a
+    copy (``dictz-rs/src/center/languages.json``)."""
+    out = ROOT / "dictz" / "resources" / "languages.json"
+    try:
+        import pycountry
+    except ImportError:
+        pycountry = None
+    if pycountry is not None:
+        rows = []
+        for lang in pycountry.languages:
+            rows.append([lang.alpha_3, getattr(lang, "alpha_2", ""), lang.name])
+        rows.sort()
+        text = "[\n" + ",\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n]\n"
+        out.write_text(text, encoding="utf-8")
+    rs = ROOT / "dictz-rs" / "src" / "center"
+    rs.mkdir(parents=True, exist_ok=True)
+    (rs / "languages.json").write_bytes(out.read_bytes())
+
+
 if __name__ == "__main__":
+    write_languages()
     write_i18n()
     write_dsl()
     write_bgl()

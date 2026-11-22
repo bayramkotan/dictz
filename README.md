@@ -51,7 +51,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 80 settings, searchable, per-setting reset</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 90 settings, searchable, per-setting reset</sub></td>
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
@@ -78,9 +78,10 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - light and dark themes, accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
 - **Adding never freezes the window:** new or changed dictionaries are read in the background by several workers at once (separate processes in the Python edition, threads in the Rust edition), with a progress bar and a stop button in the status bar.
-- **80 settings** in 9 pages with search and per-setting reset.
+- **Dictionary Center** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
+- **90 settings** in 10 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
-- **Offline and private:** no telemetry. The only network use is `dct update` / the update check, and only when you ask.
+- **Offline and private:** no telemetry. dictz goes online only for `dct update` / the update check and for the Dictionary Center's servers, and both can be switched off (`center.online`).
 - **Portable:** each release ships standalone builds of both editions, and CI self-tests every build before publishing.
 
 ---
@@ -245,6 +246,24 @@ dct info NAME|FILE            # metadata
 dct reindex [NAME…]           # rebuild the search index
 dct scan FOLDER --add         # find dictionary files, add the new ones
 dct dump NAME -F txt -o out.txt        # tsv / json / txt
+dct dicts --export list.csv   # the list with licences (csv / json / txt)
+
+# Dictionary Center: servers, catalog, downloads
+dct sources                   # the servers / sources: on/off, type, entries, state (--json)
+dct sources add URL [--name N] [--type T] [--from en --to tr] [--license ID] [--auth basic --user U --password P]
+dct sources edit | remove | enable | disable | default | up | down ID
+dct sources refresh [ID…]     # read the catalogs again
+dct sources export FILE [--mine] · dct sources import FILE [--replace] · dct sources reset
+dct catalog [TEXT] [--from en --to tr] [--license open|free|unknown|nonfree] [--format stardict] [--supported]
+dct catalog show ID           # languages, size, licence, files, checksums
+dct catalog languages | updates
+dct install ID|NAME|URL…      # download, check, unpack and add (--no-verify, --keep-archive, --no-add)
+dct uninstall ID|NAME…        # --keep-files
+dct downloads [clear]         # installed from the catalog + download history
+dct licenses                  # the licence table: open / free / unknown, credit, share-alike, commercial
+dct catalog build FOLDER --base-url URL   # catalog.json for your own server (see docs/CATALOG.md)
+dct catalog check FILE|URL    # errors and warnings of a catalog
+dct setup export FILE.zip [--with-files] · dct setup import FILE.zip [--replace] · dct setup show FILE.zip
 
 # history, favorites, settings
 dct history [--clear | --remove WORD]
@@ -280,6 +299,44 @@ Completion works for both names, `dictz` and `dct`:
 | PowerShell | `$PROFILE`: `dct completion powershell \| Out-String \| Invoke-Expression` |
 
 ---
+
+## Dictionary Center
+
+**Dosya → Sözlük Merkezi…** (Ctrl+Shift+M), the cloud button on the toolbar, or `dct catalog` / `dct install`. One window with five tabs:
+
+| Tab | What you do there |
+|---|---|
+| **Katalog** | every dictionary the enabled sources offer, in one table: name, languages, kind, format, words, size, **licence** (coloured by status), source, date. Filter by text, source and target language (with counts, ⇄ swaps them), source, licence status, format, "only those dictz opens", "hide installed". Sort by any column. The detail pane shows the licence, what it allows (credit, share-alike, commercial use), files and checksums. **Kur** (or a double click) downloads; ✓ = installed, ↑ = an update is available. |
+| **Kaynaklar (sunucular)** | the servers: switch on / off, add, edit, delete, move up / down, make default (★), refresh, export / import the list, restore the built-in ones. The editor takes an address, a type (or *Tahmin et*), a file filter, a language pattern, languages and a licence for sources that do not say, depth, sign-in (user + password, token or a custom header) and a **Dene** button that reads the source at once. |
+| **İndirmeler** | the queue (several at once, setting `center.parallel_downloads`), progress, speed, pause / resume / cancel / retry; interrupted downloads continue where they stopped. Below: the download history. |
+| **Kurulu** | what was installed from the catalog: version, date, licence, folder, available update; update one or all, remove (with or without the files), open the folder or the licence. |
+| **İçe / Dışa aktar** | export / import the **whole setup** as one zip (dictionary list, settings, sources without passwords, install records, history and favourites, optionally the dictionary files) — merge or replace; export the dictionary list with licences (CSV / JSON / TXT); **build a `catalog.json` for your own server** and check one; the licence table. |
+
+**Bağlantıdan sözlük ekle…** (Ctrl+Shift+L) takes any link — a `.zip` / `.tar.gz` / `.tar.xz` / `.tar.bz2` archive, a `.dsl` / `.bgl` / `.ifo` file, a `file:` path — and installs it; a link that looks like a server (a catalog, a GitHub repository, a WebDAV / Nextcloud share, a Telegram channel) is offered as a new source.
+
+### Built-in sources
+
+| Source | Type | What it has | Licences |
+|---|---|---|---|
+| **dictz-data** (default ★) | dictz catalog | dictz's own server: [github.com/bayramkotan/dictz-data](https://github.com/bayramkotan/dictz-data) | stated per dictionary |
+| FreeDict | FreeDict database | ~200 bilingual pairs (StarDict, dictd, slob) | GPL, CC BY-SA … |
+| Wiktionary Dictionaries (Vuizur) | GitHub folder | Wiktionary → StarDict, almost every language → English | CC BY-SA 3.0 |
+| Wiktionary StarDict (xxyzz) | GitHub releases | Wiktionary dictionaries rebuilt monthly | CC BY-SA |
+| ECDICT | GitHub releases | English → Chinese | MIT |
+| StarDict archive (download.huzheng.org) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
+| Internet Archive | archive.org search | community uploads (StarDict, Babylon, DSL) | vary |
+| FreeMdict cloud | Nextcloud share | MDict, StarDict and DSL packs | vary |
+| Telegram: Dictionaries_GoldenDict | Telegram channel | listed; the files open in Telegram | vary |
+
+Source types you can add: `dictz-catalog` (a `catalog.json`), `freedict`, `github-releases`, `github-folder`, `http-index` (any web folder listing), `webdav`, `nextcloud-share` (with password), `archive-org` (a search query), `local` (a folder on this computer or a network drive) and `telegram`. Passwords and tokens stay in `center/credentials.json` on this computer (or `DICTZ_SOURCE_<ID>_PASSWORD` / `_TOKEN`), never in an exported list. `GITHUB_TOKEN` raises GitHub's request limit.
+
+### Licences
+
+Every entry carries an SPDX-style licence id and a status: **open** (an open licence: CC0, CC BY, CC BY-SA, GPL, MIT …), **free** (free to use, but not a named licence), **unknown** (the source does not say) or **nonfree** (personal use only). Unknown and personal-use dictionaries are marked in orange / red, the Catalog can hide them (setting `center.show_unknown_license`), and dictz asks before downloading them. `dct licenses` prints the table; it is a summary, not legal advice.
+
+### Your own server
+
+Put dictionaries in a folder, run `dct catalog build FOLDER --base-url https://…/` (or *İçe / Dışa aktar → Kendi sunucun için katalog oluştur*), publish the folder with its `catalog.json` anywhere (GitHub, a web server, a share) and add the address as a source. A `<file>.json` next to a dictionary sets its licence, description, home page and other fields. The format is in [docs/CATALOG.md](docs/CATALOG.md).
 
 ## Scan popup (like GoldenDict)
 
@@ -333,7 +390,7 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 
 ## Settings
 
-**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 80 settings, stored in `settings.json` in the data folder and shared by both editions:
+**Düzen → Tercihler** (Ctrl+,) or `dct config`. There are 90 settings, stored in `settings.json` in the data folder and shared by both editions:
 
 | Page | Examples |
 |---|---|
@@ -346,6 +403,7 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 | Sözlükler | dictionary folders scanned on every start — several folders, each with its own **Subfolders** box (like GoldenDict's Sources → Files) — reindex changed files, **dictionaries prepared at once** (0 = automatic) |
 | Ses | auto-play, volume, system player |
 | Geçmiş ve Favoriler | history on/off, sidebar counts, database limit, clear on exit |
+| Sözlük Merkezi | use internet sources, refresh catalogs every N days, downloads at once, folder for downloaded dictionaries, check checksums, keep archives, add after install, show unknown licences, proxy, timeout |
 
 The window also has:
 
@@ -372,7 +430,11 @@ To use another folder, pass `--data-dir DIR` or set `DICTZ_DATA_DIR`. A USB stic
 | `articles/<id>.db` | each dictionary's articles, saved once when it is added, so dictz starts at once (rebuilt by itself when the file changes) |
 | `scan_cache.json` | what the dictionary folders held at the last scan (unchanged folders are not listed again) |
 | `icons/` | dictionary icons, looked for once |
-| `settings.json` | the 80 settings |
+| `settings.json` | the 90 settings |
+| `center/sources.json` | the Dictionary Center's servers / sources (`credentials.json` beside it keeps passwords, only on this computer) |
+| `center/cache/<source>.json` | each source's catalog, read last time |
+| `center/installed.json`, `center/downloads.json` | what was installed from the catalog, and the download history |
+| `dictionaries/<source>/<dictionary>/` | downloaded dictionaries (setting `center.install_folder` moves them) |
 | `dictz_index.db` | the headword index (SQLite FTS5) |
 | `dictz_history.db` | history and favorites |
 
@@ -471,7 +533,8 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
 - **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
-- **Ayarlar:** 9 sayfada 80 ayar, arama kutusu ve ayar başına sıfırlama.
+- **Sözlük Merkezi** (Ctrl+Shift+M): ücretsiz ve açık kaynak sözlükleri birçok sunucudan (dictz'in kendi sunucusu, FreeDict, Wiktionary, ECDICT, StarDict arşivi, Internet Archive, FreeMdict, Telegram) ya da **kendi sunucunuzdan, klasörünüzden, bağlantınızdan** arayın, indirin, kurun. Her sözlüğün **lisansı** indirmeden önce görünür. Sunucu ekleme / düzenleme / silme / sıralama / varsayılan yapma, indirmeyi duraklatma / sürdürme, kaldırma, güncelleme ve tüm kurulumu içe / dışa aktarma.
+- **Ayarlar:** 10 sayfada 90 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
 
 ### Lisans

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-11-22
+
+The **Dictionary Center**: find, download, install, update and remove free dictionaries from many servers — or from your own server, folder or link — with every dictionary's **licence**; export and import the whole setup. In **both editions**, with the same files, commands and results.
+
+### Added
+- **Dictionary Center window** (Dosya → Sözlük Merkezi…, Ctrl+Shift+M, the cloud button on the toolbar) with five tabs:
+  - **Katalog** — every dictionary of the enabled sources in one sortable table (name, languages, kind, format, words, size, licence, source, date); filters for text, source and target language (with counts and ⇄), source, licence status, format, "only those dictz opens", "hide installed"; a detail pane with the licence and what it allows (credit, share-alike, commercial use), the files and their checksums; ✓ installed, ↑ update available; install with a button or a double click, remove, open the page, copy the links.
+  - **Kaynaklar (sunucular)** — the servers: on / off, add, edit, delete, up / down, make default (★), refresh, export / import the list (without passwords), restore the built-in ones. The source editor: address, type (with "guess"), file filter, language pattern, languages and licence for sources that do not say, depth, sign-in (user + password, token, custom header, share password), notes, and a **Dene** button that reads the source at once.
+  - **İndirmeler** — the download queue: several at once, progress, speed, pause / resume / cancel / retry; an interrupted download continues where it stopped (HTTP Range); size and SHA-256 / SHA-512 / MD5 are checked; zip, tar, tar.gz, tar.xz and tar.bz2 are unpacked safely (no path leaves the install folder); the history below.
+  - **Kurulu** — what was installed from the catalog, with version, date, licence, folder and available update; update one or all, remove with or without the files, open the folder or the licence.
+  - **İçe / Dışa aktar** — export / import the **whole setup** as one zip (dictionary list, settings, sources, install records, history and favourites, optionally the dictionary files), merging or replacing; export the dictionary list with licences as CSV / JSON / TXT; build a `catalog.json` for your own server and check one; the licence table.
+- **Bağlantıdan sözlük ekle…** (Ctrl+Shift+L): any link to a dictionary file or archive (also `file:`) is downloaded, unpacked and added; a link that looks like a server is offered as a new source.
+- **10 source types:** dictz catalog (`catalog.json`, with `include`), FreeDict database, GitHub releases, GitHub folder, web folder listing, WebDAV, Nextcloud share, Internet Archive search, local folder, Telegram channel (listed; files open in Telegram).
+- **9 built-in sources:** dictz-data (github.com/bayramkotan/dictz-data, the default server), FreeDict, Wiktionary Dictionaries (Vuizur), Wiktionary StarDict (xxyzz), ECDICT, the StarDict archive at download.huzheng.org, the Internet Archive, the FreeMdict cloud and the Dictionaries_GoldenDict Telegram channel. Every address can be changed or removed.
+- **Licences:** 26 licence ids (CC0, CC BY, CC BY-SA, CC BY-NC, GPL, LGPL, AGPL, GFDL, MIT, BSD, Apache, ODbL, WordNet, EDRDG, FreeDict, Wiktionary, public domain, free, personal use, unknown) with status **open / free / unknown / nonfree** and what each allows; other spellings are recognised. Unknown and personal-use dictionaries are marked, can be hidden, and dictz asks before downloading them.
+- **ISO 639 language table** (`languages.json`): `en`, `eng`, `English`, `İngilizce`-style names all become one code, shown as "English (en)".
+- **Command line:** `dct sources [list|add|edit|remove|enable|disable|default|up|down|refresh|export|import|reset]`, `dct catalog [TEXT] [--from --to --license --format --supported]`, `dct catalog show|languages|updates|build|check`, `dct install ID|NAME|URL…`, `dct uninstall`, `dct downloads [clear]`, `dct licenses`, `dct setup export|import|show`, `dct dicts --export FILE [--format csv|json|txt]`; shell completion for all of them.
+- **10 new settings** (page "Sözlük Merkezi"): use internet sources, refresh catalogs every N days, downloads at once, folder for downloaded dictionaries, check checksums, keep archives, add after install, show unknown licences, proxy, timeout — **90 settings in 10 pages**.
+- `docs/CATALOG.md` — the catalog format, sidecar `<file>.json`, licences, source types; `docs/dictz-data/` — the starting point of the dictz-data server repository.
+- Six new interface icons (download, upload, link, server, center, license); 211 new texts in all 25 interface languages.
+
+### Changed
+- dictz now goes online also for the Dictionary Center's sources, only when it is used; `center.online` switches it off.
+
+### Rust edition
+- New default feature `center` (pure-Rust: regex, sha2, md-5, lzma-rs, bzip2 with the pure-Rust backend); `cli` and `gui` turn it on.
+- Python ↔ Rust golden tests for every source type (recorded answers in `tests/data/center/`), the licence table, the built-in sources and the language codes.
+
 ## [0.1.6] — 2026-11-21
 
 Speaker-only sound buttons, one dictz window ever, and a tray icon from the start — in **both editions**.

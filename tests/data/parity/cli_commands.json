@@ -116,6 +116,34 @@
   "create desktop and menu shortcuts (--remove deletes them)"
  ],
  [
+  "sources",
+  "dictionary servers / sources: list, add, edit, remove, refresh, export, import"
+ ],
+ [
+  "catalog",
+  "search the catalog of downloadable dictionaries; build or check a catalog"
+ ],
+ [
+  "install",
+  "download and install dictionaries from the catalog or a link"
+ ],
+ [
+  "uninstall",
+  "remove dictionaries installed from the catalog"
+ ],
+ [
+  "downloads",
+  "download history"
+ ],
+ [
+  "licenses",
+  "licences dictz knows and what they allow"
+ ],
+ [
+  "setup",
+  "export / import the whole setup (list, settings, sources, history, files)"
+ ],
+ [
   "help",
   "show help"
  ]

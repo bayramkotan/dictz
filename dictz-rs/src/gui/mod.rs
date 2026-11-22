@@ -8,6 +8,7 @@
 
 mod app;
 mod audio;
+mod center;
 mod dictbadge;
 mod fonts;
 mod langflags;

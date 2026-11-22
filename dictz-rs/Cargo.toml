@@ -1,6 +1,6 @@
 [package]
 name = "dictz"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Bayram Kotan"]
@@ -16,6 +16,7 @@ include = [
     "src/**/*.rs",
     "src/completion/*.txt",
     "src/i18n/catalog.json",
+    "src/center/languages.json",
     "src/flags/*.png",
     "src/uiicons/*.png",
     "src/flags/LICENSE-flag-icons.txt",
@@ -43,14 +44,17 @@ required-features = ["cli"]
 # `cli` = the `dictz` binary's command line, `gui` = the desktop window,
 # `audio` = in-app playback of DSL sounds (needs ALSA headers on Linux:
 # libasound2-dev / alsa-lib), `update` = `dictz update` (HTTPS download),
+# `center` = the Dictionary Center (catalogs, downloads, import / export),
 # `scan` = scan popup (clipboard / selection), global hotkeys and tray icon.
 # Library-only users: `dictz = { version = "...", default-features = false }`.
-default = ["cli", "gui", "audio", "update", "scan"]
-cli = ["dep:clap"]
+default = ["cli", "gui", "audio", "update", "scan", "center"]
+cli = ["dep:clap", "center"]
 gui = ["dep:eframe", "dep:egui_extras", "dep:rfd", "dep:image", "dep:raw-window-handle", "dep:ar-reshaper",
-       "dep:unicode-bidi"]
+       "dep:unicode-bidi", "center"]
 audio = ["dep:rodio"]
 update = ["dep:ureq", "dep:tar"]
+# the Dictionary Center: sources, catalogs, downloads, install, import / export
+center = ["dep:ureq", "dep:tar", "dep:regex", "dep:sha2", "dep:md-5", "dep:lzma-rs", "dep:bzip2"]
 scan = ["gui", "dep:arboard", "dep:clipboard-master", "dep:global-hotkey", "dep:mouse_position",
         "dep:tray-icon", "dep:ksni", "dep:x11rb"]
 
@@ -59,11 +63,17 @@ flate2 = "1"
 encoding_rs = "0.8"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "4.5", optional = true, features = ["derive", "wrap_help"] }
 ureq = { version = "2.12", optional = true, default-features = false, features = ["tls", "gzip", "proxy-from-env"] }
 tar = { version = "0.4", optional = true, default-features = false }
+# Dictionary Center: patterns, checksums, .tar.xz / .tar.bz2 (pure Rust)
+regex = { version = "1", optional = true, default-features = false, features = ["std", "unicode", "perf"] }
+sha2 = { version = "0.10", optional = true }
+md-5 = { version = "0.10", optional = true }
+lzma-rs = { version = "0.3", optional = true }
+bzip2 = { version = "0.6", optional = true }
 
 eframe = { version = "0.31", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "persistence"] }
 egui_extras = { version = "0.31", optional = true, default-features = false, features = ["image"] }

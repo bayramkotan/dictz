@@ -1,0 +1,5 @@
+{"responseHeader": {"status": 0}, "response": {"numFound": 2, "start": 0, "docs": [
+ {"identifier": "stardict-en-ru", "title": "StarDict English-Russian dictionaries", "description": ["<p>Big <b>pack</b></p>", "of dictionaries"],
+  "licenseurl": "http://creativecommons.org/licenses/by-sa/3.0/", "date": "2014-03-02T00:00:00Z", "item_size": 123456, "language": ["eng"]},
+ {"identifier": "babylon_glossaries", "title": ["Babylon glossaries"], "date": "2019", "item_size": "999"}
+]}}

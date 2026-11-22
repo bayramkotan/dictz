@@ -678,6 +678,82 @@
   "max": 16
  },
  {
+  "key": "center.online",
+  "kind": "bool",
+  "default": true,
+  "label": "İnternet kaynaklarını kullan",
+  "help": "Kapalıyken Sözlük Merkezi hiçbir sunucuya bağlanmaz; yalnızca önceki listeler görünür."
+ },
+ {
+  "key": "center.refresh_days",
+  "kind": "int",
+  "default": 7,
+  "label": "Katalogları yenileme sıklığı (gün)",
+  "help": "Sözlük Merkezi açılınca bu kadar günden eski listeler arka planda yenilenir. 0 = yalnızca elle.",
+  "min": 0,
+  "max": 365
+ },
+ {
+  "key": "center.parallel_downloads",
+  "kind": "int",
+  "default": 2,
+  "label": "Aynı anda indirme",
+  "help": "",
+  "min": 1,
+  "max": 8
+ },
+ {
+  "key": "center.install_folder",
+  "kind": "str",
+  "default": "",
+  "label": "İndirilen sözlüklerin klasörü",
+  "help": "Boş = veri klasöründe dictionaries/<kaynak>/<sözlük>."
+ },
+ {
+  "key": "center.verify_checksums",
+  "kind": "bool",
+  "default": true,
+  "label": "İndirilenlerin sağlamasını denetle",
+  "help": "Katalog SHA-256 / SHA-512 / MD5 veriyorsa dosya denetlenir; tutmazsa kurulmaz."
+ },
+ {
+  "key": "center.keep_archives",
+  "kind": "bool",
+  "default": false,
+  "label": "İndirilen arşivi de sakla",
+  "help": ""
+ },
+ {
+  "key": "center.add_after_install",
+  "kind": "bool",
+  "default": true,
+  "label": "Kurulunca sözlük listesine ekle",
+  "help": ""
+ },
+ {
+  "key": "center.show_unknown_license",
+  "kind": "bool",
+  "default": true,
+  "label": "Lisansı bilinmeyenleri de göster",
+  "help": "Kapalıyken katalog yalnızca açık ya da serbest lisanslı sözlükleri gösterir."
+ },
+ {
+  "key": "center.proxy",
+  "kind": "str",
+  "default": "",
+  "label": "Vekil sunucu (proxy)",
+  "help": "Boş = sistemin ayarı; none = doğrudan; ya da http://sunucu:port"
+ },
+ {
+  "key": "center.timeout",
+  "kind": "int",
+  "default": 30,
+  "label": "Bağlantı zaman aşımı (saniye)",
+  "help": "",
+  "min": 5,
+  "max": 300
+ },
+ {
   "key": "audio.auto_play",
   "kind": "bool",
   "default": false,

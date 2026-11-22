@@ -42,6 +42,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("scan", "Tarama penceresi"),
     ("hotkeys", "Genel kısayollar"),
     ("dictionaries", "Sözlükler"),
+    ("center", "Sözlük Merkezi"),
     ("audio", "Ses"),
     ("history", "Geçmiş ve Favoriler"),
 ]
@@ -166,6 +167,24 @@ SCHEMA: list[Setting] = [
             "Yeni ya da değişmiş sözlükler ayrı işlemlerde, bu kadarı aynı anda okunur. "
             "0 = otomatik (işlemci sayısı − 1, en çok 4). Her biri ayrıca bellek kullanır.",
             min=0, max=16),
+    # -------------------------------------------------- dictionary center
+    Setting("center.online", "bool", True, "İnternet kaynaklarını kullan",
+            "Kapalıyken Sözlük Merkezi hiçbir sunucuya bağlanmaz; yalnızca önceki listeler görünür."),
+    Setting("center.refresh_days", "int", 7, "Katalogları yenileme sıklığı (gün)",
+            "Sözlük Merkezi açılınca bu kadar günden eski listeler arka planda yenilenir. 0 = yalnızca elle.",
+            min=0, max=365),
+    Setting("center.parallel_downloads", "int", 2, "Aynı anda indirme", min=1, max=8),
+    Setting("center.install_folder", "str", "", "İndirilen sözlüklerin klasörü",
+            "Boş = veri klasöründe dictionaries/<kaynak>/<sözlük>."),
+    Setting("center.verify_checksums", "bool", True, "İndirilenlerin sağlamasını denetle",
+            "Katalog SHA-256 / SHA-512 / MD5 veriyorsa dosya denetlenir; tutmazsa kurulmaz."),
+    Setting("center.keep_archives", "bool", False, "İndirilen arşivi de sakla"),
+    Setting("center.add_after_install", "bool", True, "Kurulunca sözlük listesine ekle"),
+    Setting("center.show_unknown_license", "bool", True, "Lisansı bilinmeyenleri de göster",
+            "Kapalıyken katalog yalnızca açık ya da serbest lisanslı sözlükleri gösterir."),
+    Setting("center.proxy", "str", "", "Vekil sunucu (proxy)",
+            "Boş = sistemin ayarı; none = doğrudan; ya da http://sunucu:port"),
+    Setting("center.timeout", "int", 30, "Bağlantı zaman aşımı (saniye)", min=5, max=300),
     # --------------------------------------------------------------- audio
     Setting("audio.auto_play", "bool", False, "Aramada ilk sesi otomatik çal"),
     Setting("audio.volume", "int", 80, "Ses düzeyi", "%", min=0, max=100),

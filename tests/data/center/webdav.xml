@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:oc="http://owncloud.org/ns">
+ <d:response><d:href>/public.php/webdav/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+ <d:response><d:href>/public.php/webdav/English/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype><d:getlastmodified>Tue, 01 Sep 2026 10:00:00 GMT</d:getlastmodified></d:prop></d:propstat></d:response>
+ <d:response><d:href>/public.php/webdav/Longman%20DOCE5.mdx</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>5000</d:getcontentlength><d:getlastmodified>Wed, 02 Sep 2026 11:00:00 GMT</d:getlastmodified></d:prop></d:propstat></d:response>
+ <d:response><d:href>/public.php/webdav/Longman%20DOCE5.mdd</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>90000</d:getcontentlength></d:prop></d:propstat></d:response>
+</d:multistatus>

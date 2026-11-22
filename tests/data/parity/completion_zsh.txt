@@ -2,7 +2,7 @@
 # dictz zsh completion — add to ~/.zshrc:  eval "$(dictz completion zsh)"
 _dictz() {
     if (( CURRENT == 2 )); then
-        compadd -- add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths popup random reindex remove rm s scan selftest shell shortcut show suggest update upgrade version watch
+        compadd -- add catalog completion config dicts disable doctor downloads dump enable f fav favorites fuzzy gui help history info install l licenses lookup ls move paths popup random reindex remove rm s scan selftest setup shell shortcut show sources suggest uninstall update upgrade version watch
         return
     fi
     case "${words[2]}" in
@@ -12,6 +12,10 @@ _dictz() {
         completion) compadd -- bash zsh fish powershell ;;
         watch) compadd -- on off toggle status ;;
         shortcut) compadd -- --remove --desktop-only --menu-only ;;
+        sources) compadd -- list add edit remove enable disable default up down refresh export import reset ;;
+        catalog) compadd -- search show languages updates build check ;;
+        downloads) compadd -- list clear ;;
+        setup) compadd -- export import show ;;
         *) _files ;;
     esac
 }

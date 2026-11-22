@@ -4,7 +4,7 @@ _dictz() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[1]}"
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=( $(compgen -W "add completion config dicts disable doctor dump enable f fav favorites fuzzy gui help history info l lookup ls move paths popup random reindex remove rm s scan selftest shell shortcut show suggest update upgrade version watch --version --help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "add catalog completion config dicts disable doctor downloads dump enable f fav favorites fuzzy gui help history info install l licenses lookup ls move paths popup random reindex remove rm s scan selftest setup shell shortcut show sources suggest uninstall update upgrade version watch --version --help" -- "$cur") )
         return
     fi
     case "$prev" in
@@ -16,6 +16,10 @@ _dictz() {
         completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
         watch) COMPREPLY=( $(compgen -W "on off toggle status" -- "$cur") ) ;;
         shortcut) COMPREPLY=( $(compgen -W "--remove --desktop-only --menu-only" -- "$cur") ) ;;
+        sources) COMPREPLY=( $(compgen -W "list add edit remove enable disable default up down refresh export import reset" -- "$cur") ) ;;
+        catalog) COMPREPLY=( $(compgen -W "search show languages updates build check" -- "$cur") ) ;;
+        downloads) COMPREPLY=( $(compgen -W "list clear" -- "$cur") ) ;;
+        setup) COMPREPLY=( $(compgen -W "export import show" -- "$cur") ) ;;
         add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
     esac
 }

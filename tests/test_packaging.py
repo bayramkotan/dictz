@@ -224,7 +224,7 @@ def test_rust_crate_is_a_full_application() -> None:
     """crates.io ships the Rust edition app (binary `dictz`), not a stub."""
     cargo = (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
     assert '[[bin]]\nname = "dictz"' in cargo
-    assert 'default = ["cli", "gui", "audio", "update", "scan"]' in cargo
+    assert 'default = ["cli", "gui", "audio", "update", "scan", "center"]' in cargo
     assert '"src/completion/*.txt"' in cargo, "completion scripts are include_str!-ed"
     assert '"Cargo.lock"' in cargo, "Cargo.lock must be published (binary crate)"
     assert (ROOT / "dictz-rs" / "Cargo.lock").is_file()
@@ -233,7 +233,9 @@ def test_rust_crate_is_a_full_application() -> None:
                    "fuzzy.rs", "media.rs", "query.rs", "selftest.rs", "main.rs",
                    "cli.rs", "updater.rs", "settings.rs", "shortcuts.rs", "html.rs",
                    "instance.rs", "scantext.rs", "hotkeys.rs", "icon.rs", "gui/services.rs", "gui/window.rs",
-                   "gui/app.rs", "gui/prefs_window.rs", "gui/render.rs"):
+                   "gui/app.rs", "gui/prefs_window.rs", "gui/render.rs", "gui/center.rs", "cli_center.rs",
+                   "center/adapters.rs", "center/catalog.rs", "center/install.rs", "center/transfer.rs",
+                   "center/sources.rs", "center/languages.json"):
         assert (src / module).is_file(), f"dictz-rs/src/{module} missing"
 
 

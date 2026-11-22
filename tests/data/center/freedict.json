@@ -1,0 +1,13 @@
+[
+ {"date": "2022-04-13", "edition": "0.2.2", "headwords": "5251", "maintainerName": "Jane Doe", "name": "afr-eng",
+  "sourceURL": "https://github.com/freedict/fd-dictionaries/tree/master/afr-eng", "status": "big enough to be useful",
+  "releases": [
+   {"URL": "https://download.freedict.org/dictionaries/afr-eng/0.2.2/freedict-afr-eng-0.2.2.dictd.tar.xz", "checksum": "aa11", "date": "2022-04-13", "platform": "dictd", "size": "100", "version": "0.2.2"},
+   {"URL": "https://download.freedict.org/dictionaries/afr-eng/0.2.2/freedict-afr-eng-0.2.2.stardict.tar.xz", "checksum": "BB22", "date": "2022-04-13", "platform": "stardict", "size": "120", "version": "0.2.2"},
+   {"URL": "https://download.freedict.org/dictionaries/afr-eng/0.2.2/freedict-afr-eng-0.2.2.src.tar.xz", "checksum": "cc33", "date": "2022-04-13", "platform": "src", "size": "90", "version": "0.2.2"}]},
+ {"date": "2025-11-23", "edition": "2025.11.23", "headwords": 70000, "maintainerName": "WikDict", "name": "eng-tur",
+  "releases": [
+   {"URL": "https://download.freedict.org/dictionaries/eng-tur/2025.11.23/freedict-eng-tur-2025.11.23.slob", "checksum": "dd44", "date": "2025-11-23", "platform": "slob", "size": 5000, "version": "2025.11.23"}]},
+ {"name": "kha-deu", "releases": []},
+ {"software": "freedict-tools", "version": "0.6.0", "URL": "https://example.org/tools.tar.xz"}
+]

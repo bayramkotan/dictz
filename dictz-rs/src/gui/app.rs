@@ -129,6 +129,9 @@ enum Action {
     AddFolderDialog,
     AddPaths(Vec<PathBuf>),
     OpenManager,
+    /// The Dictionary Center on this tab.
+    OpenCenter(usize),
+    AddFromLink,
     OpenPreferences,
     About,
     Shortcuts,
@@ -278,6 +281,9 @@ pub struct DictzApp {
     show_manager: bool,
     manager_selected: Option<String>,
     prefs_win: Option<PrefsWindow>,
+    /// The Dictionary Center (kept while dictz runs: downloads go on).
+    center: Option<super::center::CenterWindow>,
+    center_open: bool,
     show_about: bool,
     show_shortcuts: bool,
     show_cli: bool,
@@ -384,6 +390,8 @@ impl DictzApp {
             show_manager: false,
             manager_selected: None,
             prefs_win: None,
+            center: None,
+            center_open: false,
             show_about: false,
             show_shortcuts: false,
             show_cli: false,
@@ -1656,6 +1664,99 @@ impl DictzApp {
         );
     }
 
+    // ------------------------------------------------------------ center
+
+    /// The Dictionary Center (one window, kept while dictz runs).
+    fn open_center(&mut self, ctx: &egui::Context, tab: usize) {
+        if self.qm.index.is_none() {
+            return;
+        }
+        if self.center.is_none() {
+            self.center = Some(super::center::CenterWindow::new(
+                ctx,
+                &self.data_dir,
+                &self.prefs,
+            ));
+        }
+        if let Some(c) = &mut self.center {
+            c.tab = tab;
+        }
+        self.center_open = true;
+    }
+
+    /// Draw the center (when open) and do what it asks; its downloads are
+    /// followed also while it is closed.
+    fn center_events(&mut self, ctx: &egui::Context) {
+        use super::center::Event;
+        let Some(c) = &mut self.center else { return };
+        let mut open = self.center_open;
+        let events = c.update(ctx, &mut open);
+        self.center_open = open;
+        for ev in events {
+            match ev {
+                Event::InstallFiles(files) => self.load_new_files(ctx, files),
+                Event::RemoveFiles(files) => {
+                    let want: std::collections::HashSet<String> = files
+                        .iter()
+                        .map(|f| crate::registry::norm_path(Path::new(f)))
+                        .collect();
+                    for row in self.dictionary_rows() {
+                        if want.contains(&crate::registry::norm_path(&row.path)) {
+                            let _ = self.qm.remove_dictionary(&row.name);
+                            self.media_cache.retain(|k, _| k.0 != row.name);
+                        }
+                    }
+                }
+                Event::RemoveAll => {
+                    for row in self.dictionary_rows() {
+                        let _ = self.qm.remove_dictionary(&row.name);
+                    }
+                    self.media_cache.clear();
+                }
+                Event::Imported(settings) => self.after_import(ctx, settings),
+            }
+        }
+    }
+
+    fn dictionary_rows(&self) -> Vec<crate::index::DictionaryRow> {
+        self.qm
+            .index
+            .as_ref()
+            .and_then(|i| i.list_dictionaries(false).ok())
+            .unwrap_or_default()
+    }
+
+    /// Open what an imported setup added (in the background); new settings
+    /// apply at once.
+    fn after_import(&mut self, ctx: &egui::Context, settings: bool) {
+        if settings {
+            let path = self.data_dir.join(crate::settings::SETTINGS_FILE);
+            self.prefs = Preferences::load(&path);
+            self.apply_prefs(ctx);
+            if let Some(c) = &mut self.center {
+                c.set_prefs(&self.prefs);
+            }
+        }
+        let loaded: std::collections::HashSet<String> =
+            self.qm.loaded_names().into_iter().collect();
+        let rows: Vec<crate::index::DictionaryRow> = self
+            .dictionary_rows()
+            .into_iter()
+            .filter(|r| !loaded.contains(&r.name))
+            .collect();
+        if rows.is_empty() {
+            self.refresh_lists();
+            return;
+        }
+        if self.loader.is_some() {
+            let files = rows.into_iter().map(|r| r.path).collect();
+            self.queue_work(ctx, files, Vec::new(), Vec::new());
+        } else {
+            self.start_job(ctx, rows, Vec::new(), Vec::new(), Vec::new(), true);
+        }
+        self.refresh_lists();
+    }
+
     fn play_audio(&mut self, dict: &str, name: &str) {
         let Some(bytes) = self.qm.media(dict).and_then(|m| m.read(name)) else {
             self.set_status(
@@ -1897,6 +1998,13 @@ impl DictzApp {
                 }
             }
             Action::OpenManager => self.show_manager = true,
+            Action::OpenCenter(tab) => self.open_center(ctx, tab),
+            Action::AddFromLink => {
+                self.open_center(ctx, 2);
+                if let Some(c) = &mut self.center {
+                    c.add_from_link();
+                }
+            }
             Action::RescanFolders => self.rescan_folders(ctx),
             Action::OpenPreferences => self.prefs_win = Some(PrefsWindow::new(&self.prefs)),
             Action::About => self.show_about = true,
@@ -2186,6 +2294,8 @@ impl DictzApp {
         sc(cmd | shift, Key::A, Action::CopyArticle(None));
         sc(cmd | shift, Key::F, Action::OpenFind);
         sc(cmd | shift, Key::O, Action::AddFolderDialog);
+        sc(cmd | shift, Key::M, Action::OpenCenter(0));
+        sc(cmd | shift, Key::L, Action::AddFromLink);
         sc(shift, Key::F3, Action::FindStep(-1));
         sc(Modifiers::NONE, Key::F3, Action::FindStep(1));
         sc(Modifiers::NONE, Key::F11, Action::Fullscreen);
@@ -2256,6 +2366,15 @@ impl DictzApp {
                 }
                 if item(ui, &tr("Sözlük Yöneticisi…"), "Ctrl+M") {
                     actions.push(Action::OpenManager);
+                }
+                if item(ui, &tr("Sözlük Merkezi…"), "Ctrl+Shift+M") {
+                    actions.push(Action::OpenCenter(0));
+                }
+                if item(ui, &tr("Bağlantıdan sözlük ekle…"), "Ctrl+Shift+L") {
+                    actions.push(Action::AddFromLink);
+                }
+                if item(ui, &tr("Kurulumu dışa / içe aktar…"), "") {
+                    actions.push(Action::OpenCenter(4));
                 }
                 ui.separator();
                 if item(ui, &tr("Makaleyi HTML olarak kaydet…"), "Ctrl+S") {
@@ -2486,6 +2605,17 @@ impl DictzApp {
                 if uiicons::button(ui, "settings", &tr("Tercihler (Ctrl+,)"), false, true).clicked()
                 {
                     actions.push(Action::OpenPreferences);
+                }
+                if uiicons::button(
+                    ui,
+                    "center",
+                    &tr("Sözlük Merkezi: sözlük indir, kaynaklar, içe / dışa aktar (Ctrl+Shift+M)"),
+                    self.center_open,
+                    true,
+                )
+                .clicked()
+                {
+                    actions.push(Action::OpenCenter(0));
                 }
                 let scan = self.prefs.bool("scan.enabled");
                 if uiicons::button(
@@ -3581,6 +3711,9 @@ impl DictzApp {
                         }
                         self.prefs = p;
                         self.save_prefs();
+                        if let Some(c) = &mut self.center {
+                            c.set_prefs(&self.prefs);
+                        }
                         self.apply_prefs(ctx);
                         self.refresh_lists();
                         if self.prefs.bool("general.autostart") != autostart_before {
@@ -3924,6 +4057,7 @@ impl eframe::App for DictzApp {
                 self.content(ui, &mut actions);
             });
         self.windows(ctx, &mut actions);
+        self.center_events(ctx);
         self.popup_viewport(ctx);
 
         for a in actions {
@@ -3942,6 +4076,9 @@ impl eframe::App for DictzApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if let Some(h) = &self.job {
             h.stop(); // workers end with the program; their temp files go later
+        }
+        if let Some(c) = &self.center {
+            c.stop_all(); // a partial download is continued next time (Range)
         }
         self.close_popup();
         self.services.stop();

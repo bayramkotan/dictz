@@ -1,0 +1,5 @@
+{"files": [
+ {"name": "stardict-en-ru/Mueller.tar.bz2", "size": "1000", "md5": "abc", "source": "original"},
+ {"name": "stardict-en-ru_meta.xml", "source": "metadata"},
+ {"name": "readme.txt", "source": "original"}
+]}

@@ -52,8 +52,33 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "shortcut",
         "create desktop and menu shortcuts (--remove deletes them)",
     ),
+    (
+        "sources",
+        "dictionary servers / sources: list, add, edit, remove, refresh, export, import",
+    ),
+    (
+        "catalog",
+        "search the catalog of downloadable dictionaries; build or check a catalog",
+    ),
+    (
+        "install",
+        "download and install dictionaries from the catalog or a link",
+    ),
+    (
+        "uninstall",
+        "remove dictionaries installed from the catalog",
+    ),
+    ("downloads", "download history"),
+    ("licenses", "licences dictz knows and what they allow"),
+    (
+        "setup",
+        "export / import the whole setup (list, settings, sources, history, files)",
+    ),
     ("help", "show help"),
 ];
+
+#[path = "cli_center.rs"]
+mod center_cli;
 
 /// Command aliases.
 pub const ALIASES: &[(&str, &str)] = &[
@@ -148,6 +173,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // parsed once
 enum Cmd {
     /// open the window (default)
     Gui {
@@ -201,6 +227,12 @@ enum Cmd {
         /// names only, one per line
         #[arg(long)]
         names: bool,
+        /// write the list (with licences) to FILE
+        #[arg(long, value_name = "FILE")]
+        export: Option<String>,
+        /// for --export (default: by the file's extension)
+        #[arg(long = "format", value_parser = ["csv", "json", "txt"])]
+        export_format: Option<String>,
     },
     /// add dictionary files or folders
     Add {
@@ -363,6 +395,8 @@ enum Cmd {
         #[arg(long)]
         menu_only: bool,
     },
+    #[command(flatten)]
+    Center(center_cli::CenterCmd),
 }
 
 #[derive(Args)]
@@ -1797,7 +1831,16 @@ pub fn run(args: Vec<String>) -> Outcome {
             json,
         }) => cmd_fuzzy(&mut ctx, word, limit, cutoff, json),
         Some(Cmd::Random { dict, json }) => cmd_random(&mut ctx, dict, json, &out),
-        Some(Cmd::Dicts { json, names }) => cmd_dicts(&mut ctx, json, names),
+        Some(Cmd::Dicts {
+            json,
+            names,
+            export,
+            export_format,
+        }) => match export {
+            Some(f) => center_cli::export_list(&ctx, &f, export_format.as_deref().unwrap_or("")),
+            None => cmd_dicts(&mut ctx, json, names),
+        },
+        Some(Cmd::Center(c)) => center_cli::run(&mut ctx, c),
         Some(Cmd::Add {
             paths,
             recursive,

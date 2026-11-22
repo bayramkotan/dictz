@@ -29,6 +29,13 @@ complete -c dictz -n '__fish_use_subcommand' -a show -d 'bring the running windo
 complete -c dictz -n '__fish_use_subcommand' -a popup -d 'look a word up in the running dictzs scan popup'
 complete -c dictz -n '__fish_use_subcommand' -a watch -d 'turn clipboard / selection scanning on or off'
 complete -c dictz -n '__fish_use_subcommand' -a shortcut -d 'create desktop and menu shortcuts (--remove deletes them)'
+complete -c dictz -n '__fish_use_subcommand' -a sources -d 'dictionary servers / sources: list, add, edit, remove, refresh, export, import'
+complete -c dictz -n '__fish_use_subcommand' -a catalog -d 'search the catalog of downloadable dictionaries; build or check a catalog'
+complete -c dictz -n '__fish_use_subcommand' -a install -d 'download and install dictionaries from the catalog or a link'
+complete -c dictz -n '__fish_use_subcommand' -a uninstall -d 'remove dictionaries installed from the catalog'
+complete -c dictz -n '__fish_use_subcommand' -a downloads -d 'download history'
+complete -c dictz -n '__fish_use_subcommand' -a licenses -d 'licences dictz knows and what they allow'
+complete -c dictz -n '__fish_use_subcommand' -a setup -d 'export / import the whole setup (list, settings, sources, history, files)'
 complete -c dictz -n '__fish_use_subcommand' -a help -d 'show help'
 complete -c dictz -n '__fish_seen_subcommand_from lookup l remove rm enable disable move info reindex dump random' -a '(dictz dicts --names 2>/dev/null)'
 complete -c dictz -n '__fish_seen_subcommand_from config' -a 'list get set reset path export import'
@@ -36,5 +43,9 @@ complete -c dictz -n '__fish_seen_subcommand_from favorites fav' -a 'list add re
 complete -c dictz -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
 complete -c dictz -n '__fish_seen_subcommand_from watch' -a 'on off toggle status'
 complete -c dictz -n '__fish_seen_subcommand_from shortcut' -l remove -l desktop-only -l menu-only
+complete -c dictz -n '__fish_seen_subcommand_from sources' -a 'list add edit remove enable disable default up down refresh export import reset'
+complete -c dictz -n '__fish_seen_subcommand_from catalog' -a 'search show languages updates build check'
+complete -c dictz -n '__fish_seen_subcommand_from downloads' -a 'list clear'
+complete -c dictz -n '__fish_seen_subcommand_from setup' -a 'export import show'
 complete -c dct -w dictz
 complete -c dictz -n '__fish_seen_subcommand_from add scan' -F

@@ -1,0 +1,11 @@
+{
+ "catalog": {
+  "base_url": "https://raw.githubusercontent.com/bayramkotan/dictz-data/main/",
+  "include": [],
+  "license": "",
+  "name": "dictz-data",
+  "schema": 1,
+  "updated": "2026-11-22T00:00:00Z"
+ },
+ "dictionaries": []
+}

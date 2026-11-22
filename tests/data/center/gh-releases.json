@@ -1,0 +1,9 @@
+[
+ {"tag_name": "20261101", "draft": false, "published_at": "2026-11-01T08:00:00Z",
+  "html_url": "https://github.com/xxyzz/wiktionary_stardict/releases/tag/20261101",
+  "assets": [
+   {"name": "en_en.zip", "size": 9000, "browser_download_url": "https://github.com/xxyzz/wiktionary_stardict/releases/download/20261101/en_en.zip"},
+   {"name": "de_en.zip", "size": 8000, "browser_download_url": "https://github.com/xxyzz/wiktionary_stardict/releases/download/20261101/de_en.zip"},
+   {"name": "en.png", "size": 10, "browser_download_url": "https://github.com/xxyzz/wiktionary_stardict/releases/download/20261101/en.png"}]},
+ {"tag_name": "20261001", "draft": false, "published_at": "2026-10-01T08:00:00Z", "assets": []}
+]

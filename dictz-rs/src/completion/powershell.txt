@@ -3,7 +3,7 @@ Register-ArgumentCompleter -Native -CommandName dictz, dct -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $words = $commandAst.CommandElements | ForEach-Object { $_.ToString() }
     if ($words.Count -le 2) {
-        @('add', 'completion', 'config', 'dicts', 'disable', 'doctor', 'dump', 'enable', 'f', 'fav', 'favorites', 'fuzzy', 'gui', 'help', 'history', 'info', 'l', 'lookup', 'ls', 'move', 'paths', 'popup', 'random', 'reindex', 'remove', 'rm', 's', 'scan', 'selftest', 'shell', 'shortcut', 'show', 'suggest', 'update', 'upgrade', 'version', 'watch') | Where-Object { $_ -like "$wordToComplete*" } |
+        @('add', 'catalog', 'completion', 'config', 'dicts', 'disable', 'doctor', 'downloads', 'dump', 'enable', 'f', 'fav', 'favorites', 'fuzzy', 'gui', 'help', 'history', 'info', 'install', 'l', 'licenses', 'lookup', 'ls', 'move', 'paths', 'popup', 'random', 'reindex', 'remove', 'rm', 's', 'scan', 'selftest', 'setup', 'shell', 'shortcut', 'show', 'sources', 'suggest', 'uninstall', 'update', 'upgrade', 'version', 'watch') | Where-Object { $_ -like "$wordToComplete*" } |
             ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
         return
     }
@@ -16,5 +16,9 @@ Register-ArgumentCompleter -Native -CommandName dictz, dct -ScriptBlock {
         'completion' { @('bash','zsh','fish','powershell') | Where-Object { $_ -like "$wordToComplete*" } }
         'watch' { @('on','off','toggle','status') | Where-Object { $_ -like "$wordToComplete*" } }
         'shortcut' { @('--remove','--desktop-only','--menu-only') | Where-Object { $_ -like "$wordToComplete*" } }
+        'sources' { @('list','add','edit','remove','enable','disable','default','up','down','refresh','export','import','reset') | Where-Object { $_ -like "$wordToComplete*" } }
+        'catalog' { @('search','show','languages','updates','build','check') | Where-Object { $_ -like "$wordToComplete*" } }
+        'downloads' { @('list','clear') | Where-Object { $_ -like "$wordToComplete*" } }
+        'setup' { @('export','import','show') | Where-Object { $_ -like "$wordToComplete*" } }
     }
 }

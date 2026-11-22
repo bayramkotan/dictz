@@ -19,6 +19,9 @@ import time
 from pathlib import Path
 
 from . import __version__
+from .cli_center import CENTER_COMMANDS
+from .cli_center import HANDLERS as CENTER_HANDLERS
+from .cli_center import add_parsers as add_center_parsers
 
 COMMANDS = [
     ("gui", "open the window (default)"),
@@ -50,6 +53,7 @@ COMMANDS = [
     ("popup", "look a word up in the running dictz's scan popup"),
     ("watch", "turn clipboard / selection scanning on or off"),
     ("shortcut", "create desktop and menu shortcuts (--remove deletes them)"),
+    *CENTER_COMMANDS,
     ("help", "show help"),
 ]
 ALIASES = {"l": "lookup", "s": "suggest", "ls": "dicts", "rm": "remove", "fav": "favorites",
@@ -328,6 +332,12 @@ def _row_dict(i: int, r) -> dict:
 
 
 def cmd_dicts(ctx: Ctx, args) -> int:
+    if getattr(args, "export", None):
+        from .center.transfer import export_list
+
+        n = export_list(Path(args.export).expanduser(), ctx.data_dir, args.export_format or "")
+        print(f"exported {n} dictionaries → {args.export}")
+        return 0
     rows = [_row_dict(i, r) for i, r in enumerate(ctx.rows())]
     if args.names:
         for r in rows:
@@ -739,6 +749,10 @@ _dictz() {{
         completion) COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- "$cur") ) ;;
         watch) COMPREPLY=( $(compgen -W "on off toggle status" -- "$cur") ) ;;
         shortcut) COMPREPLY=( $(compgen -W "--remove --desktop-only --menu-only" -- "$cur") ) ;;
+        sources) COMPREPLY=( $(compgen -W "list add edit remove enable disable default up down refresh export import reset" -- "$cur") ) ;;
+        catalog) COMPREPLY=( $(compgen -W "search show languages updates build check" -- "$cur") ) ;;
+        downloads) COMPREPLY=( $(compgen -W "list clear" -- "$cur") ) ;;
+        setup) COMPREPLY=( $(compgen -W "export import show" -- "$cur") ) ;;
         add|scan) COMPREPLY=( $(compgen -f -- "$cur") ) ;;
     esac
 }}
@@ -759,6 +773,10 @@ _dictz() {{
         completion) compadd -- bash zsh fish powershell ;;
         watch) compadd -- on off toggle status ;;
         shortcut) compadd -- --remove --desktop-only --menu-only ;;
+        sources) compadd -- list add edit remove enable disable default up down refresh export import reset ;;
+        catalog) compadd -- search show languages updates build check ;;
+        downloads) compadd -- list clear ;;
+        setup) compadd -- export import show ;;
         *) _files ;;
     esac
 }}
@@ -777,6 +795,12 @@ compdef _dictz dictz dct
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from watch' -a 'on off toggle status'")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from shortcut' -l remove -l desktop-only -l menu-only")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from sources' "
+                     "-a 'list add edit remove enable disable default up down refresh export import reset'")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from catalog' "
+                     "-a 'search show languages updates build check'")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from downloads' -a 'list clear'")
+        lines.append("complete -c dictz -n '__fish_seen_subcommand_from setup' -a 'export import show'")
         lines.append("complete -c dct -w dictz")
         lines.append("complete -c dictz -n '__fish_seen_subcommand_from add scan' -F")
         return "\n".join(lines) + "\n"
@@ -800,6 +824,10 @@ Register-ArgumentCompleter -Native -CommandName dictz, dct -ScriptBlock {{
         'completion' {{ @('bash','zsh','fish','powershell') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
         'watch' {{ @('on','off','toggle','status') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
         'shortcut' {{ @('--remove','--desktop-only','--menu-only') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'sources' {{ @('list','add','edit','remove','enable','disable','default','up','down','refresh','export','import','reset') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'catalog' {{ @('search','show','languages','updates','build','check') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'downloads' {{ @('list','clear') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
+        'setup' {{ @('export','import','show') | Where-Object {{ $_ -like "$wordToComplete*" }} }}
     }}
 }}
 """
@@ -1015,6 +1043,9 @@ def build_parser() -> argparse.ArgumentParser:
     ds = add("dicts", ["ls"])
     ds.add_argument("--json", action="store_true")
     ds.add_argument("--names", action="store_true", help="names only, one per line")
+    ds.add_argument("--export", metavar="FILE", help="write the list (with licences) to FILE")
+    ds.add_argument("--format", dest="export_format", choices=["csv", "json", "txt"],
+                    help="for --export (default: by the file's extension)")
 
     ad = add("add")
     ad.add_argument("paths", nargs="+", metavar="PATH", help="dictionary files or folders")
@@ -1100,6 +1131,8 @@ def build_parser() -> argparse.ArgumentParser:
     wt = add("watch")
     wt.add_argument("state", nargs="?", choices=["on", "off", "toggle", "status"], default="status")
 
+    add_center_parsers(add)
+
     hp = add("help")
     hp.add_argument("topic", nargs="?", metavar="COMMAND")
     return p
@@ -1114,6 +1147,7 @@ HANDLERS = {
     "doctor": cmd_doctor, "selftest": cmd_selftest, "update": cmd_update, "version": cmd_version,
     "completion": cmd_completion, "shell": cmd_shell, "show": cmd_show, "popup": cmd_popup,
     "watch": cmd_watch, "shortcut": lambda c, a: cmd_shortcut(c, a),
+    **CENTER_HANDLERS,
 }
 
 

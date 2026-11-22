@@ -324,6 +324,9 @@ class MainWindow(QMainWindow):
         self.scan_action = self._act(t("Tarama"), self.set_scan, None, "scan", checkable=True,
                                      tip=t("Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir"))
         tb.addAction(self.scan_action)
+        self.center_action = self._act(t("Sözlük Merkezi"), lambda: self.open_center(0), None, "center",
+                                       tip=t("Sözlük Merkezi: sözlük indir, kaynaklar, içe / dışa aktar (Ctrl+Shift+M)"))
+        tb.addAction(self.center_action)
         self.prefs_action = self._act(t("Tercihler"), self._open_preferences, "Ctrl+,", "settings",
                                       tip=t("Tercihler (Ctrl+,)"))
         tb.addAction(self.prefs_action)
@@ -431,6 +434,9 @@ class MainWindow(QMainWindow):
         m.addAction(self._act(t("Sözlük &Ekle…"), self._add_dictionary_dialog, "Ctrl+O", "open"))
         m.addAction(self._act(t("&Klasör Ekle…"), self._add_folder_dialog, "Ctrl+Shift+O", "folder"))
         m.addAction(self._act(t("Sözlük &Yöneticisi…"), self._open_dictionary_manager, "Ctrl+M", "dict"))
+        m.addAction(self._act(t("Sözlük Mer&kezi…"), lambda: self.open_center(0), "Ctrl+Shift+M", "center"))
+        m.addAction(self._act(t("Bağlantıdan sözlük ekle…"), self._add_from_link, "Ctrl+Shift+L", "link"))
+        m.addAction(self._act(t("Kurulumu dışa / içe aktar…"), lambda: self.open_center(4), None, "upload"))
         m.addSeparator()
         m.addAction(self._act(t("Makaleyi HTML olarak &kaydet…"), self._save_article, "Ctrl+S", "save"))
         m.addAction(self._act(t("Favorileri dışa aktar…"), self._export_favorites))
@@ -1120,6 +1126,66 @@ class MainWindow(QMainWindow):
         from ..core.query_manager import folder_sources
 
         return folder_sources(self.prefs)
+
+    def open_center(self, tab: int = 0):
+        """The Dictionary Center (one window, kept while dictz runs)."""
+        from .dictionary_center import DictionaryCenter
+
+        store = self.query_manager.index_store
+        if store is None:
+            return None
+        c = getattr(self, "_center", None)
+        if c is None:
+            c = DictionaryCenter(Path(store.db_path).parent, self.prefs, self)
+            c.install_files.connect(lambda files: self.load_new_files([Path(f) for f in files]))
+            c.removed_files.connect(self._remove_dictionary_files)
+            c.before_replace.connect(self._remove_all_dictionaries)
+            c.imported.connect(self._after_import)
+            self._center = c
+        c.tabs.setCurrentIndex(tab)
+        c.show()
+        c.raise_()
+        c.activateWindow()
+        return c
+
+    def _add_from_link(self) -> None:
+        c = self.open_center(2)
+        if c is not None:
+            c.add_from_link()
+
+    def _remove_dictionary_files(self, files: list[str]) -> None:
+        from ..storage.registry import norm_path
+
+        want = {norm_path(f) for f in files}
+        qm = self.query_manager
+        for row in qm.list_rows():
+            if norm_path(row["path"]) in want:
+                qm.remove_dictionary(row["name"])
+        self._refresh_dictionaries()
+
+    def _remove_all_dictionaries(self) -> None:
+        qm = self.query_manager
+        for row in list(qm.list_rows()):
+            qm.remove_dictionary(row["name"])
+        self._refresh_dictionaries()
+
+    def _after_import(self, res: dict) -> None:
+        """Open what an imported setup added (in the background)."""
+        store = self.query_manager.index_store
+        if store is None:
+            return
+        loaded = set(self.query_manager.dictionaries)
+        rows = [dict(r) for r in store.list_dictionaries(enabled_only=False) if r["name"] not in loaded]
+        if rows:
+            if self._job_running():
+                self._loader.job.add(files=[Path(r["path"]) for r in rows])
+            else:
+                self._start_job(rows=rows)
+        if res.get("settings") and self.prefs.path is not None:
+            fresh = type(self.prefs).load(self.prefs.path)
+            self.prefs.values = fresh.values  # the same object: others hold it
+            self.apply_prefs()
+        self._refresh_dictionaries()
 
     def _open_dictionary_manager(self) -> None:
         dlg = DictionaryManagerDialog(self.query_manager, self, prefs=self.prefs)

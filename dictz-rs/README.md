@@ -50,6 +50,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **Formats:** StarDict (`.ifo` / `.idx[.gz]` / `.dict[.dz]`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`) and Babylon (`.bgl`). All three are parsed natively, with no Python and no PyGlossary.
 - **25 interface languages** from the flag at the top right (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語, 한국어 …); Arabic, Persian and Urdu interface texts are shaped and drawn right to left.
 - **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
+- **Dictionary Center** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
 - **Multi-dictionary search** in your own order. You can enable, disable and reorder dictionaries in the dictionary manager.
 - **Fuzzy search:** "did you mean" suggestions. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
 - **DSL pictures and sounds** are read from `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same names as folders (any letter case), StarDict's from `res/`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
@@ -91,6 +92,13 @@ dictz history  /  dictz favorites add WORD
 dictz config list             # every setting with its value, range and description
 dictz config set article.font_size 18
 dictz config export my.json   # import / reset / path / get
+dictz dicts --export list.csv     # the list with licences (csv / json / txt)
+dictz sources                 # Dictionary Center servers: add / edit / remove / enable / disable / default / up / down / refresh / export / import / reset
+dictz catalog en --to tr      # search the catalog (--license open|free|unknown|nonfree, --format, --supported); show / languages / updates
+dictz install ID|NAME|URL     # download, check, unpack, add  ·  dictz uninstall ID  ·  dictz downloads
+dictz licenses                # the licence table
+dictz catalog build FOLDER --base-url URL   # catalog.json for your own server  ·  dictz catalog check FILE|URL
+dictz setup export setup.zip  # whole setup (list, settings, sources, history, files)  ·  import / show
 dictz paths  /  dictz doctor  /  dictz selftest
 dictz update --check          # crates.io or GitHub release, depending on how it was installed
 dictz shortcut [--remove]     # desktop + menu shortcut (--desktop-only, --menu-only)
@@ -104,7 +112,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-80 settings in 9 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+90 settings in 10 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history, Dictionary Center), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 
@@ -137,6 +145,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `html` | converts article HTML into styled lines (GUI) or text (CLI) |
 | `settings` | the shared `settings.json` schema and `Preferences` |
 | `fuzzy` | RapidFuzz-compatible `ratio`, `extract` and `rank` |
+| `center` | Dictionary Center: `sources`, `adapters` (every source type), `catalog`, `install` (downloads, checksums, unpacking, queue), `transfer` (setup archive, list export, catalog build / check), `licenses`, `langs` |
 
 ## Feature flags
 
@@ -146,6 +155,7 @@ for (word, score) in qm.fuzzy("aple", 5, 60.0) {
 | `gui` | on | eframe/egui, rfd (file dialogs), image |
 | `audio` | on | rodio (needs ALSA headers on Linux) |
 | `update` | on | ureq, tar (`dictz update`) |
+| `center` | on | ureq, tar, regex, sha2, md-5, lzma-rs, bzip2 (pure-Rust backend) — the Dictionary Center; `cli` and `gui` turn it on |
 | `scan` | on | arboard, clipboard-master, x11rb, global-hotkey, mouse_position, ksni (Linux tray) / tray-icon (Windows, macOS) — scan popup, global hotkeys, tray icon |
 
 ## License

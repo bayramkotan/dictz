@@ -1,0 +1,717 @@
+{
+ "archive-org": [
+  {
+   "author": "",
+   "date": "2019",
+   "description": "",
+   "files": [],
+   "format": "archive",
+   "headwords": 0,
+   "homepage": "",
+   "id": "archive-org:babylon_glossaries",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Babylon glossaries",
+   "page": "https://archive.org/details/babylon_glossaries",
+   "resolve": "archive-org:babylon_glossaries",
+   "sample": "",
+   "size": 999,
+   "source": "archive-org",
+   "source_lang": "",
+   "supported": null,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "2014-03-02",
+   "description": "Big pack of dictionaries",
+   "files": [],
+   "format": "archive",
+   "headwords": 0,
+   "homepage": "",
+   "id": "archive-org:stardict-en-ru",
+   "kind": "bilingual",
+   "license": "CC-BY-SA-3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+   "name": "StarDict English-Russian dictionaries",
+   "page": "https://archive.org/details/stardict-en-ru",
+   "resolve": "archive-org:stardict-en-ru",
+   "sample": "",
+   "size": 123456,
+   "source": "archive-org",
+   "source_lang": "en",
+   "supported": null,
+   "tags": [],
+   "target_lang": [
+    "ru"
+   ],
+   "version": ""
+  }
+ ],
+ "dictz-data": [
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "00ff",
+     "name": "bg.bgl",
+     "sha256": "",
+     "sha512": "",
+     "size": 10,
+     "url": "https://srv.example.org/data/extra/bg.bgl"
+    }
+   ],
+   "format": "babylon",
+   "headwords": 0,
+   "homepage": "",
+   "id": "dictz-data:bg-mono",
+   "kind": "monolingual",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Bulgarian Explanatory",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 10,
+   "source": "dictz-data",
+   "source_lang": "bg",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "bg"
+   ],
+   "version": ""
+  },
+  {
+   "author": "dictz",
+   "date": "2026-05-01",
+   "description": "A free word list.",
+   "files": [
+    {
+     "archive": "tar.xz",
+     "md5": "",
+     "name": "en-tr-wordlist.tar.xz",
+     "sha256": "ab12",
+     "sha512": "",
+     "size": 2048,
+     "url": "https://srv.example.org/data/files/en-tr-wordlist.tar.xz"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 12345,
+   "homepage": "",
+   "id": "dictz-data:en-tr-wordlist",
+   "kind": "bilingual",
+   "license": "CC-BY-SA-4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "name": "English–Turkish Word List",
+   "page": "",
+   "resolve": "",
+   "sample": "apple, book",
+   "size": 2048,
+   "source": "dictz-data",
+   "source_lang": "en",
+   "supported": true,
+   "tags": [
+    "free",
+    "general"
+   ],
+   "target_lang": [
+    "tr"
+   ],
+   "version": "1.2"
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [],
+   "format": "unknown",
+   "headwords": 0,
+   "homepage": "",
+   "id": "dictz-data:no-files",
+   "kind": "monolingual",
+   "license": "unknown",
+   "license_url": "",
+   "name": "No files",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "dictz-data",
+   "source_lang": "de",
+   "supported": null,
+   "tags": [],
+   "target_lang": [
+    "de"
+   ],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "",
+     "name": "ota-tr.dsl.dz",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://example.org/ota-tr.dsl.dz"
+    }
+   ],
+   "format": "dsl",
+   "headwords": 0,
+   "homepage": "",
+   "id": "dictz-data:ota-tr",
+   "kind": "multilingual",
+   "license": "GPL-3.0-or-later",
+   "license_url": "https://www.gnu.org/licenses/gpl-3.0.html",
+   "name": "Osmanlıca–Türkçe",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "dictz-data",
+   "source_lang": "ota",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "tr",
+    "en"
+   ],
+   "version": ""
+  }
+ ],
+ "freedict": [
+  {
+   "author": "Jane Doe",
+   "date": "2022-04-13",
+   "description": "big enough to be useful",
+   "files": [
+    {
+     "archive": "tar.xz",
+     "md5": "",
+     "name": "freedict-afr-eng-0.2.2.stardict.tar.xz",
+     "sha256": "",
+     "sha512": "bb22",
+     "size": 120,
+     "url": "https://download.freedict.org/dictionaries/afr-eng/0.2.2/freedict-afr-eng-0.2.2.stardict.tar.xz"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 5251,
+   "homepage": "https://freedict.org/",
+   "id": "freedict:afr-eng",
+   "kind": "bilingual",
+   "license": "freedict",
+   "license_url": "https://freedict.org/",
+   "name": "FreeDict Afrikaans → English",
+   "page": "https://github.com/freedict/fd-dictionaries/tree/master/afr-eng",
+   "resolve": "",
+   "sample": "",
+   "size": 120,
+   "source": "freedict",
+   "source_lang": "af",
+   "supported": true,
+   "tags": [
+    "dictd",
+    "src",
+    "stardict"
+   ],
+   "target_lang": [
+    "en"
+   ],
+   "version": "0.2.2"
+  },
+  {
+   "author": "WikDict",
+   "date": "2025-11-23",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "",
+     "name": "freedict-eng-tur-2025.11.23.slob",
+     "sha256": "",
+     "sha512": "dd44",
+     "size": 5000,
+     "url": "https://download.freedict.org/dictionaries/eng-tur/2025.11.23/freedict-eng-tur-2025.11.23.slob"
+    }
+   ],
+   "format": "slob",
+   "headwords": 70000,
+   "homepage": "https://freedict.org/",
+   "id": "freedict:eng-tur",
+   "kind": "bilingual",
+   "license": "freedict",
+   "license_url": "https://freedict.org/",
+   "name": "FreeDict English → Turkish",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 5000,
+   "source": "freedict",
+   "source_lang": "en",
+   "supported": false,
+   "tags": [
+    "slob"
+   ],
+   "target_lang": [
+    "tr"
+   ],
+   "version": "2025.11.23"
+  }
+ ],
+ "freemdict": [
+  {
+   "author": "",
+   "date": "2026-09-02",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "",
+     "name": "Longman DOCE5.mdx",
+     "sha256": "",
+     "sha512": "",
+     "size": 5000,
+     "url": "https://cloud.freemdict.com/public.php/webdav/Longman%20DOCE5.mdx"
+    },
+    {
+     "archive": "",
+     "md5": "",
+     "name": "Longman DOCE5.mdd",
+     "sha256": "",
+     "sha512": "",
+     "size": 90000,
+     "url": "https://cloud.freemdict.com/public.php/webdav/Longman%20DOCE5.mdd"
+    }
+   ],
+   "format": "mdict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "freemdict:longman doce5.mdx",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Longman DOCE5",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 95000,
+   "source": "freemdict",
+   "source_lang": "",
+   "supported": false,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "",
+     "name": "Oxford En-En.dsl.dz",
+     "sha256": "",
+     "sha512": "",
+     "size": 777,
+     "url": "https://cloud.freemdict.com/public.php/webdav/English/Oxford%20En-En.dsl.dz"
+    }
+   ],
+   "format": "dsl",
+   "headwords": 0,
+   "homepage": "",
+   "id": "freemdict:english/oxford en-en.dsl.dz",
+   "kind": "monolingual",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Oxford En-En",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 777,
+   "source": "freemdict",
+   "source_lang": "en",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "en"
+   ],
+   "version": ""
+  }
+ ],
+ "huzheng": [
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "",
+     "md5": "",
+     "name": "cedict-gb.ifo",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/zh_CN/cedict-gb.ifo"
+    },
+    {
+     "archive": "",
+     "md5": "",
+     "name": "cedict-gb.dict.dz",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/zh_CN/cedict-gb.dict.dz"
+    },
+    {
+     "archive": "",
+     "md5": "",
+     "name": "cedict-gb.idx",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/zh_CN/cedict-gb.idx"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "huzheng:zh_cn/cedict-gb.ifo",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "cedict-gb",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "huzheng",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-dictd-web1913-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/dict.org/stardict-dictd-web1913-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "huzheng:dict.org/stardict-dictd-web1913-2.4.2.tar.bz2",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-dictd-web1913-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "huzheng",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "huzheng:dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-dictd_www.dict.org_gcide-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "huzheng",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-English-Turkish-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://download.huzheng.org/dict.org/stardict-English-Turkish-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "huzheng:dict.org/stardict-english-turkish-2.4.2.tar.bz2",
+   "kind": "bilingual",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-English-Turkish-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "huzheng",
+   "source_lang": "en",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "tr"
+   ],
+   "version": ""
+  }
+ ],
+ "telegram": [
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [],
+   "format": "babylon",
+   "headwords": 0,
+   "homepage": "",
+   "id": "telegram:dictionaries_goldendict/119",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Deutsch-Russisch",
+   "page": "https://t.me/Dictionaries_GoldenDict/119",
+   "resolve": "",
+   "sample": "",
+   "size": 921600,
+   "source": "telegram",
+   "source_lang": "",
+   "supported": true,
+   "tags": [
+    "telegram"
+   ],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "2025-02-03",
+   "description": "A great dictionary & more",
+   "files": [],
+   "format": "dsl",
+   "headwords": 0,
+   "homepage": "",
+   "id": "telegram:dictionaries_goldendict/120",
+   "kind": "bilingual",
+   "license": "unknown",
+   "license_url": "",
+   "name": "Oxford English-Turkish",
+   "page": "https://t.me/Dictionaries_GoldenDict/120",
+   "resolve": "",
+   "sample": "",
+   "size": 13107200,
+   "source": "telegram",
+   "source_lang": "en",
+   "supported": true,
+   "tags": [
+    "telegram"
+   ],
+   "target_lang": [
+    "tr"
+   ],
+   "version": ""
+  }
+ ],
+ "wiktionary-vuizur": [
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.gz",
+     "md5": "",
+     "name": "Afrikaans-English Wiktionary dictionary stardict.tar.gz",
+     "sha256": "",
+     "sha512": "",
+     "size": 3000,
+     "url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/Afrikaans-English%20Wiktionary%20dictionary%20stardict.tar.gz"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "wiktionary-vuizur:afrikaans-english wiktionary dictionary stardict.tar.gz",
+   "kind": "bilingual",
+   "license": "CC-BY-SA-3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+   "name": "Afrikaans-English Wiktionary dictionary",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 3000,
+   "source": "wiktionary-vuizur",
+   "source_lang": "af",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "en"
+   ],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.gz",
+     "md5": "",
+     "name": "Ancient Greek-English Wiktionary dictionary stardict.tar.gz",
+     "sha256": "",
+     "sha512": "",
+     "size": 4000,
+     "url": "https://raw.githubusercontent.com/Vuizur/Wiktionary-Dictionaries/master/Ancient%20Greek-English%20Wiktionary%20dictionary%20stardict.tar.gz"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "wiktionary-vuizur:ancient greek-english wiktionary dictionary stardict.tar.gz",
+   "kind": "bilingual",
+   "license": "CC-BY-SA-3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+   "name": "Ancient Greek-English Wiktionary dictionary",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 4000,
+   "source": "wiktionary-vuizur",
+   "source_lang": "grc",
+   "supported": true,
+   "tags": [],
+   "target_lang": [
+    "en"
+   ],
+   "version": ""
+  }
+ ],
+ "wiktionary-xxyzz": [
+  {
+   "author": "",
+   "date": "2026-11-01",
+   "description": "",
+   "files": [
+    {
+     "archive": "zip",
+     "md5": "",
+     "name": "de_en.zip",
+     "sha256": "",
+     "sha512": "",
+     "size": 8000,
+     "url": "https://github.com/xxyzz/wiktionary_stardict/releases/download/20261101/de_en.zip"
+    }
+   ],
+   "format": "archive",
+   "headwords": 0,
+   "homepage": "",
+   "id": "wiktionary-xxyzz:de_en.zip",
+   "kind": "bilingual",
+   "license": "wiktionary",
+   "license_url": "https://en.wiktionary.org/wiki/Wiktionary:Copyrights",
+   "name": "de_en",
+   "page": "https://github.com/xxyzz/wiktionary_stardict/releases/tag/20261101",
+   "resolve": "",
+   "sample": "",
+   "size": 8000,
+   "source": "wiktionary-xxyzz",
+   "source_lang": "de",
+   "supported": null,
+   "tags": [],
+   "target_lang": [
+    "en"
+   ],
+   "version": "20261101"
+  },
+  {
+   "author": "",
+   "date": "2026-11-01",
+   "description": "",
+   "files": [
+    {
+     "archive": "zip",
+     "md5": "",
+     "name": "en_en.zip",
+     "sha256": "",
+     "sha512": "",
+     "size": 9000,
+     "url": "https://github.com/xxyzz/wiktionary_stardict/releases/download/20261101/en_en.zip"
+    }
+   ],
+   "format": "archive",
+   "headwords": 0,
+   "homepage": "",
+   "id": "wiktionary-xxyzz:en_en.zip",
+   "kind": "monolingual",
+   "license": "wiktionary",
+   "license_url": "https://en.wiktionary.org/wiki/Wiktionary:Copyrights",
+   "name": "en_en",
+   "page": "https://github.com/xxyzz/wiktionary_stardict/releases/tag/20261101",
+   "resolve": "",
+   "sample": "",
+   "size": 9000,
+   "source": "wiktionary-xxyzz",
+   "source_lang": "en",
+   "supported": null,
+   "tags": [],
+   "target_lang": [
+    "en"
+   ],
+   "version": "20261101"
+  }
+ ]
+}

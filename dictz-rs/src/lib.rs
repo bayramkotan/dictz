@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.1.6", default-features = false }
+//! dictz = { version = "0.1.7", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -40,6 +40,8 @@ use std::path::{Path, PathBuf};
 pub mod articles;
 pub mod autostart;
 pub mod babylon;
+#[cfg(feature = "center")]
+pub mod center;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod desktop;
