@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **dictz-mobile/** — the Android and iOS apps (first build, for testing): one Flutter interface on the same Rust core (`dictz-mobile/rust`: a C interface with JSON in and out over the `dictz` library, used through `dart:ffi`). Search box always on top with Enter and random-word buttons, word list while typing (background isolate), articles one strip per dictionary (`bword://` links, DSL pictures, back), favourites and history, dictionaries added from the phone's files (StarDict set with `.syn`, DSL, Babylon or a `.zip`; copied into the app), on / off, drag to reorder, remove with or without the files, the 27 themes and the 25 interface languages (the desktop's `themes.json` and catalogues). `tool/prepare.sh` makes the platform folders (`flutter create`) and builds the core (cargo-ndk for Android, a `DictzCore.xcframework` for iOS). New jobs in the CI workflow (`mobile-core`, `mobile-android`, `mobile-ios`; on tags and manual runs, not on pull requests, never holding up the release): core tests, APK, unsigned iOS app as artifacts; a tag attaches the APK to the release.
+
 ## [0.2.0] — 2026-11-22
 
 StarDict **synonyms** and one broken source less — in both editions.

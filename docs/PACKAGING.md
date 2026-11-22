@@ -127,6 +127,12 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 
 - `dictz/resources/themes.json` ships with the other resources (`MANIFEST.in` takes all of `dictz/resources`). The Rust crate embeds `src/gui/themes.json` with `include_str!` — it is listed in `Cargo.toml`'s `include`; **without it the crates.io package does not build**. `make_samples.py` copies it; `tests/test_themes.py` checks the copy is identical.
 
+## Mobile apps (dictz-mobile/) — what they need
+
+- Build machine: Flutter 3.24.5, Java 17, Rust stable; Android: the NDK (`ANDROID_NDK_HOME`) and `cargo-ndk`; iOS: macOS with Xcode and CocoaPods. `tool/prepare.sh android|ios` does the rest (assets from `dictz/resources`, `flutter create` for the platform folders, the Rust core).
+- The core crate `dictz-mobile/rust` uses `dictz` with `default-features = false` (no window, no network); rusqlite's bundled SQLite is compiled by the NDK / Xcode toolchain.
+- Distribution: the APK from *Actions → CI → Run workflow* (artifact `dictz-android`) (debug-key signed: sideload; Play Store needs an upload key). iOS needs an Apple developer account for TestFlight / App Store; the workflow builds `--no-codesign`.
+
 ## Parity between the editions
 
 `tests/data/parity/` holds `sample.dsl` (+ `sample.dsl.files.zip`), `sample.bgl` and the golden files the Python edition produces from them (`*_golden.json`). `dictz-rs/tests/parity.rs` requires the Rust parsers to produce exactly the same headwords, definitions and metadata, and the same fuzzy scores; `tests/test_parity.py` checks the Python side still matches. Since v0.0.7 the same folder also pins the article-text conversion (`text_golden.json`), the settings schema (`settings_schema.json`), the CLI command list (`cli_commands.json`), the shell completion scripts (`completion_*.txt`, also copied to `dictz-rs/src/completion/`) the shortcuts (`shortcuts.json`) and, since v0.1.1, the exact text of the shared dictionary list `dictionaries.json` plus its unique-name and path-id rules (`registry_golden.json`), and an article store written by the Python edition (`articles_golden.db`, built from `sample.dsl`) that the Rust edition must read with its own parser's answers; since v0.1.7 also the Dictionary Center's adapters, licence table, built-in sources and language codes (`center_golden.json`, `licenses_golden.json`, `sources_golden.json`, `langs_golden.json`). After an intentional change, regenerate with `python tests/data/parity/make_samples.py`.

@@ -5,7 +5,12 @@ name: CI
 #                      PyPI (Python edition), crates.io (Rust edition) and
 #                      GitHub Releases (portable binaries of BOTH editions)
 #   pull request    -> lint + test + rust + install-smoke
-#   manual          -> Actions -> CI -> "Run workflow" (tests only)
+#   manual          -> Actions -> CI -> "Run workflow" (tests only, plus the
+#                      phone apps: their APK / unsigned iOS app as artifacts)
+#
+# The mobile jobs (dictz-mobile/: Flutter + the Rust core) run on tags and
+# manual runs, not on pull requests. They do not hold up the release: on a
+# tag the Android job waits for the release and attaches the APK to it.
 #
 # Plain pushes to main deliberately do NOT trigger CI: a release pushes both
 # main and a tag, which GitHub reports as two separate push events — reacting
@@ -485,7 +490,7 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.whl" \) \
-            -exec cp -v {} release/ \;
+            ! -name "*ios-unsigned*" -exec cp -v {} release/ \;
           ls -lh release/
       - uses: softprops/action-gh-release@v2
         with:
@@ -513,3 +518,104 @@ jobs:
             Both editions share the dictionary list, history and favorites (same data folder).
 
             See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md).
+
+  # ------------------------------------------------------------ phone apps
+  mobile-core:
+    name: Mobile · Rust core
+    timeout-minutes: 60
+    needs: lint
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: fmt, clippy, test
+        working-directory: dictz-mobile/rust
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+  mobile-android:
+    name: Mobile · Android (APK)
+    timeout-minutes: 60
+    needs: mobile-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      - name: Prepare (assets, platform folders, Rust core for Android)
+        working-directory: dictz-mobile
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: tool/prepare.sh android
+      - name: Test and build
+        working-directory: dictz-mobile
+        run: |
+          flutter pub get
+          flutter test
+          flutter build apk --release
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          cp build/app/outputs/flutter-apk/app-release.apk "dictz-${VERSION}-android.apk"
+          ls -la dictz-*-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dictz-android
+          path: dictz-mobile/dictz-*-android.apk
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        working-directory: dictz-mobile
+        run: |
+          # the github-release job makes the release; wait for it (up to an hour)
+          for i in $(seq 1 60); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" dictz-*-android.apk --clobber
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "release $TAG did not appear; the APK is in the run's artifacts"
+          exit 1
+
+  mobile-ios:
+    name: Mobile · iOS (unsigned)
+    timeout-minutes: 60
+    needs: mobile-core
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      - name: Prepare (assets, platform folders, Rust core for iOS)
+        working-directory: dictz-mobile
+        run: tool/prepare.sh ios
+      - name: Build
+        working-directory: dictz-mobile
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          (cd build/ios/iphoneos && zip -qr "../../../dictz-${VERSION}-ios-unsigned.zip" Runner.app)
+          ls -la dictz-*-ios-unsigned.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dictz-ios-unsigned
+          path: dictz-mobile/dictz-*-ios-unsigned.zip

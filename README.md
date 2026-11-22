@@ -42,6 +42,8 @@ Both read dictionaries identically, which CI checks against shared golden files.
 
 Both install two commands: **`dictz`** and its short name **`dct`**. They are the same program.
 
+**On the phone:** [`dictz-mobile/`](dictz-mobile/README.md) — Android and iOS from one Flutter app on the same Rust core (StarDict with synonyms, DSL, Babylon; search, "did you mean", favourites, history, the 27 themes and 25 languages). In development; the APK is built by GitHub Actions (*Actions → CI → Run workflow*, artifact `dictz-android`).
+
 ## Screenshots
 
 <table>
