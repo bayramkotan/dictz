@@ -78,7 +78,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - light and dark themes, accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
 - **Adding never freezes the window:** new or changed dictionaries are read in the background by several workers at once (separate processes in the Python edition, threads in the Rust edition), with a progress bar and a stop button in the status bar.
-- **Dictionary Center** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
+- **One Sözlükler window** (Ctrl+M): your dictionaries (drag to reorder, on / off, remove with or without the files), folders, catalog, sources, downloads, import / export and settings in seven tabs. **Catalog** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
 - **90 settings** in 10 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
 - **Offline and private:** no telemetry. dictz goes online only for `dct update` / the update check and for the Dictionary Center's servers, and both can be switched off (`center.online`).
@@ -300,17 +300,39 @@ Completion works for both names, `dictz` and `dct`:
 
 ---
 
-## Dictionary Center
+## The Sözlükler window (dictionaries, folders, catalog, settings)
 
-**Dosya → Sözlük Merkezi…** (Ctrl+Shift+M), the cloud button on the toolbar, or `dct catalog` / `dct install`. One window with five tabs:
+Everything about dictionaries is in **one window** and **one menu**:
+**Sözlükler → Sözlükler…** (Ctrl+M), the cloud button on the toolbar, or
+`dct dicts` / `dct catalog` / `dct install` on the command line. The
+**Sözlükler** menu has: Sözlükler… (Ctrl+M), Sözlük ekle… (Ctrl+O), Klasör
+ekle… (Ctrl+Shift+O), Bağlantıdan sözlük ekle… (Ctrl+Shift+L), Sözlük
+klasörleri…, Sözlük indir (katalog)… (Ctrl+Shift+M), Kaynaklar (sunucular)…, Kurulumu
+dışa / içe aktar…, Tümünü etkinleştir / devre dışı bırak and Sözlük ayarları….
+**Dosya** keeps only the article, favourites, the desktop shortcut and Çıkış;
+**Düzen → Tercihler** keeps the general settings (its Sözlükler page only
+points to this window).
 
 | Tab | What you do there |
 |---|---|
-| **Katalog** | every dictionary the enabled sources offer, in one table: name, languages, kind, format, words, size, **licence** (coloured by status), source, date. Filter by text, source and target language (with counts, ⇄ swaps them), source, licence status, format, "only those dictz opens", "hide installed". Sort by any column. The detail pane shows the licence, what it allows (credit, share-alike, commercial use), files and checksums. **Kur** (or a double click) downloads; ✓ = installed, ↑ = an update is available. |
+| **Sözlüklerim** | your dictionaries in search order: on / off box, name, format, words, languages, catalog licence and update (↑), path. **Drag a row** (or ▲ ▼) to change the order; Yalnızca bunu etkinleştir, Bilgi, Yeniden indeksle, Klasörü aç; add files or a folder; **Kaldır** asks *Listeden kaldır* (files stay) or *Dosyalarıyla sil* (deletes only that dictionary's own files: the `.ifo` / `.idx` / `.dict`, `.syn`, the media archive; a dictionary installed from the catalog loses its folder). Right click = the same menu. |
+| **Klasörler** | folders scanned on every start, each with its own *Alt klasörler* box (like GoldenDict's Sources → Files); *Şimdi tara*. |
+| **Katalog** | every dictionary the enabled sources offer, in one table: name, languages, kind, format, words, size, **licence** (coloured by status), source, date. Filter by text, source and target language (with counts, ⇄ swaps them), source, licence status, format, "only those dictz opens", "hide installed". Sort by any column. The detail pane shows the licence, what it allows (credit, share-alike, commercial use), files and checksums. **Kur** (or a double click) downloads; ✓ = installed, ↑ = an update is available (*Güncelle* / *Hepsini güncelle*). |
 | **Kaynaklar (sunucular)** | the servers: switch on / off, add, edit, delete, move up / down, make default (★), refresh, export / import the list, restore the built-in ones. The editor takes an address, a type (or *Tahmin et*), a file filter, a language pattern, languages and a licence for sources that do not say, depth, sign-in (user + password, token or a custom header) and a **Dene** button that reads the source at once. |
 | **İndirmeler** | the queue (several at once, setting `center.parallel_downloads`), progress, speed, pause / resume / cancel / retry; interrupted downloads continue where they stopped. Below: the download history. |
-| **Kurulu** | what was installed from the catalog: version, date, licence, folder, available update; update one or all, remove (with or without the files), open the folder or the licence. |
 | **İçe / Dışa aktar** | export / import the **whole setup** as one zip (dictionary list, settings, sources without passwords, install records, history and favourites, optionally the dictionary files) — merge or replace; export the dictionary list with licences (CSV / JSON / TXT); **build a `catalog.json` for your own server** and check one; the licence table. |
+| **Ayarlar** | the dictionary settings (reindex changed files, dictionaries prepared at once) and the catalog settings (internet sources on / off, refresh days, downloads at once, install folder, checksums, keep archives, add after install, unknown licences, proxy, timeout); saved as you change them, ↺ per setting. |
+
+### The dictionary icons
+
+| Where | Click | Ctrl+click | Right click | Drag |
+|---|---|---|---|---|
+| dictionary bar (toolbar) | go to its article | switch on / off (an off one is drawn faded) | aç / kapa, yalnızca bunu etkinleştir, bilgi, Sözlüklerimde göster, kaldır | onto another icon = put it there |
+| "Bulunduğu yer" panel | go to its article | — | the same menu | change the order |
+| left pane → Sözlükler | go to its article | — | the same menu | change the order |
+
+The order is the search order everywhere, and it is saved at once
+(`dictionaries.json`, the same in both editions).
 
 **Bağlantıdan sözlük ekle…** (Ctrl+Shift+L) takes any link — a `.zip` / `.tar.gz` / `.tar.xz` / `.tar.bz2` archive, a `.dsl` / `.bgl` / `.ifo` file, a `file:` path — and installs it; a link that looks like a server (a catalog, a GitHub repository, a WebDAV / Nextcloud share, a Telegram channel) is offered as a new source.
 
@@ -400,10 +422,10 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 | Arama | live search, delay, minimum letters, suggestion count, prefix fallback, fuzzy on/off / threshold / count, max articles, Enter → new tab, ignore case |
 | Tarama penceresi | scanning on/off, Ctrl+C+C, every copy, selection (Linux), Ctrl+C+C interval, max text length, open near the mouse, always on top, hide when the mouse leaves + delay, size, record in history |
 | Genel kısayollar | on/off, show/hide main window, scanning on/off, look up the clipboard |
-| Sözlükler | dictionary folders scanned on every start — several folders, each with its own **Subfolders** box (like GoldenDict's Sources → Files) — reindex changed files, **dictionaries prepared at once** (0 = automatic) |
+| Sözlükler (now in **Sözlükler → Klasörler / Ayarlar**) | dictionary folders scanned on every start — several folders, each with its own **Subfolders** box (like GoldenDict's Sources → Files) — reindex changed files, **dictionaries prepared at once** (0 = automatic) |
 | Ses | auto-play, volume, system player |
 | Geçmiş ve Favoriler | history on/off, sidebar counts, database limit, clear on exit |
-| Sözlük Merkezi | use internet sources, refresh catalogs every N days, downloads at once, folder for downloaded dictionaries, check checksums, keep archives, add after install, show unknown licences, proxy, timeout |
+| Sözlük Merkezi (now in **Sözlükler → Ayarlar**) | use internet sources, refresh catalogs every N days, downloads at once, folder for downloaded dictionaries, check checksums, keep archives, add after install, show unknown licences, proxy, timeout |
 
 The window also has:
 
@@ -533,7 +555,8 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
 - **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
-- **Sözlük Merkezi** (Ctrl+Shift+M): ücretsiz ve açık kaynak sözlükleri birçok sunucudan (dictz'in kendi sunucusu, FreeDict, Wiktionary, ECDICT, StarDict arşivi, Internet Archive, FreeMdict, Telegram) ya da **kendi sunucunuzdan, klasörünüzden, bağlantınızdan** arayın, indirin, kurun. Her sözlüğün **lisansı** indirmeden önce görünür. Sunucu ekleme / düzenleme / silme / sıralama / varsayılan yapma, indirmeyi duraklatma / sürdürme, kaldırma, güncelleme ve tüm kurulumu içe / dışa aktarma.
+- **Tek Sözlükler penceresi** (Ctrl+M): sözlükleriniz (sürükleyerek sıralama, aç / kapa, listeden ya da dosyalarıyla kaldırma), klasörler, katalog, kaynaklar, indirmeler, içe / dışa aktarma ve ayarlar yedi sekmede. Araç çubuğundaki sözlük simgesine tıklamak o sözlüğün makalesine gider, Ctrl+tık açar / kapatır, sürüklemek sırayı değiştirir.
+- **Katalog** (Ctrl+Shift+M): ücretsiz ve açık kaynak sözlükleri birçok sunucudan (dictz'in kendi sunucusu, FreeDict, Wiktionary, ECDICT, StarDict arşivi, Internet Archive, FreeMdict, Telegram) ya da **kendi sunucunuzdan, klasörünüzden, bağlantınızdan** arayın, indirin, kurun. Her sözlüğün **lisansı** indirmeden önce görünür. Sunucu ekleme / düzenleme / silme / sıralama / varsayılan yapma, indirmeyi duraklatma / sürdürme, kaldırma, güncelleme ve tüm kurulumu içe / dışa aktarma.
 - **Ayarlar:** 10 sayfada 90 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
 

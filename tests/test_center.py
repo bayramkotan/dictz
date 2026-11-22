@@ -338,3 +338,10 @@ def test_file_links_same_in_both_editions() -> None:
     for g in golden:
         assert local_path_text(g["url"], False) == g["posix"], g["url"]
         assert local_path_text(g["url"], True) == g["windows"], g["url"]
+
+
+def test_own_files_of_a_dictionary() -> None:
+    from dictz.center.transfer import own_files
+
+    p = Path(__file__).parent / "data" / "parity" / "sample.dsl"
+    assert [f.name for f in own_files(p)] == ["sample.dsl", "sample.dsl.files.zip"]

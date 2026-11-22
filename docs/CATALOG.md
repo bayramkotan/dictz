@@ -1,7 +1,7 @@
 # dictz catalogs (`catalog.json`)
 
 A **dictz catalog** is one JSON file listing downloadable dictionaries. The
-Dictionary Center reads it from any address — a web server, GitHub, a share,
+Sözlükler window (Katalog tab) reads it from any address — a web server, GitHub, a share,
 a `file:` path — when it is added as a source of type `dictz-catalog`.
 dictz's own default server, [github.com/bayramkotan/dictz-data](https://github.com/bayramkotan/dictz-data),
 is a dictz catalog too. Both editions (Python and Rust) read and write the
@@ -126,7 +126,7 @@ dct catalog build ~/my-dicts --base-url https://example.org/dicts/ \
 dct catalog check ~/my-dicts/catalog.json            # errors and warnings
 ```
 
-or in the window: *Sözlük Merkezi → İçe / Dışa aktar → Kendi sunucun için
+or in the window: *Sözlükler → İçe / Dışa aktar → Kendi sunucun için
 katalog oluştur*.
 
 For every dictionary (and archive) in the folder and its subfolders the
@@ -149,7 +149,7 @@ my-dicts/
 ```
 
 Publish the folder with its `catalog.json` (a GitHub repository, a web
-server, a WebDAV share …) and add the address in *Kaynaklar (sunucular) →
+server, a WebDAV share …) and add the address in *Sözlükler → Kaynaklar (sunucular) →
 Ekle…* or with `dct sources add URL`. Make it the default with *Varsayılan
 sunucu yap* / `dct sources default ID`.
 

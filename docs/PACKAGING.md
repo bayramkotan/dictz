@@ -109,7 +109,7 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 
 `dictz update --check` only compares versions (PyPI or crates.io); `--yes` skips the question.
 
-## Dictionary Center (v0.1.7) — what it needs
+## Dictionary Center (v0.1.7; the Sözlükler window since 0.1.7b) — what it needs
 
 - **Python edition:** nothing new. Downloads use `urllib.request` (system certificates, `center.proxy` or the `*_proxy` variables), unpacking `zipfile` / `tarfile` / `lzma` / `bz2`, checksums `hashlib` — all standard library. `dictz/resources/languages.json` (ISO 639 table) ships with the other resources (`MANIFEST.in`, the PyInstaller spec's `resources/**/*`).
 - **Rust edition:** the `center` feature (on by default; `cli` and `gui` turn it on) adds pure-Rust crates only — `ureq` (already used by `update`), `tar`, `regex`, `sha2`, `md-5`, `lzma-rs` (xz) and `bzip2` 0.6 with its default pure-Rust backend (`libbz2-rs-sys`, no C compiler or system libbz2). `src/center/languages.json` is built in with `include_str!` and listed in the crate's `include` — **without it the crates.io package does not build**.

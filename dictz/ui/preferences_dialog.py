@@ -119,90 +119,26 @@ class _FolderList(QWidget):
             self.list.addItem(f)
 
 
-class PreferencesDialog(QDialog):
-    preferences_changed = Signal(object)
-    action_requested = Signal(str)  # reindex | clear_history | clear_favorites | check_updates | open_data
+# pages shown in the Dictionaries window (Sözlükler → Ayarlar) instead
+PAGES_IN_DICTIONARIES_WINDOW = ("dictionaries", "center")
 
-    def __init__(self, prefs: Preferences, parent: QWidget | None = None):
-        super().__init__(parent)
-        self.setWindowTitle(t("Tercihler"))
-        self.resize(900, 640)
-        self.prefs = prefs
-        self.draft = prefs.copy()
-        self.editors: dict[str, tuple[QWidget, QWidget]] = {}  # key -> (editor, row widget)
-        self.page_keys: list[list[str]] = []
 
-        root = QVBoxLayout(self)
-        top = QHBoxLayout()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(t("Ayar ara…  (ör. yazı tipi, bulanık, ses)"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._filter)
-        top.addWidget(self.search)
-        root.addLayout(top)
+class _SettingsEditing:
+    """The editors of settings rows, shared by the Preferences dialog and the
+    Dictionaries window's settings tab. Needs ``self.draft`` and
+    ``self.editors``; ``_set`` may be overridden (the window saves at once)."""
 
-        split = QSplitter()
-        self.nav = QListWidget()
-        self.nav.setFixedWidth(200)
-        self.stack = QStackedWidget()
-        split.addWidget(self.nav)
-        split.addWidget(self.stack)
-        split.setStretchFactor(1, 1)
-        root.addWidget(split, 1)
+    draft: Preferences
+    editors: dict[str, tuple[QWidget, QWidget]]
 
-        for sec_id, title in SECTIONS:
-            settings = [s for s in SCHEMA if s.key.split(".")[0] == sec_id]
-            self._add_page(title, settings)
-        self._add_shortcuts_page()
-        self._add_advanced_page()
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.nav.setCurrentRow(0)
-
-        bottom = QHBoxLayout()
-        reset_page = QPushButton(t("Bu sayfayı varsayılana döndür"))
-        reset_page.clicked.connect(self._reset_page)
-        reset_all = QPushButton(t("Tümünü varsayılana döndür"))
-        reset_all.clicked.connect(self._reset_all)
-        bottom.addWidget(reset_page)
-        bottom.addWidget(reset_all)
-        bottom.addStretch(1)
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Apply
-            | QDialogButtonBox.StandardButton.Cancel)
-        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(t("Tamam"))
-        self.buttons.button(QDialogButtonBox.StandardButton.Apply).setText(t("Uygula"))
-        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(t("İptal"))
-        self.buttons.accepted.connect(self._ok)
-        self.buttons.rejected.connect(self.reject)
-        self.buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._apply)
-        bottom.addWidget(self.buttons)
-        root.addLayout(bottom)
-
-    # ------------------------------------------------------------ pages
-    def _page_container(self, title: str) -> tuple[QWidget, QVBoxLayout]:
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        lab = QLabel(t(title))
-        lab.setObjectName("section_title")
-        lay.addWidget(lab)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        inner = QWidget()
-        inner_lay = QVBoxLayout(inner)
-        inner_lay.setContentsMargins(0, 6, 8, 6)
-        scroll.setWidget(inner)
-        lay.addWidget(scroll, 1)
-        return page, inner_lay
-
-    def _add_page(self, title: str, settings: list[Setting]) -> None:
-        page, lay = self._page_container(title)
+    def _build_form(self, settings: list[Setting], skip: tuple[str, ...] = ()) -> tuple[QFormLayout, list[str]]:
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         keys = []
         for s in settings:
-            if s.key in HIDDEN_KEYS:
-                continue  # edited together with another setting
+            if s.key in HIDDEN_KEYS or s.key in skip:
+                continue  # edited together with another setting / elsewhere
             editor = self._editor_for(s)
             row = QWidget()
             rl = QHBoxLayout(row)
@@ -227,11 +163,7 @@ class PreferencesDialog(QDialog):
                 form.addRow("", hint)
             self.editors[s.key] = (editor, row)
             keys.append(s.key)
-        lay.addLayout(form)
-        lay.addStretch(1)
-        self.page_keys.append(keys)
-        self.stack.addWidget(page)
-        QListWidgetItem(t(title), self.nav)
+        return form, keys
 
     def _fmt_default(self, s: Setting) -> str:
         if s.kind == "bool":
@@ -337,6 +269,115 @@ class PreferencesDialog(QDialog):
         if key == "dictionaries.folders":
             self.draft.reset("dictionaries.flat_folders")
         self._load_editor(key)
+
+
+class PreferencesDialog(_SettingsEditing, QDialog):
+    preferences_changed = Signal(object)
+    action_requested = Signal(str)  # dictionaries_settings | reindex | clear_history | clear_favorites | check_updates | open_data
+
+    def __init__(self, prefs: Preferences, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle(t("Tercihler"))
+        self.resize(900, 640)
+        self.prefs = prefs
+        self.draft = prefs.copy()
+        self.editors: dict[str, tuple[QWidget, QWidget]] = {}  # key -> (editor, row widget)
+        self.page_keys: list[list[str]] = []
+
+        root = QVBoxLayout(self)
+        top = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(t("Ayar ara…  (ör. yazı tipi, bulanık, ses)"))
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._filter)
+        top.addWidget(self.search)
+        root.addLayout(top)
+
+        split = QSplitter()
+        self.nav = QListWidget()
+        self.nav.setFixedWidth(200)
+        self.stack = QStackedWidget()
+        split.addWidget(self.nav)
+        split.addWidget(self.stack)
+        split.setStretchFactor(1, 1)
+        root.addWidget(split, 1)
+
+        for sec_id, title in SECTIONS:
+            if sec_id in PAGES_IN_DICTIONARIES_WINDOW:
+                if sec_id == PAGES_IN_DICTIONARIES_WINDOW[0]:
+                    self._add_dictionaries_link_page()
+                continue
+            settings = [s for s in SCHEMA if s.key.split(".")[0] == sec_id]
+            self._add_page(title, settings)
+        self._add_shortcuts_page()
+        self._add_advanced_page()
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.nav.setCurrentRow(0)
+
+        bottom = QHBoxLayout()
+        reset_page = QPushButton(t("Bu sayfayı varsayılana döndür"))
+        reset_page.clicked.connect(self._reset_page)
+        reset_all = QPushButton(t("Tümünü varsayılana döndür"))
+        reset_all.clicked.connect(self._reset_all)
+        bottom.addWidget(reset_page)
+        bottom.addWidget(reset_all)
+        bottom.addStretch(1)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Apply
+            | QDialogButtonBox.StandardButton.Cancel)
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(t("Tamam"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Apply).setText(t("Uygula"))
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(t("İptal"))
+        self.buttons.accepted.connect(self._ok)
+        self.buttons.rejected.connect(self.reject)
+        self.buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._apply)
+        bottom.addWidget(self.buttons)
+        root.addLayout(bottom)
+
+    # ------------------------------------------------------------ pages
+    # ------------------------------------------------------------ pages
+    def _page_container(self, title: str) -> tuple[QWidget, QVBoxLayout]:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lab = QLabel(t(title))
+        lab.setObjectName("section_title")
+        lay.addWidget(lab)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        inner_lay = QVBoxLayout(inner)
+        inner_lay.setContentsMargins(0, 6, 8, 6)
+        scroll.setWidget(inner)
+        lay.addWidget(scroll, 1)
+        return page, inner_lay
+
+    def _add_page(self, title: str, settings: list[Setting]) -> None:
+        page, lay = self._page_container(title)
+        form, keys = self._build_form(settings)
+        lay.addLayout(form)
+        lay.addStretch(1)
+        self.page_keys.append(keys)
+        self.stack.addWidget(page)
+        QListWidgetItem(t(title), self.nav)
+
+    def _add_dictionaries_link_page(self) -> None:
+        """The dictionary settings live in the Dictionaries window now; this
+        page only points there (and the search still finds them)."""
+        page, lay = self._page_container(t("Sözlükler"))
+        info = QLabel(t("Sözlük klasörleri, sözlük ve Sözlük Merkezi ayarları Sözlükler penceresinde, "
+                        "listeniz, kataloğunuz ve indirmelerinizle bir arada."))
+        info.setWordWrap(True)
+        lay.addWidget(info)
+        b = QPushButton(t("Sözlükler penceresinde aç (Ctrl+M)"))
+        b.clicked.connect(lambda: self.action_requested.emit("dictionaries_settings"))
+        row = QHBoxLayout()
+        row.addWidget(b)
+        row.addStretch(1)
+        lay.addLayout(row)
+        lay.addStretch(1)
+        self.page_keys.append([])
+        self.stack.addWidget(page)
+        QListWidgetItem(t("Sözlükler"), self.nav)
 
     def _reset_page(self) -> None:
         i = self.stack.currentIndex()
@@ -459,3 +500,63 @@ class PreferencesDialog(QDialog):
     def _ok(self) -> None:
         self._apply()
         self.accept()
+
+
+class SettingsForm(_SettingsEditing, QWidget):
+    """Settings of some pages as one form that saves at once — the
+    Dictionaries window's "Ayarlar" tab (dictionaries.* and center.*)."""
+
+    changed = Signal()
+    action_requested = Signal(str)
+
+    def __init__(self, prefs: Preferences, sections: tuple[str, ...], skip: tuple[str, ...] = (),
+                 parent: QWidget | None = None):
+        super().__init__(parent)
+        self.prefs = prefs
+        self.draft = prefs  # edited in place, saved at every change
+        self.editors = {}
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        inner_lay = QVBoxLayout(inner)
+        inner_lay.setContentsMargins(4, 6, 10, 6)
+        self.keys: list[str] = []
+        for sec_id, title in SECTIONS:
+            if sec_id not in sections:
+                continue
+            lab = QLabel(t(title))
+            lab.setObjectName("section_title")
+            inner_lay.addWidget(lab)
+            form, keys = self._build_form([s for s in SCHEMA if s.key.split(".")[0] == sec_id], skip)
+            inner_lay.addLayout(form)
+            self.keys += keys
+        inner_lay.addStretch(1)
+        scroll.setWidget(inner)
+        lay.addWidget(scroll, 1)
+        row = QHBoxLayout()
+        reset = QPushButton(t("Bu sayfayı varsayılana döndür"))
+        reset.clicked.connect(self._reset_all)
+        row.addWidget(reset)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+    def _set(self, key: str, value) -> None:
+        with contextlib.suppress(KeyError, ValueError):
+            self.prefs.set(key, value, save=True)
+            self.changed.emit()
+
+    def _reset_key(self, key: str) -> None:
+        super()._reset_key(key)
+        self.prefs.save()
+        self.changed.emit()
+
+    def _reset_all(self) -> None:
+        for k in self.keys:
+            self._reset_key(k)
+
+    def reload(self) -> None:
+        """Show the values again (changed elsewhere, e.g. an import)."""
+        for k in self.keys:
+            self._load_editor(k)

@@ -48,6 +48,25 @@ def _media_of(path: Path) -> list[Path]:
     return out
 
 
+def own_files(path: Path | str) -> list[Path]:
+    """The files that make one dictionary — what it is read from (a StarDict
+    is three or four files) and its media zips: what "delete with its files"
+    removes. Media folders and anything else in the folder stay."""
+    from ..core.media import MediaResolver
+    from ..storage.articles import source_files
+
+    p = Path(path)
+    out = [f for f in source_files(p) if f.is_file()]
+    if p.suffix.lower() == ".ifo":
+        syn = p.with_suffix(".syn")
+        if syn.is_file():
+            out.append(syn)
+    for loc in MediaResolver(p).search_locations()[:-1]:
+        if loc.is_file() and loc not in out:
+            out.append(loc)
+    return out
+
+
 def export_setup(zip_path: Path | str, data_dir: Path | str, parts: tuple[str, ...] = PARTS[:-1],
                  progress: Callable[[str, int, int], None] | None = None) -> dict:
     """Write a setup archive; returns its manifest."""

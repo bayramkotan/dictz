@@ -50,14 +50,15 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **Formats:** StarDict (`.ifo` / `.idx[.gz]` / `.dict[.dz]`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`) and Babylon (`.bgl`). All three are parsed natively, with no Python and no PyGlossary.
 - **25 interface languages** from the flag at the top right (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語, 한국어 …); Arabic, Persian and Urdu interface texts are shaped and drawn right to left.
 - **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
-- **Dictionary Center** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
-- **Multi-dictionary search** in your own order. You can enable, disable and reorder dictionaries in the dictionary manager.
+- **One Sözlükler window** (Ctrl+M) with seven tabs — Sözlüklerim (drag rows to reorder, on / off, only this, info, reindex, remove from the list or with the files), Klasörler, Katalog, Kaynaklar, İndirmeler, İçe / Dışa aktar, Ayarlar — and one **Sözlükler** menu; Dosya keeps only article, favourites, shortcut and quit.
+- **Catalog** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
+- **Multi-dictionary search** in your own order. Change the order by dragging in the Sözlüklerim tab, the dictionary bar, the found-in panel or the left pane.
 - **Fuzzy search:** "did you mean" suggestions. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
 - **DSL pictures and sounds** are read from `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same names as folders (any letter case), StarDict's from `res/`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
 - **SQLite FTS5 index:** instant, diacritic-insensitive prefix suggestions.
 - **Interface:**
   - tabs, back/forward, random word, favorites and history (with filters)
-  - dictionary bar (one-click on/off, right-click = only this one) and a "found in" panel
+  - dictionary bar: click = go to that dictionary's article, Ctrl+click = on / off (off is faded), right click = menu, drag = reorder; the same in the "found in" panel
   - 25 interface languages, picked from the flag at the top right (Arabic, Persian and Urdu are shaped and drawn right to left)
   - collapsible article cards per dictionary: its icon (or monogram badge in its own colour), language pair, format, copy / "only this dictionary" buttons
   - find in page with highlighting, save article as HTML / text
@@ -112,7 +113,7 @@ Global options: `--data-dir DIR` (or `DICTZ_DATA_DIR`), `--no-color` (or `NO_COL
 
 ## Settings
 
-90 settings in 10 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history, Dictionary Center), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. Change them in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
+90 settings in 10 pages (general, appearance, article, search, scan popup, global hotkeys, dictionaries, sound, history, Dictionary Center), stored in `settings.json` in the data folder. The Python edition reads and writes the same file. The dictionary and catalog pages are edited in **Sözlükler → Ayarlar**, the rest in **Düzen → Tercihler** (search box, ↺ per setting, page reset, shortcuts page, advanced page) or with `dictz config`.
 
 ## Use as a library
 

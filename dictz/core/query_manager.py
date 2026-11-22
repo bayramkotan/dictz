@@ -403,6 +403,29 @@ class QueryManager:
             self._persist_order()
             self._headword_cache = None
 
+    def move_before(self, name: str, target: str | None) -> None:
+        """Put ``name`` just before ``target`` (``None`` = at the end) — a drag
+        and drop in the dictionary bar, the found-in panel or a list."""
+        if name not in self._order or name == target:
+            return
+        order = [n for n in self._order if n != name]
+        j = order.index(target) if target in order else len(order)
+        order.insert(j, name)
+        if order != self._order:
+            self._order = order
+            self._persist_order()
+            self._headword_cache = None
+
+    def set_order(self, names: list[str]) -> None:
+        """Reorder the loaded dictionaries like ``names`` (unknown names are
+        ignored, missing ones keep their order after the given ones)."""
+        given = [n for n in names if n in self._order]
+        order = given + [n for n in self._order if n not in set(given)]
+        if order != self._order:
+            self._order = order
+            self._persist_order()
+            self._headword_cache = None
+
     def _persist_order(self) -> None:
         """Write the order of the loaded dictionaries to the list.
 

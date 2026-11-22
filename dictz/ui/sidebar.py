@@ -117,6 +117,8 @@ class Sidebar(QDockWidget):
     dictionary_toggled = Signal(str, bool)
     dictionary_activated = Signal(str)
     manage_dictionaries_requested = Signal()
+    dictionaries_reordered = Signal(list)  # names, after a drag and drop
+    dictionary_menu_requested = Signal(str, object)  # name, global position
     clear_history_requested = Signal()
     history_remove_requested = Signal(str)
     favorite_remove_requested = Signal(str)
@@ -137,13 +139,23 @@ class Sidebar(QDockWidget):
         self.tabs.tabBar().setUsesScrollButtons(False)
         self.search_pane = SearchPane()
 
-        self.dicts_pane = _ListPane(t("Sözlükler"), action_label=t("Yönet…"))
+        self.dicts_pane = _ListPane(t("Sözlükler"), action_label=t("Sözlükler…"))
         self.dicts_pane.action_triggered.connect(self.manage_dictionaries_requested)
         self.dicts_pane.list.itemChanged.connect(self._on_dict_item_changed)
         self.dicts_pane.list.itemActivated.disconnect()
         self.dicts_pane.list.itemClicked.disconnect()
         self.dicts_pane.list.itemDoubleClicked.connect(
             lambda it: self.dictionary_activated.emit(it.data(Qt.ItemDataRole.UserRole)))
+        # drag a dictionary up or down = the order of the results
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QAbstractItemView
+
+        dl = self.dicts_pane.list
+        dl.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        dl.setDefaultDropAction(Qt.DropAction.MoveAction)
+        dl.model().rowsMoved.connect(lambda *_a: QTimer.singleShot(0, self._dicts_reordered))
+        dl.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        dl.customContextMenuRequested.connect(self._dict_menu)
 
         self.favorites_pane = _ListPane(t("Favoriler"), action_label=t("Dışa aktar…"), removable=True)
         self.favorites_pane.item_activated.connect(self.word_selected)
@@ -189,13 +201,24 @@ class Sidebar(QDockWidget):
                 it.setToolTip(t("açılamadı") + f": {error}")
             else:
                 it = QListWidgetItem(dicticons.qicon(name), name)
-                it.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Çift tık: bilgiler"))
+                it.setToolTip(dicticons.look(name).tooltip() + "\n\n"
+                              + t("Çift tık: bilgiler · Sürükle: sırayı değiştir · Sağ tık: menü"))
             it.setData(Qt.ItemDataRole.UserRole, name)
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             it.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
             lst.addItem(it)
         lst.blockSignals(False)
         self.dicts_pane._apply_filter(self.dicts_pane.filter.text())
+
+    def _dicts_reordered(self) -> None:
+        lst = self.dicts_pane.list
+        self.dictionaries_reordered.emit([lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())])
+
+    def _dict_menu(self, pos) -> None:
+        lst = self.dicts_pane.list
+        it = lst.itemAt(pos)
+        if it is not None:
+            self.dictionary_menu_requested.emit(it.data(Qt.ItemDataRole.UserRole), lst.viewport().mapToGlobal(pos))
 
     def _on_dict_item_changed(self, item: QListWidgetItem) -> None:
         self.dictionary_toggled.emit(item.data(Qt.ItemDataRole.UserRole),

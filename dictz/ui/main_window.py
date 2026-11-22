@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QDockWidget,
@@ -63,7 +64,8 @@ from ..storage.settings import Preferences
 from . import dicticons, icons, themes
 from .definition_tabs import DefinitionTabs
 from .definition_view import group_by_dictionary
-from .dictionary_manager import DictionaryManagerDialog, file_filter, info_html
+from .dictbar import DictionaryStrip
+from .dictionary_manager import file_filter, info_html
 from .icons import app_icon, icon
 from .preferences_dialog import PreferencesDialog
 from .scan_popup import ScanPopup
@@ -295,12 +297,15 @@ class MainWindow(QMainWindow):
         tb.addAction(self.back_action)
         tb.addAction(self.fwd_action)
         tb.addSeparator()
-        # the dictionary bar: one small toggle per dictionary
-        self.dict_strip = QWidget()
-        self.dict_strip.setObjectName("dictionary_bar")
-        self.dict_strip_layout = QHBoxLayout(self.dict_strip)
-        self.dict_strip_layout.setContentsMargins(0, 0, 0, 0)
-        self.dict_strip_layout.setSpacing(1)
+        # the dictionary bar: one icon per dictionary (click = go to its
+        # article, Ctrl+click = on / off, right click = menu, drag = order)
+        self.dict_strip = DictionaryStrip()
+        self.dict_strip.jump_requested.connect(self._jump_to_dictionary)
+        self.dict_strip.toggle_requested.connect(
+            lambda n: self._set_dictionary_enabled(n, not self.query_manager.is_enabled(n)))
+        self.dict_strip.menu_requested.connect(self._dictionary_menu)
+        self.dict_strip.moved.connect(self._move_dictionary_before)
+        self.dict_strip.enable_all_requested.connect(lambda: self._enable_all(True))
         self.dictionary_bar = tb.addWidget(self.dict_strip)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -324,8 +329,9 @@ class MainWindow(QMainWindow):
         self.scan_action = self._act(t("Tarama"), self.set_scan, None, "scan", checkable=True,
                                      tip=t("Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir"))
         tb.addAction(self.scan_action)
-        self.center_action = self._act(t("Sözlük Merkezi"), lambda: self.open_center(0), None, "center",
-                                       tip=t("Sözlük Merkezi: sözlük indir, kaynaklar, içe / dışa aktar (Ctrl+Shift+M)"))
+        self.center_action = self._act(t("Sözlükler"), lambda: self.open_center(0), None, "center",
+                                       tip=t("Sözlükler: listem, klasörler, sözlük indir, kaynaklar, içe / dışa aktar, "
+                                             "ayarlar (Ctrl+M)"))
         tb.addAction(self.center_action)
         self.prefs_action = self._act(t("Tercihler"), self._open_preferences, "Ctrl+,", "settings",
                                       tip=t("Tercihler (Ctrl+,)"))
@@ -342,40 +348,9 @@ class MainWindow(QMainWindow):
         self.sidebar.restyle_icons()
 
     def _refresh_dictionary_bar(self) -> None:
-        lay = self.dict_strip_layout
-        while lay.count():
-            w = lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
         qm = self.query_manager
-        names = qm.loaded_names()
-        if not names:
-            lab = QLabel(" " + t("Sözlük yok — Ctrl+O ile ekleyin"))
-            lab.setObjectName("hint")
-            lay.addWidget(lab)
-            return
-        for name in names:
-            b = QToolButton()
-            b.setObjectName("dict_toggle")
-            b.setIcon(dicticons.qicon(name))
-            b.setIconSize(QSize(20, 20))
-            b.setAutoRaise(True)
-            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            b.setCheckable(True)
-            b.setChecked(qm.is_enabled(name))
-            b.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Tıkla: aç/kapat · Sağ tık: yalnızca bu"))
-            b.toggled.connect(lambda on, n=name: self._set_dictionary_enabled(n, on))
-            b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            b.customContextMenuRequested.connect(lambda _p, n=name: self._solo_dictionary(n))
-            lay.addWidget(b)
-        all_b = QToolButton()
-        all_b.setObjectName("dict_toggle")
-        all_b.setAutoRaise(True)
-        all_b.setIcon(icons.icon("all"))
-        all_b.setIconSize(QSize(16, 16))
-        all_b.setToolTip(t("Tüm sözlükleri etkinleştir"))
-        all_b.clicked.connect(lambda: self._enable_all(True))
-        lay.addWidget(all_b)
+        self.dict_strip.set_dictionaries([(n, qm.is_enabled(n)) for n in qm.loaded_names()],
+                                         t("Sözlük yok — Ctrl+O ile ekleyin"))
 
     def _build_sidebar(self) -> None:
         self.sidebar = Sidebar(self)
@@ -391,7 +366,9 @@ class MainWindow(QMainWindow):
         self.sidebar.word_selected.connect(self._open_word)
         self.sidebar.dictionary_toggled.connect(self._set_dictionary_enabled)
         self.sidebar.dictionary_activated.connect(self._show_dictionary_info)
-        self.sidebar.manage_dictionaries_requested.connect(self._open_dictionary_manager)
+        self.sidebar.manage_dictionaries_requested.connect(lambda: self.open_center(0))
+        self.sidebar.dictionaries_reordered.connect(self._reorder_dictionaries)
+        self.sidebar.dictionary_menu_requested.connect(self._dictionary_menu)
         self.sidebar.clear_history_requested.connect(self._clear_history)
         self.sidebar.history_remove_requested.connect(self._remove_history_word)
         self.sidebar.favorite_remove_requested.connect(self._remove_favorite)
@@ -409,6 +386,12 @@ class MainWindow(QMainWindow):
         self.found_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.found_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.found_list.itemClicked.connect(self._on_found_in_clicked)
+        # drag a dictionary up or down = change the order of all results
+        self.found_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.found_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.found_list.model().rowsMoved.connect(lambda *_a: QTimer.singleShot(0, self._found_in_reordered))
+        self.found_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.found_list.customContextMenuRequested.connect(self._found_in_menu)
         dock.setWidget(self.found_list)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         dock.setMinimumWidth(140)
@@ -431,13 +414,6 @@ class MainWindow(QMainWindow):
     def _build_menus(self) -> None:
         mb = self.menuBar()
         m = mb.addMenu(t("&Dosya"))
-        m.addAction(self._act(t("Sözlük &Ekle…"), self._add_dictionary_dialog, "Ctrl+O", "open"))
-        m.addAction(self._act(t("&Klasör Ekle…"), self._add_folder_dialog, "Ctrl+Shift+O", "folder"))
-        m.addAction(self._act(t("Sözlük &Yöneticisi…"), self._open_dictionary_manager, "Ctrl+M", "dict"))
-        m.addAction(self._act(t("Sözlük Mer&kezi…"), lambda: self.open_center(0), "Ctrl+Shift+M", "center"))
-        m.addAction(self._act(t("Bağlantıdan sözlük ekle…"), self._add_from_link, "Ctrl+Shift+L", "link"))
-        m.addAction(self._act(t("Kurulumu dışa / içe aktar…"), lambda: self.open_center(4), None, "upload"))
-        m.addSeparator()
         m.addAction(self._act(t("Makaleyi HTML olarak &kaydet…"), self._save_article, "Ctrl+S", "save"))
         m.addAction(self._act(t("Favorileri dışa aktar…"), self._export_favorites))
         m.addSeparator()
@@ -453,7 +429,7 @@ class MainWindow(QMainWindow):
         e.addAction(self._act(t("Sonraki eşleşme"), lambda: self._find(False), "F3"))
         e.addAction(self._act(t("Önceki eşleşme"), lambda: self._find(True), "Shift+F3"))
         e.addSeparator()
-        e.addAction(self._act(t("Tercihler…"), self._open_preferences))
+        e.addAction(self.prefs_action)
 
         v = mb.addMenu(t("&Görünüm"))
         v.addAction(self._act(t("Yeni sekme"), lambda: self.tabs.new_tab(), "Ctrl+T", "new"))
@@ -501,8 +477,33 @@ class MainWindow(QMainWindow):
         g.addAction(self._act(t("Sonraki sekme"), lambda: self._cycle_tab(1), "Ctrl+Tab"))
         g.addAction(self._act(t("Önceki sekme"), lambda: self._cycle_tab(-1), "Ctrl+Shift+Tab"))
 
-        self.dict_menu = mb.addMenu(t("&Sözlükler"))
-        self.dict_menu.aboutToShow.connect(self._fill_dictionary_menu)
+        # everything about dictionaries; the Dictionaries window (Ctrl+M) has the rest
+        d = self.dict_menu = mb.addMenu(t("&Sözlükler"))
+        from .dictionary_center import (
+            TAB_CATALOG,
+            TAB_FOLDERS,
+            TAB_MINE,
+            TAB_SETTINGS,
+            TAB_SOURCES,
+            TAB_TRANSFER,
+        )
+
+        d.addAction(self._act(t("&Sözlükler…"), lambda: self.open_center(TAB_MINE), "Ctrl+M", "dict"))
+        d.addSeparator()
+        d.addAction(self._act(t("Sözlük &Ekle…"), self._add_dictionary_dialog, "Ctrl+O", "open"))
+        d.addAction(self._act(t("&Klasör Ekle…"), self._add_folder_dialog, "Ctrl+Shift+O", "folder"))
+        d.addAction(self._act(t("Bağlantıdan sözlük ekle…"), self._add_from_link, "Ctrl+Shift+L", "link"))
+        d.addAction(self._act(t("Sözlük klasörleri…"), lambda: self.open_center(TAB_FOLDERS)))
+        d.addSeparator()
+        d.addAction(self._act(t("Sözlük indir (katalog)…"), lambda: self.open_center(TAB_CATALOG), "Ctrl+Shift+M",
+                              "center"))
+        d.addAction(self._act(t("Kaynaklar (sunucular)…"), lambda: self.open_center(TAB_SOURCES), None, "server"))
+        d.addAction(self._act(t("Kurulumu dışa / içe aktar…"), lambda: self.open_center(TAB_TRANSFER), None, "upload"))
+        d.addSeparator()
+        d.addAction(self._act(t("Tümünü etkinleştir"), lambda: self._enable_all(True)))
+        d.addAction(self._act(t("Tümünü devre dışı bırak"), lambda: self._enable_all(False)))
+        d.addSeparator()
+        d.addAction(self._act(t("Sözlük ayarları…"), lambda: self.open_center(TAB_SETTINGS), None, "settings"))
 
         h = mb.addMenu(t("&Yardım"))
         h.addAction(self._act(t("Kısayollar"), self._show_shortcuts, "F1", "help"))
@@ -567,10 +568,6 @@ class MainWindow(QMainWindow):
         self._loader.loaded.connect(self._on_dictionary_loaded)
         self._loader.failed.connect(self._on_load_failed)
         self._loader.progress.connect(self.progress.show_state)
-        if getattr(self, "_manager_dialog", None) is not None:
-            dlg = self._manager_dialog
-            self._loader.loaded.connect(lambda *_a: dlg.refresh())
-            self._loader.failed.connect(lambda *_a: dlg.refresh())
         self._loader.finished.connect(finished or self._extra_loading_finished)
         if background:
             self._loader.start()
@@ -748,7 +745,13 @@ class MainWindow(QMainWindow):
             self.rescan_folders()  # new folders: their dictionaries are added now
 
     def _on_prefs_action(self, action: str, dlg=None) -> None:
-        if action == "rescan":
+        if action == "dictionaries_settings":
+            from .dictionary_center import TAB_SETTINGS
+
+            if dlg is not None:
+                dlg.reject()
+            self.open_center(TAB_SETTINGS)
+        elif action == "rescan":
             self.rescan_folders(dlg.draft if dlg is not None else None)
         elif action == "open_data":
             self._open_data_dir()
@@ -921,12 +924,18 @@ class MainWindow(QMainWindow):
 
     # ================================================================ found-in
     def _refresh_found_in(self, entries: list[DictionaryEntry]) -> None:
+        self.found_list.blockSignals(True)
         self.found_list.clear()
+        self._found_names = []
         for i, (name, items) in enumerate(group_by_dictionary(entries)):
             it = QListWidgetItem(dicticons.qicon(name), f"{name}  ({len(items)})" if len(items) > 1 else name)
             it.setData(Qt.ItemDataRole.UserRole, i)
-            it.setToolTip(dicticons.look(name).tooltip() + "\n\n" + t("Tıkla: makaleye git"))
+            it.setData(Qt.ItemDataRole.UserRole + 1, name)
+            it.setToolTip(dicticons.look(name).tooltip() + "\n\n"
+                          + t("Tıkla: makaleye git · Sürükle: sırayı değiştir · Sağ tık: menü"))
             self.found_list.addItem(it)
+            self._found_names.append(name)
+        self.found_list.blockSignals(False)
 
     def _on_found_in_clicked(self, item: QListWidgetItem) -> None:
         v = self.tabs.current_view()
@@ -1030,6 +1039,9 @@ class MainWindow(QMainWindow):
         self.sidebar.set_dictionaries([(r["name"], r["enabled"], r["word_count"], r["error"])
                                        for r in qm.list_rows()])
         self._refresh_dictionary_bar()
+        c = getattr(self, "_center", None)
+        if c is not None:
+            c.refresh_dictionaries()
         self._refresh_favorites_pane()
         self._refresh_history_pane()
         self._refresh_status()
@@ -1045,35 +1057,106 @@ class MainWindow(QMainWindow):
             return
         self.query_manager.set_enabled(name, enabled)
         self._refresh_dictionaries()
+        self._rerun_current()  # the change shows at once
 
     def _enable_all(self, on: bool) -> None:
         for n in self.query_manager.loaded_names():
             self.query_manager.set_enabled(n, on)
         self._refresh_dictionaries()
+        self._rerun_current()
 
     def _solo_dictionary(self, name: str) -> None:
         for n in self.query_manager.loaded_names():
             self.query_manager.set_enabled(n, n == name)
         self._refresh_dictionaries()
+        self._rerun_current()
         self.statusBar().showMessage(t("Yalnızca “{name}” etkin — Sözlükler → Tümünü etkinleştir ile geri alın", name=name), 5000)
 
-    def _fill_dictionary_menu(self) -> None:
-        m = self.dict_menu
-        m.clear()
+    def _rerun_current(self) -> None:
+        """Show the current word again (the dictionaries or their order changed)."""
+        word = self.tabs.current_word()
+        if word:
+            self._open_word(word)
+
+    def _jump_to_dictionary(self, name: str) -> None:
         qm = self.query_manager
-        for n in qm.loaded_names():
-            a = QAction(n, m, checkable=True)
-            a.setChecked(qm.is_enabled(n))
-            a.toggled.connect(lambda on, name=n: self._set_dictionary_enabled(name, on))
-            m.addAction(a)
-        if qm.loaded_names():
-            m.addSeparator()
-        m.addAction(t("Tümünü etkinleştir"), lambda: self._enable_all(True))
-        m.addAction(t("Tümünü devre dışı bırak"), lambda: self._enable_all(False))
-        m.addSeparator()
-        m.addAction(icon("dict"), t("Sözlük yöneticisi…"), self._open_dictionary_manager)
-        m.addAction(icon("open"), t("Sözlük ekle…"), self._add_dictionary_dialog)
-        m.addAction(icon("folder"), t("Klasör ekle…"), self._add_folder_dialog)
+        if not qm.is_enabled(name):
+            self.statusBar().showMessage(t("“{name}” kapalı — açmak için Ctrl+tık", name=name), 5000)
+            return
+        names = getattr(self, "_found_names", [])
+        v = self.tabs.current_view()
+        if name in names and v is not None:
+            v.scroll_to_dictionary(names.index(name))
+        else:
+            self.statusBar().showMessage(t("“{name}” bu kelimede sonuç vermedi", name=name), 5000)
+
+    def _move_dictionary_before(self, name: str, target) -> None:
+        self.query_manager.move_before(name, target)
+        self._refresh_dictionaries()
+        self._rerun_current()
+
+    def _reorder_dictionaries(self, names: list[str]) -> None:
+        self.query_manager.set_order(names)
+        self._refresh_dictionaries()
+        self._rerun_current()
+
+    def _found_in_reordered(self) -> None:
+        shown = [self.found_list.item(i).data(Qt.ItemDataRole.UserRole + 1) for i in range(self.found_list.count())]
+        old = list(getattr(self, "_found_names", []))
+        if shown == old or len(shown) != len(old):
+            return
+        # the one that moved: without it both lists are the same
+        moved = next((n for n in shown if [x for x in shown if x != n] == [x for x in old if x != n]), None)
+        if moved is None:
+            return
+        i = shown.index(moved)
+        nxt = shown[i + 1] if i + 1 < len(shown) else None
+        # put it before the next shown one, or right after the previous shown one
+        if nxt is not None:
+            self.query_manager.move_before(moved, nxt)
+        else:
+            order = [n for n in self.query_manager.loaded_names() if n != moved]
+            prev = shown[i - 1]
+            j = order.index(prev) + 1
+            self.query_manager.move_before(moved, order[j] if j < len(order) else None)
+        self._refresh_dictionaries()
+        self._rerun_current()
+
+    def _found_in_menu(self, pos) -> None:
+        it = self.found_list.itemAt(pos)
+        if it is not None:
+            self._dictionary_menu(it.data(Qt.ItemDataRole.UserRole + 1), self.found_list.viewport().mapToGlobal(pos))
+
+    def _dictionary_menu(self, name: str, global_pos) -> None:
+        """Right click on a dictionary (dictionary bar, found-in panel, side list)."""
+        from .dictionary_center import TAB_MINE
+
+        qm = self.query_manager
+        menu = QMenu(self)
+        on = qm.is_enabled(name)
+        toggle = menu.addAction(t("Etkin"))
+        toggle.setCheckable(True)
+        toggle.setChecked(on)
+        toggle.triggered.connect(lambda checked: self._set_dictionary_enabled(name, checked))
+        menu.addAction(t("Makalesine git"), lambda: self._jump_to_dictionary(name))
+        menu.addAction(t("Yalnızca bunu etkinleştir"), lambda: self._solo_dictionary(name))
+        menu.addAction(t("Tümünü etkinleştir"), lambda: self._enable_all(True))
+        menu.addSeparator()
+        menu.addAction(icon("help"), t("Bilgi"), lambda: self._show_dictionary_info(name))
+        menu.addAction(icon("refresh"), t("Yeniden indeksle"), lambda: self.rebuild_dictionaries([name]))
+        menu.addSeparator()
+
+        def _show(remove: bool = False) -> None:
+            c = self.open_center(TAB_MINE)
+            if c is None:
+                return
+            c.select_dictionary(name)
+            if remove:
+                c._mine_remove()
+
+        menu.addAction(icon("dict"), t("Sözlüklerimde göster"), _show)
+        menu.addAction(icon("remove"), t("Kaldır…"), lambda: _show(True))
+        menu.exec(global_pos)
 
     def _show_dictionary_info(self, name: str) -> None:
         if name in self.query_manager.dictionaries:
@@ -1117,6 +1200,9 @@ class MainWindow(QMainWindow):
         scanned at every start) and add its dictionaries now."""
         if add_folder_source(self.prefs, folder):
             self.prefs.save()
+        c = getattr(self, "_center", None)
+        if c is not None:
+            c.refresh_folders()
         rec = dict(self._folder_sources()).get(str(Path(folder).expanduser().absolute()),
                                                bool(self.prefs["dictionaries.recursive"]))
         # listed in the background too: a big folder tree must not stop the window
@@ -1136,8 +1222,14 @@ class MainWindow(QMainWindow):
             return None
         c = getattr(self, "_center", None)
         if c is None:
-            c = DictionaryCenter(Path(store.db_path).parent, self.prefs, self)
+            c = DictionaryCenter(Path(store.db_path).parent, self.prefs, self, query_manager=self.query_manager)
             c.install_files.connect(lambda files: self.load_new_files([Path(f) for f in files]))
+            c.add_paths_requested.connect(self.add_paths)
+            c.add_folder_requested.connect(lambda folder: self.add_folder(Path(folder)))
+            c.rescan_requested.connect(lambda: self.rescan_folders())
+            c.rebuild_requested.connect(self.rebuild_dictionaries)
+            c.dictionaries_changed.connect(lambda: (self._refresh_dictionaries(), self._rerun_current()))
+            c.prefs_changed.connect(self.apply_prefs)
             c.removed_files.connect(self._remove_dictionary_files)
             c.before_replace.connect(self._remove_all_dictionaries)
             c.imported.connect(self._after_import)
@@ -1149,7 +1241,9 @@ class MainWindow(QMainWindow):
         return c
 
     def _add_from_link(self) -> None:
-        c = self.open_center(2)
+        from .dictionary_center import TAB_DOWNLOADS
+
+        c = self.open_center(TAB_DOWNLOADS)
         if c is not None:
             c.add_from_link()
 
@@ -1186,19 +1280,6 @@ class MainWindow(QMainWindow):
             self.prefs.values = fresh.values  # the same object: others hold it
             self.apply_prefs()
         self._refresh_dictionaries()
-
-    def _open_dictionary_manager(self) -> None:
-        dlg = DictionaryManagerDialog(self.query_manager, self, prefs=self.prefs)
-        dlg.dictionaries_changed.connect(self._refresh_dictionaries)
-        dlg.add_paths_requested.connect(lambda paths: (self.add_paths(paths), dlg.refresh()))
-        dlg.rebuild_requested.connect(lambda names: self.rebuild_dictionaries(names))
-        dlg.add_folder_requested.connect(lambda folder: (self.add_folder(Path(folder)), dlg.refresh()))
-        dlg.rescan_requested.connect(lambda: self.rescan_folders())
-        if self._loader is not None:
-            self._loader.loaded.connect(lambda *_a: dlg.refresh())
-        self._manager_dialog = dlg  # new loaders refresh it too
-        dlg.exec()
-        self._manager_dialog = None
 
     def dragEnterEvent(self, event):  # noqa: N802
         if event.mimeData().hasUrls():

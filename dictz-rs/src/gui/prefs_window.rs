@@ -27,6 +27,19 @@ pub enum Advanced {
     Import,
     /// Scan the dictionary folders now (with the draft's folders).
     Rescan,
+    /// Open the Dictionaries window on its settings tab.
+    DictionariesSettings,
+}
+
+/// Pages shown in the Dictionaries window (Sözlükler → Ayarlar) instead.
+pub const PAGES_IN_DICTIONARIES_WINDOW: &[&str] = &["dictionaries", "center"];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Page {
+    Section(usize),
+    DictionariesLink,
+    Shortcuts,
+    Advanced,
 }
 
 /// What the window asks the app to do.
@@ -90,10 +103,19 @@ impl PrefsWindow {
         }
     }
 
-    fn pages() -> Vec<&'static str> {
-        let mut v: Vec<&str> = SECTIONS.iter().map(|s| s.1).collect();
-        v.push(PAGE_SHORTCUTS);
-        v.push(PAGE_ADVANCED);
+    fn pages() -> Vec<(&'static str, Page)> {
+        let mut v = Vec::new();
+        for (i, (sec, title)) in SECTIONS.iter().enumerate() {
+            if PAGES_IN_DICTIONARIES_WINDOW.contains(sec) {
+                if *sec == PAGES_IN_DICTIONARIES_WINDOW[0] {
+                    v.push(("Sözlükler", Page::DictionariesLink));
+                }
+                continue;
+            }
+            v.push((*title, Page::Section(i)));
+        }
+        v.push((PAGE_SHORTCUTS, Page::Shortcuts));
+        v.push((PAGE_ADVANCED, Page::Advanced));
         v
     }
 
@@ -130,7 +152,7 @@ impl PrefsWindow {
                         ui.vertical(|ui| {
                             ui.set_width(170.0);
                             ui.set_min_height(body_h);
-                            for (i, title) in Self::pages().iter().enumerate() {
+                            for (i, (title, _)) in Self::pages().iter().enumerate() {
                                 let sel = self.page == i && self.filter.is_empty();
                                 if ui.selectable_label(sel, tr(title)).clicked() {
                                     self.page = i;
@@ -178,8 +200,21 @@ impl PrefsWindow {
 
     fn page_body(&mut self, ui: &mut egui::Ui, events: &mut Vec<Event>) {
         let pages = Self::pages();
-        let title = pages[self.page.min(pages.len() - 1)];
-        if title == PAGE_SHORTCUTS {
+        let (_, page) = pages[self.page.min(pages.len() - 1)];
+        if page == Page::DictionariesLink {
+            ui.heading(tr("Sözlükler"));
+            ui.add_space(6.0);
+            ui.label(tr("Sözlük klasörleri, sözlük ve Sözlük Merkezi ayarları Sözlükler penceresinde, listeniz, kataloğunuz ve indirmelerinizle bir arada."));
+            ui.add_space(6.0);
+            if ui
+                .button(tr("Sözlükler penceresinde aç (Ctrl+M)"))
+                .clicked()
+            {
+                events.push(Event::Action(Advanced::DictionariesSettings));
+            }
+            return;
+        }
+        if page == Page::Shortcuts {
             ui.heading(tr(PAGE_SHORTCUTS));
             ui.add_space(6.0);
             egui::Grid::new("shortcuts")
@@ -194,7 +229,7 @@ impl PrefsWindow {
                 });
             return;
         }
-        if title == PAGE_ADVANCED {
+        if page == Page::Advanced {
             ui.heading(tr(PAGE_ADVANCED));
             ui.add_space(6.0);
             let buttons: [(&str, &str, Advanced); 7] = [
@@ -244,7 +279,8 @@ impl PrefsWindow {
             ));
             return;
         }
-        let (sec, sec_title) = SECTIONS[self.page];
+        let Page::Section(i) = page else { return };
+        let (sec, sec_title) = SECTIONS[i];
         ui.horizontal(|ui| {
             ui.heading(tr(sec_title));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -271,6 +307,9 @@ impl PrefsWindow {
         let q = self.filter.trim().to_lowercase();
         let mut any = false;
         for (sec, title) in SECTIONS {
+            if PAGES_IN_DICTIONARIES_WINDOW.contains(sec) {
+                continue; // in the Dictionaries window
+            }
             let items: Vec<&Setting> = SCHEMA
                 .iter()
                 .filter(|s| s.key.split('.').next() == Some(*sec))
@@ -294,6 +333,38 @@ impl PrefsWindow {
         if !any {
             ui.weak(tr("Eşleşen ayar yok."));
         }
+    }
+
+    /// Some pages as one form (the Dictionaries window's "Ayarlar" tab):
+    /// a heading and the rows of each section, without the `skip` keys.
+    pub fn form(&mut self, ui: &mut egui::Ui, sections: &[&str], skip: &[&str]) {
+        for (sec, title) in SECTIONS {
+            if !sections.contains(sec) {
+                continue;
+            }
+            ui.label(RichText::new(tr(title)).strong().size(15.0));
+            let items: Vec<&Setting> = SCHEMA
+                .iter()
+                .filter(|s| s.key.split('.').next() == Some(*sec))
+                .filter(|s| !HIDDEN_KEYS.contains(&s.key) && !skip.contains(&s.key))
+                .collect();
+            self.grid(ui, &format!("form-{}", sec), &items);
+            ui.add_space(10.0);
+        }
+    }
+
+    /// Reset the rows of `sections` (but `skip`).
+    pub fn reset_sections(&mut self, sections: &[&str], skip: &[&str]) {
+        for s in SCHEMA.iter().filter(|s| {
+            sections.contains(&s.key.split('.').next().unwrap_or("")) && !skip.contains(&s.key)
+        }) {
+            let _ = self.draft.reset(Some(s.key));
+        }
+    }
+
+    /// Events asked by an embedded editor (e.g. "Şimdi tara").
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.pending)
     }
 
     fn grid(&mut self, ui: &mut egui::Ui, id: &str, items: &[&Setting]) {
@@ -507,7 +578,7 @@ impl PrefsWindow {
 impl PrefsWindow {
     /// The dictionary folders, each with its own "subfolders" box (like
     /// GoldenDict's Sources → Files).
-    fn folder_sources(&mut self, ui: &mut egui::Ui) {
+    pub fn folder_sources(&mut self, ui: &mut egui::Ui) {
         let mut items = crate::query::folder_sources(&self.draft);
         let mut changed = false;
         ui.vertical(|ui| {

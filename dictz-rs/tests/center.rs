@@ -334,3 +334,13 @@ fn file_links_same_as_python() {
         assert_eq!(local_path_text(url, true), want("windows"), "{}", url);
     }
 }
+
+#[test]
+fn own_files_of_a_dictionary() {
+    let p = root().join("parity/sample.dsl");
+    let got: Vec<String> = transfer::own_files(&p)
+        .iter()
+        .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(got, vec!["sample.dsl", "sample.dsl.files.zip"]);
+}

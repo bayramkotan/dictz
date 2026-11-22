@@ -546,6 +546,42 @@ impl QueryManager {
         }
     }
 
+    /// Put `name` just before `target` (`None` = at the end) — a drag and
+    /// drop in the dictionary bar, the found-in panel or a list.
+    pub fn move_before(&mut self, name: &str, target: Option<&str>) {
+        if Some(name) == target {
+            return;
+        }
+        let Some(i) = self.position(name) else { return };
+        let d = self.dicts.remove(i);
+        let j = target
+            .and_then(|t| self.position(t))
+            .unwrap_or(self.dicts.len());
+        self.dicts.insert(j, d);
+        if j != i {
+            self.persist_order();
+            self.headword_cache = None;
+        }
+    }
+
+    /// Reorder the loaded dictionaries like `names` (unknown names are
+    /// ignored; the ones not given keep their order after the given ones).
+    pub fn set_order(&mut self, names: &[String]) {
+        let before = self.loaded_names();
+        let mut taken: Vec<Loaded> = Vec::new();
+        for n in names {
+            if let Some(i) = self.position(n) {
+                taken.push(self.dicts.remove(i));
+            }
+        }
+        taken.append(&mut self.dicts);
+        self.dicts = taken;
+        if self.loaded_names() != before {
+            self.persist_order();
+            self.headword_cache = None;
+        }
+    }
+
     /// Write the loaded order into the list; dictionaries that are in the
     /// list but not loaded (missing file, failed) keep their place.
     fn persist_order(&self) {
@@ -835,6 +871,13 @@ mod tests {
         assert_eq!(qm.loaded_names(), vec!["A", "B"]);
         qm.move_dictionary("B", -1);
         assert_eq!(qm.loaded_names(), vec!["B", "A"]);
+        qm.move_before("B", None); // drag to the end
+        assert_eq!(qm.loaded_names(), vec!["A", "B"]);
+        qm.move_before("B", Some("A")); // drag onto the first one
+        assert_eq!(qm.loaded_names(), vec!["B", "A"]);
+        qm.set_order(&["A".to_string(), "nope".to_string()]);
+        assert_eq!(qm.loaded_names(), vec!["A", "B"]);
+        qm.set_order(&["B".to_string(), "A".to_string()]);
         assert_eq!(qm.search("apple", true)[0].definition, "Apfel");
         qm.set_enabled("B", false);
         assert_eq!(qm.search("apple", true).len(), 1);

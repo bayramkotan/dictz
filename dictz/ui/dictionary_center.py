@@ -1,5 +1,7 @@
-"""The Dictionary Center window: catalog, sources (servers), downloads,
-installed dictionaries, import / export.
+"""The Dictionaries window — everything about dictionaries in one place:
+your dictionaries (order by drag and drop, on / off, remove, files, updates),
+dictionary folders, the catalog of downloadable dictionaries, sources
+(servers), downloads, import / export and the dictionary settings.
 
 Everything heavy (reading sources, downloading, unpacking, building a
 catalog) runs in threads; results come back through Qt signals. The logic is
@@ -50,6 +52,8 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTextBrowser,
     QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -62,6 +66,9 @@ from ..center.net import Http
 from ..center.sources import AUTH, TYPES, Sources, guess_type
 from ..core.i18n import t
 from .icons import icon
+
+# the tabs, in order (the main window opens one by number)
+TAB_MINE, TAB_FOLDERS, TAB_CATALOG, TAB_SOURCES, TAB_DOWNLOADS, TAB_TRANSFER, TAB_SETTINGS = range(7)
 
 STATUS_COLORS = {"open": "#2e9d5b", "free": "#3b82c4", "unknown": "#c28a1e", "nonfree": "#c2453a"}
 
@@ -303,6 +310,32 @@ class SourceDialog(QDialog):
 
 # ---------------------------------------------------------------- the window
 
+class OrderTree(QTreeWidget):
+    """Rows reordered by drag and drop; ``reordered(names)`` after a drop
+    (the names are in column 0's ``UserRole``)."""
+
+    reordered = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setRootIsDecorated(False)
+        self.setUniformRowHeights(True)
+        self.setAlternatingRowColors(True)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+    def names(self) -> list[str]:
+        return [self.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) for i in range(self.topLevelItemCount())]
+
+    def dropEvent(self, event):  # noqa: N802
+        super().dropEvent(event)
+        self.reordered.emit(self.names())
+
+
 class DictionaryCenter(QDialog):
     """Non-modal; one per main window. ``install_files(files)`` is called with
     the dictionary files of each finished install (the main window adds them
@@ -310,12 +343,19 @@ class DictionaryCenter(QDialog):
 
     install_files = Signal(list)
     removed_files = Signal(list)
+    add_paths_requested = Signal(list)  # files to add (in the background)
+    add_folder_requested = Signal(str)  # a folder kept in the folder list and scanned now
+    rescan_requested = Signal()
+    rebuild_requested = Signal(list)  # names read again
+    dictionaries_changed = Signal()  # order / on-off / removed: the main window refreshes
+    prefs_changed = Signal()
 
-    def __init__(self, data_dir: Path, prefs, parent=None):
+    def __init__(self, data_dir: Path, prefs, parent=None, query_manager=None):
         super().__init__(parent)
         self.data_dir = Path(data_dir)
         self.prefs = prefs
-        self.setWindowTitle(t("Sözlük Merkezi"))
+        self.qm = query_manager
+        self.setWindowTitle(t("Sözlükler"))
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.resize(1180, 760)
         self.sources = Sources(self.data_dir)
@@ -351,11 +391,14 @@ class DictionaryCenter(QDialog):
         lay.addLayout(top)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
+        self._updates: dict[str, dict] = {}  # installed id → newer catalog entry
+        self.tabs.addTab(self._build_mine(), icon("dict"), t("Sözlüklerim"))
+        self.tabs.addTab(self._build_folders(), icon("folder"), t("Klasörler"))
         self.tabs.addTab(self._build_catalog(), icon("center"), t("Katalog"))
         self.tabs.addTab(self._build_sources(), icon("server"), t("Kaynaklar (sunucular)"))
         self.tabs.addTab(self._build_downloads(), icon("download"), t("İndirmeler"))
-        self.tabs.addTab(self._build_installed(), icon("dict"), t("Kurulu"))
         self.tabs.addTab(self._build_transfer(), icon("upload"), t("İçe / Dışa aktar"))
+        self.tabs.addTab(self._build_settings(), icon("settings"), t("Ayarlar"))
         lay.addWidget(self.tabs, 1)
         self.reload_all()
         QTimer.singleShot(200, self._auto_refresh)
@@ -569,12 +612,12 @@ class DictionaryCenter(QDialog):
             todo = [e for e in todo if e not in unsupported]
         if todo and not self.prefs["center.online"] and any(
                 not f["url"].startswith("file:") for e in todo for f in e["files"]):
-            QMessageBox.warning(self, t("Kur"), t("İnternet kaynakları kapalı (Tercihler → Sözlük Merkezi)."))
+            QMessageBox.warning(self, t("Kur"), t("İnternet kaynakları kapalı (Sözlükler → Ayarlar)."))
             return
         for e in todo:
             self.queue.add(e)
         if todo:
-            self.tabs.setCurrentIndex(2)
+            self.tabs.setCurrentIndex(TAB_DOWNLOADS)
 
     def _uninstall_selected_catalog(self) -> None:
         ids = [e["id"] for e in self._selected() if e["id"] in self.installer.installed()]
@@ -817,7 +860,7 @@ class DictionaryCenter(QDialog):
             err.setForeground(QColor("#c2453a"))
             self.dl_table.setItem(i, 5, err)
         active = self.queue.active()
-        self.tabs.setTabText(2, t("İndirmeler") + (f" ({active})" if active else ""))
+        self.tabs.setTabText(TAB_DOWNLOADS, t("İndirmeler") + (f" ({active})" if active else ""))
 
     def _fill_history(self) -> None:
         rows = self.installer.history()[:300]
@@ -840,85 +883,304 @@ class DictionaryCenter(QDialog):
             self.install_files.emit(list(rec["files"]))
         self.status.setText(t("Kuruldu: {name}", name=entry["name"]) + (
             "" if rec["files"] else " — " + t("dictz bu biçimi henüz açamıyor; dosyalar klasörde saklandı")))
-        self._fill_installed()
+        self._compute_updates()
         self._apply_filter()
 
-    # ------------------------------------------------------------ installed tab
-    def _build_installed(self) -> QWidget:
+    # ------------------------------------------------------------ my dictionaries tab
+    MINE_COLS = ("", "Ad", "Biçim", "Kelime", "Diller", "Kaynak", "Lisans", "Güncelleme", "Dosya")
+
+    def _build_mine(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(0, 4, 0, 0)
-        self.inst_table = QTableWidget(0, 7)
-        self.inst_table.setHorizontalHeaderLabels([t("Ad"), t("Kaynak"), t("Sürüm"), t("Kuruldu"), t("Lisans"),
-                                                   t("Güncelleme"), t("Klasör")])
-        self.inst_table.verticalHeader().setVisible(False)
-        self.inst_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.inst_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.inst_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
-        for i, wd in ((0, 280), (1, 130), (2, 90), (3, 100), (4, 130), (5, 90)):
-            self.inst_table.setColumnWidth(i, wd)
-        lay.addWidget(self.inst_table, 1)
+        hint = QLabel(t("Arama sonuçlarındaki sıra budur: satırları sürükleyip bırakarak sıralayın. "
+                        "Kutu = etkin. Çift tık: bilgiler."))
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.mine = OrderTree()
+        self.mine.setColumnCount(len(self.MINE_COLS))
+        self.mine.setHeaderLabels([t(c) for c in self.MINE_COLS])
+        hh = self.mine.header()
+        hh.setStretchLastSection(True)
+        for i, wd in ((0, 34), (1, 280), (2, 70), (3, 90), (4, 90), (5, 110), (6, 120), (7, 90)):
+            self.mine.setColumnWidth(i, wd)
+        self.mine.itemChanged.connect(self._mine_item_changed)
+        self.mine.itemDoubleClicked.connect(lambda _it, _c: self._mine_info())
+        self.mine.reordered.connect(self._mine_reordered)
+        self.mine.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mine.customContextMenuRequested.connect(self._mine_menu)
+        lay.addWidget(self.mine, 1)
         row = QHBoxLayout()
-        self.keep_files = QCheckBox(t("Dosyaları sakla"))
-        for text, ic, fn in ((t("Güncelle"), "download", self._update_selected),
-                             (t("Hepsini güncelle"), "refresh", self._update_all),
-                             (t("Kaldır"), "remove", lambda: self.uninstall(self._selected_installed())),
-                             (t("Klasörü aç"), "folder", self._open_installed_folder),
-                             (t("Lisansı aç"), "license", self._open_installed_license)):
+        for text, ic, fn in ((t("Dosya ekle…"), "open", self._mine_add_files),
+                             (t("Klasör ekle…"), "folder", self._mine_add_folder),
+                             (t("Bağlantıdan ekle…"), "link", self.add_from_link),
+                             (t("Kaldır…"), "remove", self._mine_remove)):
             b = QPushButton(icon(ic), text)
             b.clicked.connect(fn)
             row.addWidget(b)
-        row.addWidget(self.keep_files)
+        row.addSpacing(10)
+        for text, ic, where in ((t("En üste"), "up", "top"), (t("Yukarı"), "up", -1), (t("Aşağı"), "down", 1),
+                                (t("En alta"), "down", "bottom")):
+            b = QPushButton(icon(ic), text)
+            b.clicked.connect(lambda _=False, d=where: self._mine_move(d))
+            row.addWidget(b)
+        row.addSpacing(10)
+        for text, ic, fn in ((t("Bilgi"), "help", self._mine_info),
+                             (t("Yeniden indeksle"), "refresh", self._mine_reindex),
+                             (t("Klasörü aç"), "folder", self._mine_open_folder),
+                             (t("Güncelle"), "download", self._update_selected),
+                             (t("Hepsini güncelle"), "refresh", self._update_all)):
+            b = QPushButton(icon(ic), text)
+            b.clicked.connect(fn)
+            row.addWidget(b)
         row.addStretch(1)
         lay.addLayout(row)
+        self.mine_summary = QLabel("")
+        self.mine_summary.setObjectName("hint")
+        lay.addWidget(self.mine_summary)
         return w
 
-    def _fill_installed(self) -> None:
-        recs = sorted(self.installer.installed().values(), key=lambda r: r["name"].lower())
-        ups = {r["id"]: e for r, e in self.installer.updates(self.catalog.entries(include_disabled=True))}
-        self.inst_table.setRowCount(len(recs))
-        for i, r in enumerate(recs):
-            up = ups.get(r["id"])
-            vals = [r["name"], r.get("source", ""), r.get("version") or r.get("date") or "–", r["installed"][:10],
-                    r.get("license", ""), (up["version"] or up["date"]) if up else "", r.get("folder", "")]
-            for j, v in enumerate(vals):
-                it = QTableWidgetItem(v)
-                it.setToolTip(v)
-                if j == 0:
-                    it.setData(Qt.ItemDataRole.UserRole, r["id"])
-                if j == 5 and up:
-                    it.setForeground(QColor("#2e9d5b"))
-                self.inst_table.setItem(i, j, it)
-        self.tabs.setTabText(3, t("Kurulu") + f" ({len(recs)})")
+    def refresh_dictionaries(self) -> None:
+        """Fill "Sözlüklerim" again (the main window calls it after a change)."""
+        if self.qm is None:
+            return
+        from ..storage.registry import norm_path
 
-    def _selected_installed(self) -> list[str]:
-        return [self.inst_table.item(i.row(), 0).data(Qt.ItemDataRole.UserRole)
-                for i in self.inst_table.selectionModel().selectedRows()]
+        qm = self.qm
+        selected = set(self._mine_selected())
+        recs = {}
+        for rid, rec in self.installer.installed().items():
+            for f in rec.get("files") or []:
+                recs[norm_path(f)] = (rid, rec)
+        src_names = {s["id"]: s["name"] for s in self.sources.all()}
+        self.mine.blockSignals(True)
+        self.mine.clear()
+        rows = qm.list_rows()
+        for row in rows:
+            name = row["name"]
+            rid, rec = recs.get(norm_path(row["path"]), (None, None))
+            up = self._updates.get(rid) if rid else None
+            if row["loaded"]:
+                m = qm.dictionaries[name].metadata
+                langs_text = f"{m.source_language} → {m.target_language}" if m.source_language else ""
+                label = name
+            else:
+                langs_text, label = "", f"⚠ {name} — {t('açılamadı')}"
+            vals = ["", label, row["format"], f"{row['word_count']:,}", langs_text,
+                    src_names.get(rec.get("source", ""), rec.get("source", "")) if rec else t("yerel"),
+                    rec.get("license", "") if rec else "", (up["version"] or up["date"]) if up else "", row["path"]]
+            it = QTreeWidgetItem(vals)
+            it.setData(0, Qt.ItemDataRole.UserRole, name)
+            it.setData(1, Qt.ItemDataRole.UserRole, rid or "")
+            it.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+                        | (Qt.ItemFlag.ItemIsDragEnabled if row["loaded"] else Qt.ItemFlag.NoItemFlags))
+            it.setCheckState(0, Qt.CheckState.Checked if row["enabled"] else Qt.CheckState.Unchecked)
+            if row["loaded"]:
+                from . import dicticons
+
+                it.setIcon(1, dicticons.qicon(name))
+                it.setToolTip(1, dicticons.look(name).tooltip())
+            else:
+                for c in range(len(vals)):
+                    it.setForeground(c, QColor("#dc2626"))
+                    it.setToolTip(c, row["error"])
+            it.setTextAlignment(3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if up:
+                it.setForeground(7, QColor("#2e9d5b"))
+            it.setToolTip(8, row["path"])
+            self.mine.addTopLevelItem(it)
+            it.setSelected(name in selected)
+        self.mine.blockSignals(False)
+        enabled = [r for r in rows if r["enabled"] and r["loaded"]]
+        words = sum(r["word_count"] for r in enabled)
+        self.mine_summary.setText(t("{n} / {m} sözlük etkin · {w} kelime", n=len(enabled), m=len(rows), w=f"{words:,}"))
+        self.tabs.setTabText(TAB_MINE, t("Sözlüklerim") + f" ({len(rows)})")
+
+    def select_dictionary(self, name: str) -> None:
+        """Select ``name`` in "Sözlüklerim" (and show it)."""
+        for i in range(self.mine.topLevelItemCount()):
+            it = self.mine.topLevelItem(i)
+            it.setSelected(it.data(0, Qt.ItemDataRole.UserRole) == name)
+            if it.isSelected():
+                self.mine.scrollToItem(it)
+
+    def _mine_selected(self) -> list[str]:
+        return [it.data(0, Qt.ItemDataRole.UserRole) for it in self.mine.selectedItems()]
+
+    def _mine_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        if column != 0 or self.qm is None:
+            return
+        self.qm.set_enabled(item.data(0, Qt.ItemDataRole.UserRole), item.checkState(0) == Qt.CheckState.Checked)
+        self.dictionaries_changed.emit()
+
+    def _mine_reordered(self, names: list[str]) -> None:
+        if self.qm is None:
+            return
+        self.qm.set_order([n for n in names if n in self.qm.dictionaries])
+        self.dictionaries_changed.emit()
+
+    def _mine_move(self, where) -> None:
+        names = [n for n in self._mine_selected() if self.qm is not None and n in self.qm.dictionaries]
+        if not names:
+            return
+        order = self.qm.loaded_names()
+        if where == "top":
+            order = names + [n for n in order if n not in names]
+        elif where == "bottom":
+            order = [n for n in order if n not in names] + names
+        else:
+            for n in (names if where < 0 else reversed(names)):
+                i = order.index(n)
+                j = max(0, min(len(order) - 1, i + where))
+                order.insert(j, order.pop(i))
+        self.qm.set_order(order)
+        self.dictionaries_changed.emit()
+
+    def _mine_menu(self, pos) -> None:
+        from PySide6.QtWidgets import QMenu
+
+        if not self.mine.itemAt(pos):
+            return
+        menu = QMenu(self)
+        menu.addAction(icon("help"), t("Bilgi"), self._mine_info)
+        menu.addAction(t("Yalnızca bunu etkinleştir"), self._mine_solo)
+        menu.addAction(icon("refresh"), t("Yeniden indeksle"), self._mine_reindex)
+        menu.addAction(icon("folder"), t("Klasörü aç"), self._mine_open_folder)
+        menu.addSeparator()
+        menu.addAction(icon("up"), t("En üste"), lambda: self._mine_move("top"))
+        menu.addAction(icon("down"), t("En alta"), lambda: self._mine_move("bottom"))
+        menu.addSeparator()
+        menu.addAction(icon("remove"), t("Kaldır…"), self._mine_remove)
+        menu.exec(self.mine.viewport().mapToGlobal(pos))
+
+    def _mine_solo(self) -> None:
+        names = set(self._mine_selected())
+        if self.qm is None or not names:
+            return
+        for n in self.qm.loaded_names():
+            self.qm.set_enabled(n, n in names)
+        self.dictionaries_changed.emit()
+
+    def _mine_add_files(self) -> None:
+        from .dictionary_manager import file_filter
+
+        paths, _ = QFileDialog.getOpenFileNames(self, t("Sözlük dosyası seçin"), "", file_filter())
+        if paths:
+            self.add_paths_requested.emit([Path(p) for p in paths])
+
+    def _mine_add_folder(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, t("Sözlük klasörü seçin"))
+        if d:
+            self.add_folder_requested.emit(d)
+
+    def _mine_info(self) -> None:
+        names = self._mine_selected()
+        if not names or self.qm is None:
+            return
+        name = names[0]
+        if name not in self.qm.dictionaries:
+            QMessageBox.warning(self, name, self.qm.failed.get(name, ""))
+            return
+        from .dictionary_manager import info_html
+
+        QMessageBox.information(self, name, info_html(self.qm, name))
+
+    def _mine_reindex(self) -> None:
+        names = [n for n in self._mine_selected() if self.qm is not None and n in self.qm.dictionaries]
+        if names:
+            self.rebuild_requested.emit(names)
+
+    def _mine_open_folder(self) -> None:
+        if self.qm is None:
+            return
+        paths = {r["name"]: r["path"] for r in self.qm.list_rows()}
+        for n in self._mine_selected()[:3]:
+            if paths.get(n):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(paths[n]).parent)))
+
+    def _mine_remove(self) -> None:
+        """Remove from the list, or delete with the files: a catalog install
+        loses its folder, an own dictionary only the files it is made of
+        (listed in the question)."""
+        from ..center.transfer import own_files
+        from ..storage.registry import norm_path
+
+        names = self._mine_selected()
+        if not names or self.qm is None:
+            return
+        rows = {r["name"]: r for r in self.qm.list_rows()}
+        recs = {}
+        for rid, rec in self.installer.installed().items():
+            for f in rec.get("files") or []:
+                recs[norm_path(f)] = rid
+        files: list[str] = []
+        for n in names:
+            p = rows.get(n, {}).get("path", "")
+            if p and norm_path(p) not in recs:
+                files += [str(f) for f in own_files(p)]
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(t("Kaldır"))
+        text = t("Bu sözlükler dictz'ten kaldırılsın mı?") + "\n\n" + "\n".join(names[:20])
+        if files:
+            text += "\n\n" + t("“Dosyalarıyla sil” şunları da siler:") + "\n" + "\n".join(files[:20])
+        box.setText(text)
+        only = box.addButton(t("Listeden kaldır"), QMessageBox.ButtonRole.AcceptRole)
+        delete = box.addButton(t("Dosyalarıyla sil"), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(t("İptal"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() not in (only, delete):
+            return
+        with_files = box.clickedButton() is delete
+        problems = []
+        for n in names:
+            p = rows.get(n, {}).get("path", "")
+            rid = recs.get(norm_path(p)) if p else None
+            own = own_files(p) if p and with_files and not rid else []
+            self.qm.remove_dictionary(n)  # closed first: Windows cannot delete an open file
+            if rid:
+                self.installer.uninstall(rid, delete_files=with_files)
+            for f in own:
+                try:
+                    f.unlink()
+                except OSError as e:
+                    problems.append(f"{f}: {e}")
+        self.dictionaries_changed.emit()
+        self._apply_filter()
+        if problems:
+            QMessageBox.warning(self, t("Kaldır"), "\n".join(problems[:20]))
+
+    def _compute_updates(self) -> None:
+        self._updates = {r["id"]: e for r, e in self.installer.updates(self.catalog.entries(include_disabled=True))}
 
     def _update_selected(self) -> None:
-        ids = set(self._selected_installed())
-        for _rec, e in self.installer.updates(self.catalog.entries(include_disabled=True)):
-            if e["id"] in ids:
-                self.queue.add(e)
-        self.tabs.setCurrentIndex(2)
-
-    def _update_all(self) -> None:
-        ups = self.installer.updates(self.catalog.entries(include_disabled=True))
-        if not ups:
+        ids = {self.mine.topLevelItem(i).data(1, Qt.ItemDataRole.UserRole)
+               for i in range(self.mine.topLevelItemCount()) if self.mine.topLevelItem(i).isSelected()}
+        todo = [e for rid, e in self._updates.items() if rid in ids]
+        if not todo:
             QMessageBox.information(self, t("Güncelle"), t("Kurulu sözlüklerin hepsi güncel."))
             return
-        for _rec, e in ups:
+        for e in todo:
             self.queue.add(e)
-        self.tabs.setCurrentIndex(2)
+        self.tabs.setCurrentIndex(TAB_DOWNLOADS)
+
+    def _update_all(self) -> None:
+        self._compute_updates()
+        if not self._updates:
+            QMessageBox.information(self, t("Güncelle"), t("Kurulu sözlüklerin hepsi güncel."))
+            return
+        for e in self._updates.values():
+            self.queue.add(e)
+        self.tabs.setCurrentIndex(TAB_DOWNLOADS)
 
     def uninstall(self, ids: list[str]) -> None:
+        """Remove catalog installs (from the catalog tab's "Kaldır")."""
         if not ids:
             return
         recs = self.installer.installed()
         names = "\n".join(recs[i]["name"] for i in ids if i in recs)
-        keep = self.keep_files.isChecked()
-        msg = t("Bu sözlükler dictz'ten kaldırılsın mı?") + "\n\n" + names + "\n\n" + (
-            t("Dosyalar saklanacak.") if keep else t("İndirilen dosyalar da silinecek."))
+        msg = t("Bu sözlükler dictz'ten kaldırılsın mı?") + "\n\n" + names + "\n\n" + t("İndirilen dosyalar da silinecek.")
         if QMessageBox.question(self, t("Kaldır"), msg) != QMessageBox.StandardButton.Yes:
             return
         files = []
@@ -928,22 +1190,51 @@ class DictionaryCenter(QDialog):
                 files += rec.get("files") or []
         self.removed_files.emit(files)  # the window drops them from the list first (Windows: closes them)
         for i in ids:
-            self.installer.uninstall(i, delete_files=not keep)
-        self._fill_installed()
+            self.installer.uninstall(i, delete_files=True)
         self._apply_filter()
+        self.refresh_dictionaries()
 
-    def _open_installed_folder(self) -> None:
-        recs = self.installer.installed()
-        for i in self._selected_installed()[:3]:
-            if i in recs and recs[i].get("folder"):
-                QDesktopServices.openUrl(QUrl.fromLocalFile(recs[i]["folder"]))
+    # ------------------------------------------------------------ folders tab
+    def _build_folders(self) -> QWidget:
+        from ..core.query_manager import folder_sources
+        from .folder_sources import FolderSources
 
-    def _open_installed_license(self) -> None:
-        recs = self.installer.installed()
-        for i in self._selected_installed()[:3]:
-            url = recs.get(i, {}).get("license_url")
-            if url:
-                QDesktopServices.openUrl(QUrl(url))
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 4, 0, 0)
+        hint = QLabel(t("Açılışta bu klasörlerdeki .ifo / .dsl / .dsl.dz / .bgl dosyaları otomatik eklenir.") + " "
+                      + t("Kutu = alt klasörleri de tara. Bir klasörü kaldırmak sözlüklerini listeden çıkarmaz."))
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.folders = FolderSources(folder_sources(self.prefs), bool(self.prefs["dictionaries.recursive"]))
+        self.folders.changed.connect(self._folders_changed)
+        self.folders.rescan_requested.connect(self.rescan_requested.emit)
+        lay.addWidget(self.folders, 1)
+        return w
+
+    def _folders_changed(self) -> None:
+        from ..core.query_manager import folder_sources, set_folder_sources
+
+        old = {f for f, _ in folder_sources(self.prefs)}
+        set_folder_sources(self.prefs, self.folders.value())
+        self.prefs.save()
+        for f, _rec in self.folders.value():
+            if f not in old:
+                self.add_folder_requested.emit(f)
+
+    def refresh_folders(self) -> None:
+        from ..core.query_manager import folder_sources
+
+        self.folders.set_value(folder_sources(self.prefs))
+
+    # ------------------------------------------------------------ settings tab
+    def _build_settings(self) -> QWidget:
+        from .preferences_dialog import PAGES_IN_DICTIONARIES_WINDOW, SettingsForm
+
+        self.settings_form = SettingsForm(self.prefs, PAGES_IN_DICTIONARIES_WINDOW, skip=("dictionaries.folders",))
+        self.settings_form.changed.connect(self.prefs_changed.emit)
+        return self.settings_form
 
     # ------------------------------------------------------------ import / export tab
     def _build_transfer(self) -> QWidget:
@@ -1191,7 +1482,7 @@ class DictionaryCenter(QDialog):
         if self._refreshing:
             return
         if not self.prefs["center.online"]:
-            self.status.setText(t("İnternet kaynakları kapalı (Tercihler → Sözlük Merkezi)."))
+            self.status.setText(t("İnternet kaynakları kapalı (Sözlükler → Ayarlar)."))
             return
         todo = ids if ids is not None else [s["id"] for s in self.sources.enabled()]
         if not todo:
@@ -1221,20 +1512,21 @@ class DictionaryCenter(QDialog):
         self._refreshing = False
         self.refresh_btn.setEnabled(True)
         errors = [s["name"] for s in self.sources.enabled() if self.catalog.cached(s["id"])["error"]]
-        self.status.setText(t("{n} sözlük, {k} kaynak", n=len(self.catalog.entries()), k=len(self.sources.enabled()))
+        self.status.setText(t("Katalog") + ": " + t("{n} sözlük, {k} kaynak", n=len(self.catalog.entries()), k=len(self.sources.enabled()))
                             + (" · " + t("okunamayan: {names}", names=", ".join(errors)) if errors else ""))
         self.reload_all()
 
     def reload_all(self) -> None:
+        self._compute_updates()
         self._fill_sources()
         self._fill_filters()
         self._apply_filter()
         self._fill_downloads()
         self._fill_history()
-        self._fill_installed()
+        self.refresh_dictionaries()
         if not self._refreshing:
             n = len(self.catalog.entries())
-            self.status.setText(t("{n} sözlük, {k} kaynak", n=n, k=len(self.sources.enabled())))
+            self.status.setText(t("Katalog") + ": " + t("{n} sözlük, {k} kaynak", n=n, k=len(self.sources.enabled())))
 
     # ------------------------------------------------------------ link
     def add_from_link(self) -> None:
@@ -1248,19 +1540,19 @@ class DictionaryCenter(QDialog):
                     self, t("Bağlantıdan ekle"),
                     t("Bu adres bir kaynak gibi görünüyor ({type}). Kaynak olarak eklensin mi?", type=type_text(tp))
         ) == QMessageBox.StandardButton.Yes:
-            self.tabs.setCurrentIndex(1)
+            self.tabs.setCurrentIndex(TAB_SOURCES)
             self._add_source(url)
             return
         entry = adapters.entry_from_url(url)
         if not self.prefs["center.online"] and not url.startswith("file:"):
-            QMessageBox.warning(self, t("Bağlantıdan ekle"), t("İnternet kaynakları kapalı (Tercihler → Sözlük Merkezi)."))
+            QMessageBox.warning(self, t("Bağlantıdan ekle"), t("İnternet kaynakları kapalı (Sözlükler → Ayarlar)."))
             return
         self.queue.add(entry)
-        self.tabs.setCurrentIndex(2)
+        self.tabs.setCurrentIndex(TAB_DOWNLOADS)
 
     def closeEvent(self, event):  # noqa: N802
         if self.queue.active() and QMessageBox.question(
-                self, t("Sözlük Merkezi"),
+                self, t("Sözlükler"),
                 t("İndirmeler sürüyor. Pencere kapanınca arka planda devam etsinler mi?")
         ) != QMessageBox.StandardButton.Yes:
             event.ignore()

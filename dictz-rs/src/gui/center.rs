@@ -1,6 +1,8 @@
-//! The Dictionary Center window — the same tabs, buttons and texts as the
-//! Python edition's `dictz/ui/dictionary_center.py`: catalog, sources
-//! (servers), downloads, installed dictionaries, import / export.
+//! The Dictionaries window — the same tabs, buttons and texts as the Python
+//! edition's `dictz/ui/dictionary_center.py`: your dictionaries (order by
+//! drag and drop, on / off, remove, files, updates), dictionary folders, the
+//! catalog of downloadable dictionaries, sources (servers), downloads,
+//! import / export and the dictionary settings.
 //!
 //! Everything slow (reading sources, downloading, unpacking, building a
 //! catalog, a setup archive) runs in threads; results come back through a
@@ -25,6 +27,48 @@ use crate::center::transfer::{self, ImportResult};
 use crate::center::{adapters, langs, licenses, store};
 use crate::i18n::{tr, tr_args};
 use crate::settings::Preferences;
+
+use super::prefs_window::{PrefsWindow, PAGES_IN_DICTIONARIES_WINDOW};
+
+/// The tabs, in order (the main window opens one by number).
+pub const TAB_MINE: usize = 0;
+/// Dictionary folders.
+pub const TAB_FOLDERS: usize = 1;
+/// Downloadable dictionaries.
+pub const TAB_CATALOG: usize = 2;
+/// Servers.
+pub const TAB_SOURCES: usize = 3;
+/// The download queue.
+pub const TAB_DOWNLOADS: usize = 4;
+/// Setup / list export and import, catalog builder.
+pub const TAB_TRANSFER: usize = 5;
+/// Dictionary and Dictionary Center settings.
+pub const TAB_SETTINGS: usize = 6;
+
+/// One row of "Sözlüklerim" (from the main window's list).
+#[derive(Clone)]
+pub struct MineRow {
+    /// Unique name.
+    pub name: String,
+    /// On / off.
+    pub enabled: bool,
+    /// Opened (false: the file is missing or failed).
+    pub loaded: bool,
+    /// Why it failed.
+    pub error: String,
+    /// stardict / dsl / babylon.
+    pub format: String,
+    /// Headwords.
+    pub words: u64,
+    /// `en → tr`.
+    pub langs: String,
+    /// Its file.
+    pub path: PathBuf,
+}
+
+/// A dictionary dragged in "Sözlüklerim".
+#[derive(Clone)]
+struct MineDrag(String);
 
 use super::system::open_external;
 
@@ -147,6 +191,26 @@ pub enum Event {
     RemoveAll,
     /// A setup came in: open its dictionaries; `true` = settings too.
     Imported(bool),
+    /// Switch a dictionary on / off.
+    SetEnabled(String, bool),
+    /// Only these on.
+    Solo(Vec<String>),
+    /// The new order of the dictionaries.
+    SetOrder(Vec<String>),
+    /// Show a dictionary's information.
+    Info(String),
+    /// Read these again.
+    Reindex(Vec<String>),
+    /// "Dosya ekle…".
+    AddFiles,
+    /// "Klasör ekle…".
+    AddFolder,
+    /// Scan the dictionary folders now.
+    Rescan,
+    /// Drop these dictionaries from the list, then delete these files.
+    Remove(Vec<String>, Vec<PathBuf>),
+    /// The settings changed in the window (folders or the settings tab).
+    PrefsChanged(Preferences),
 }
 
 enum Work {
@@ -175,6 +239,8 @@ enum Next {
     Import(PathBuf, bool),
     AddSource(String),
     DownloadLink(String),
+    /// Remove from "Sözlüklerim"; `true` = with the files.
+    RemoveMine(Vec<String>, bool),
     Close,
 }
 
@@ -185,6 +251,9 @@ struct Ask {
     no: Next,
     /// Only an OK button.
     info: bool,
+    /// A third button (text, what it does) and the yes / no texts.
+    extra: Option<(String, Next)>,
+    texts: Option<(String, String)>,
 }
 
 /// The source editor (add / edit).
@@ -307,10 +376,16 @@ pub struct CenterWindow {
     tasks: Vec<Task>,
     dl_sel: BTreeSet<usize>,
     history: Vec<Value>,
-    // installed
-    inst_sel: BTreeSet<String>,
-    keep_files: bool,
+    // my dictionaries
+    mine_rows: Vec<MineRow>,
+    mine_sel: BTreeSet<String>,
+    rec_by_path: HashMap<String, (String, Value)>,
+    update_by_id: HashMap<String, Entry>,
     pending_uninstall: Vec<String>,
+    uninstall_delete: bool,
+    remove_next: bool,
+    // folders and settings (edited on a copy, sent with `PrefsChanged`)
+    settings_ed: PrefsWindow,
     // import / export
     ex_parts: [bool; 6],
     im_replace: bool,
@@ -392,9 +467,14 @@ impl CenterWindow {
             tasks: Vec::new(),
             dl_sel: BTreeSet::new(),
             history: Vec::new(),
-            inst_sel: BTreeSet::new(),
-            keep_files: false,
+            mine_rows: Vec::new(),
+            mine_sel: BTreeSet::new(),
+            rec_by_path: HashMap::new(),
+            update_by_id: HashMap::new(),
             pending_uninstall: Vec::new(),
+            uninstall_delete: true,
+            remove_next: false,
+            settings_ed: PrefsWindow::new(prefs),
             ex_parts: [true, true, true, true, true, false],
             im_replace: false,
             cb_folder: String::new(),
@@ -411,6 +491,17 @@ impl CenterWindow {
     /// New settings from the preferences window.
     pub fn set_prefs(&mut self, prefs: &Preferences) {
         self.prefs = prefs.clone();
+        self.settings_ed.draft = prefs.clone();
+    }
+
+    /// Select `name` in "Sözlüklerim" (`remove`: and ask to remove it).
+    pub fn select_dictionary(&mut self, name: &str, remove: bool) {
+        self.tab = TAB_MINE;
+        self.mine_sel = [name.to_string()].into_iter().collect();
+        if remove {
+            // the rows come with the next frame; ask then
+            self.remove_next = true;
+        }
     }
 
     /// Stop the downloads (dictz quits).
@@ -420,7 +511,7 @@ impl CenterWindow {
 
     /// Ask for a link (File → Add dictionary from link…).
     pub fn add_from_link(&mut self) {
-        self.tab = 2;
+        self.tab = TAB_DOWNLOADS;
         self.link = Some(String::new());
     }
 
@@ -443,13 +534,14 @@ impl CenterWindow {
     }
 
     fn summary(&self) -> String {
-        tr_args(
-            "{n} sözlük, {k} kaynak",
-            &[
-                ("n", &self.entries.len()),
-                ("k", &self.sources.enabled().len()),
-            ],
-        )
+        format!("{}: ", tr("Katalog"))
+            + &tr_args(
+                "{n} sözlük, {k} kaynak",
+                &[
+                    ("n", &self.entries.len()),
+                    ("k", &self.sources.enabled().len()),
+                ],
+            )
     }
 
     fn fill_filters(&mut self) {
@@ -494,6 +586,27 @@ impl CenterWindow {
 
     fn apply_filter(&mut self) {
         self.installed = self.installer.installed();
+        self.rec_by_path.clear();
+        for (rid, rec) in &self.installed {
+            for f in rec["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                self.rec_by_path.insert(
+                    crate::registry::norm_path(Path::new(f)),
+                    (rid.clone(), rec.clone()),
+                );
+            }
+        }
+        let all = self.catalog.entries(true);
+        self.update_by_id = self
+            .installer
+            .updates(&all)
+            .into_iter()
+            .map(|(r, e)| (vs(&r, "id"), e))
+            .collect();
         self.updates = self
             .installer
             .updates(&self.entries)
@@ -562,7 +675,7 @@ impl CenterWindow {
     }
 
     fn offline_text() -> String {
-        tr("İnternet kaynakları kapalı (Tercihler → Sözlük Merkezi).")
+        tr("İnternet kaynakları kapalı (Sözlükler → Ayarlar).")
     }
 
     fn info(&mut self, title: String, text: String) {
@@ -572,6 +685,8 @@ impl CenterWindow {
             yes: Next::Nothing,
             no: Next::Nothing,
             info: true,
+            extra: None,
+            texts: None,
         });
     }
 
@@ -582,6 +697,8 @@ impl CenterWindow {
             yes,
             no,
             info: false,
+            extra: None,
+            texts: None,
         });
     }
 
@@ -806,7 +923,7 @@ impl CenterWindow {
                 });
             }
             Next::AddSource(url) => {
-                self.tab = 1;
+                self.tab = TAB_SOURCES;
                 self.editor = Some(SourceDialog::new(&self.sources, None, &url));
             }
             Next::DownloadLink(url) => {
@@ -815,8 +932,9 @@ impl CenterWindow {
                     return;
                 }
                 self.queue.add(adapters::entry_from_url(&url));
-                self.tab = 2;
+                self.tab = TAB_DOWNLOADS;
             }
+            Next::RemoveMine(names, with_files) => self.do_remove_mine(names, with_files),
             Next::Close => *open = false,
         }
     }
@@ -929,7 +1047,7 @@ impl CenterWindow {
         for e in todo {
             self.queue.add(e);
         }
-        self.tab = 2;
+        self.tab = TAB_DOWNLOADS;
     }
 
     fn uninstall(&mut self, ids: Vec<String>) {
@@ -942,11 +1060,7 @@ impl CenterWindow {
             .filter_map(|i| recs.get(i))
             .map(|r| vs(r, "name"))
             .collect();
-        let tail = if self.keep_files {
-            tr("Dosyalar saklanacak.")
-        } else {
-            tr("İndirilen dosyalar da silinecek.")
-        };
+        let tail = tr("İndirilen dosyalar da silinecek.");
         self.question(
             tr("Kaldır"),
             format!(
@@ -978,6 +1092,83 @@ impl CenterWindow {
         // the main window drops them from the list first (Windows: closes them)
         self.events.push(Event::RemoveFiles(files));
         self.pending_uninstall = ids;
+        self.uninstall_delete = true;
+    }
+
+    /// "Kaldır…" in "Sözlüklerim": a catalog install loses its folder (or
+    /// only leaves the list), an own dictionary only the files it is made of.
+    fn remove_mine(&mut self) {
+        let names: Vec<String> = self.mine_sel.iter().cloned().collect();
+        if names.is_empty() {
+            return;
+        }
+        let mut files = Vec::new();
+        for r in self
+            .mine_rows
+            .iter()
+            .filter(|r| self.mine_sel.contains(&r.name))
+        {
+            if !self
+                .rec_by_path
+                .contains_key(&crate::registry::norm_path(&r.path))
+            {
+                files.extend(
+                    transfer::own_files(&r.path)
+                        .into_iter()
+                        .map(|f| f.display().to_string()),
+                );
+            }
+        }
+        let mut text = format!(
+            "{}\n\n{}",
+            tr("Bu sözlükler dictz'ten kaldırılsın mı?"),
+            names
+                .iter()
+                .take(20)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        if !files.is_empty() {
+            text += &format!(
+                "\n\n{}\n{}",
+                tr("“Dosyalarıyla sil” şunları da siler:"),
+                files
+                    .iter()
+                    .take(20)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+        }
+        self.ask = Some(Ask {
+            title: tr("Kaldır"),
+            text,
+            yes: Next::RemoveMine(names.clone(), false),
+            no: Next::Nothing,
+            info: false,
+            extra: Some((tr("Dosyalarıyla sil"), Next::RemoveMine(names, true))),
+            texts: Some((tr("Listeden kaldır"), tr("İptal"))),
+        });
+    }
+
+    fn do_remove_mine(&mut self, names: Vec<String>, with_files: bool) {
+        let mut own = Vec::new();
+        let mut rids = Vec::new();
+        for r in self.mine_rows.iter().filter(|r| names.contains(&r.name)) {
+            match self.rec_by_path.get(&crate::registry::norm_path(&r.path)) {
+                Some((rid, _)) => rids.push(rid.clone()),
+                None if with_files => own.extend(transfer::own_files(&r.path)),
+                None => {}
+            }
+        }
+        rids.sort();
+        rids.dedup();
+        // the main window drops them from the list (and closes them) first
+        self.events.push(Event::Remove(names, own));
+        self.pending_uninstall = rids;
+        self.uninstall_delete = with_files;
+        self.mine_sel.clear();
     }
 }
 
@@ -990,9 +1181,8 @@ impl CenterWindow {
             return;
         }
         for i in &ids {
-            self.installer.uninstall(i, !self.keep_files);
+            self.installer.uninstall(i, self.uninstall_delete);
         }
-        self.inst_sel.clear();
         self.dirty = true;
     }
 }
@@ -1061,9 +1251,22 @@ fn pick_open(title: &str, filter: (&str, &[&str])) -> Option<PathBuf> {
 impl CenterWindow {
     /// Drain the threads' messages and, when `open`, draw the window.
     /// Returns what the main window should do.
-    pub fn update(&mut self, ctx: &egui::Context, open: &mut bool) -> Vec<Event> {
+    pub fn update(
+        &mut self,
+        ctx: &egui::Context,
+        open: &mut bool,
+        rows: Vec<MineRow>,
+        badge: &mut dyn FnMut(&mut egui::Ui, &str),
+    ) -> Vec<Event> {
         self.finish_uninstall();
         self.poll();
+        if *open || !rows.is_empty() {
+            self.mine_rows = rows;
+        }
+        if self.remove_next && !self.mine_rows.is_empty() {
+            self.remove_next = false;
+            self.remove_mine();
+        }
         if *open {
             if !self.auto_refreshed {
                 self.auto_refreshed = true;
@@ -1078,7 +1281,7 @@ impl CenterWindow {
                 (screen.width() - 40.0).min(1180.0),
                 (screen.height() - 90.0).min(720.0),
             );
-            egui::Window::new(tr("Sözlük Merkezi"))
+            egui::Window::new(tr("Sözlükler"))
                 .id(egui::Id::new("dictz-center"))
                 .open(&mut keep)
                 .collapsible(false)
@@ -1088,11 +1291,11 @@ impl CenterWindow {
                 .min_width(760.0)
                 .min_height(420.0)
                 .resizable(true)
-                .show(ctx, |ui| self.body(ui));
+                .show(ctx, |ui| self.body(ui, badge));
             if !keep {
                 if self.queue.active() > 0 {
                     self.question(
-                        tr("Sözlük Merkezi"),
+                        tr("Sözlükler"),
                         tr("İndirmeler sürüyor. Pencere kapanınca arka planda devam etsinler mi?"),
                         Next::Close,
                         Next::Nothing,
@@ -1109,7 +1312,7 @@ impl CenterWindow {
         std::mem::take(&mut self.events)
     }
 
-    fn body(&mut self, ui: &mut egui::Ui) {
+    fn body(&mut self, ui: &mut egui::Ui, badge: &mut dyn FnMut(&mut egui::Ui, &str)) {
         // rows are picked by clicking anywhere on them
         ui.style_mut().interaction.selectable_labels = false;
         // keep the window's size when a tab has less to show
@@ -1135,6 +1338,11 @@ impl CenterWindow {
         });
         let active = self.queue.active();
         let tabs = [
+            (
+                "dict",
+                format!("{} ({})", tr("Sözlüklerim"), self.mine_rows.len()),
+            ),
+            ("folder", tr("Klasörler")),
             ("center", tr("Katalog")),
             ("server", tr("Kaynaklar (sunucular)")),
             (
@@ -1145,11 +1353,8 @@ impl CenterWindow {
                     tr("İndirmeler")
                 },
             ),
-            (
-                "dict",
-                format!("{} ({})", tr("Kurulu"), self.installed.len()),
-            ),
             ("upload", tr("İçe / Dışa aktar")),
+            ("settings", tr("Ayarlar")),
         ];
         ui.horizontal(|ui| {
             for (i, (icon, label)) in tabs.iter().enumerate() {
@@ -1165,11 +1370,13 @@ impl CenterWindow {
         });
         ui.separator();
         match self.tab {
-            0 => self.catalog_tab(ui),
-            1 => self.sources_tab(ui),
-            2 => self.downloads_tab(ui),
-            3 => self.installed_tab(ui),
-            _ => self.transfer_tab(ui),
+            TAB_MINE => self.mine_tab(ui, badge),
+            TAB_FOLDERS => self.folders_tab(ui),
+            TAB_CATALOG => self.catalog_tab(ui),
+            TAB_SOURCES => self.sources_tab(ui),
+            TAB_DOWNLOADS => self.downloads_tab(ui),
+            TAB_TRANSFER => self.transfer_tab(ui),
+            _ => self.settings_tab(ui),
         }
     }
 
@@ -1814,146 +2021,404 @@ impl CenterWindow {
 
     // ------------------------------------------------------------ installed tab
 
-    fn installed_tab(&mut self, ui: &mut egui::Ui) {
-        let mut recs: Vec<Value> = self.installed.values().cloned().collect();
-        recs.sort_by_key(|r| vs(r, "name").to_lowercase());
-        let all = self.catalog.entries(true);
-        let ups: HashMap<String, Entry> = self
-            .installer
-            .updates(&all)
+    fn mine_tab(&mut self, ui: &mut egui::Ui, badge: &mut dyn FnMut(&mut egui::Ui, &str)) {
+        muted(
+            ui,
+            tr("Arama sonuçlarındaki sıra budur: satırları sürükleyip bırakarak sıralayın. Kutu = etkin. Çift tık: bilgiler."),
+        );
+        let rows = self.mine_rows.clone();
+        let src_names: HashMap<String, String> = self
+            .sources
+            .all()
             .into_iter()
-            .map(|(r, e)| (vs(&r, "id"), e))
+            .map(|s| (s.id, s.name))
             .collect();
-        let h = (ui.available_height() - 40.0).max(120.0);
+        let h = (ui.available_height() - 64.0).max(120.0);
+        let mut drop: Option<(String, usize)> = None;
+        let mut clicked: Option<(usize, egui::Modifiers)> = None;
+        let mut double: Option<String> = None;
+        let mut menu_events: Vec<Event> = Vec::new();
+        let mut menu_remove = false;
+        let mut menu_move: Option<bool> = None;
         TableBuilder::new(ui)
-            .id_salt("center-installed")
+            .id_salt("center-mine")
             .striped(true)
             .resizable(true)
             .sense(egui::Sense::click())
             .max_scroll_height(h)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::initial(280.0).clip(true))
-            .column(Column::initial(130.0).clip(true))
+            .column(Column::exact(28.0))
+            .column(Column::initial(290.0).clip(true))
+            .column(Column::initial(70.0))
+            .column(Column::initial(80.0))
             .column(Column::initial(90.0).clip(true))
-            .column(Column::initial(100.0))
-            .column(Column::initial(130.0).clip(true))
-            .column(Column::initial(90.0).clip(true))
+            .column(Column::initial(110.0).clip(true))
+            .column(Column::initial(110.0).clip(true))
+            .column(Column::initial(80.0).clip(true))
             .column(Column::remainder().clip(true))
             .header(20.0, |mut head| {
                 for c in [
+                    "",
                     "Ad",
+                    "Biçim",
+                    "Kelime",
+                    "Diller",
                     "Kaynak",
-                    "Sürüm",
-                    "Kuruldu",
                     "Lisans",
                     "Güncelleme",
-                    "Klasör",
+                    "Dosya",
                 ] {
                     head.col(|ui| {
-                        ui.strong(tr(c));
+                        ui.strong(if c.is_empty() { String::new() } else { tr(c) });
                     });
                 }
             })
             .body(|body| {
-                body.rows(22.0, recs.len(), |mut row| {
-                    let r = &recs[row.index()];
-                    let id = vs(r, "id");
-                    row.set_selected(self.inst_sel.contains(&id));
-                    let up = ups.get(&id);
-                    let ver = [vs(r, "version"), vs(r, "date")]
-                        .into_iter()
-                        .find(|x| !x.is_empty())
-                        .unwrap_or("–".into());
-                    let upv = up
-                        .map(|e| {
-                            if e.version.is_empty() {
+                body.rows(24.0, rows.len(), |mut row| {
+                    let ri = row.index();
+                    let r = &rows[ri];
+                    let rec = self.rec_by_path.get(&crate::registry::norm_path(&r.path));
+                    let up = rec.and_then(|(rid, _)| self.update_by_id.get(rid));
+                    row.set_selected(self.mine_sel.contains(&r.name));
+                    row.col(|ui| {
+                        let mut on = r.enabled;
+                        if ui.checkbox(&mut on, "").changed() {
+                            menu_events.push(Event::SetEnabled(r.name.clone(), on));
+                        }
+                    });
+                    row.col(|ui| {
+                        if r.loaded {
+                            let id = egui::Id::new(("mine-dnd", &r.name));
+                            ui.dnd_drag_source(id, MineDrag(r.name.clone()), |ui| {
+                                ui.horizontal(|ui| {
+                                    badge(ui, &r.name);
+                                    ui.add(egui::Label::new(&r.name).truncate());
+                                });
+                            });
+                        } else {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(format!("⚠ {} — {}", r.name, tr("açılamadı")))
+                                        .color(RED),
+                                )
+                                .truncate(),
+                            )
+                            .on_hover_text(&r.error);
+                        }
+                    });
+                    row.col(|ui| {
+                        ui.label(&r.format);
+                    });
+                    row.col(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(group(r.words));
+                        });
+                    });
+                    row.col(|ui| {
+                        ui.label(&r.langs);
+                    });
+                    row.col(|ui| {
+                        let src = match rec {
+                            Some((_, v)) => {
+                                let id = vs(v, "source");
+                                src_names.get(&id).cloned().unwrap_or(id)
+                            }
+                            None => tr("yerel"),
+                        };
+                        ui.label(src);
+                    });
+                    row.col(|ui| {
+                        ui.label(rec.map(|(_, v)| vs(v, "license")).unwrap_or_default());
+                    });
+                    row.col(|ui| {
+                        if let Some(e) = up {
+                            let v = if e.version.is_empty() {
                                 e.date.clone()
                             } else {
                                 e.version.clone()
-                            }
-                        })
-                        .unwrap_or_default();
-                    let vals = [
-                        vs(r, "name"),
-                        vs(r, "source"),
-                        ver,
-                        take(&vs(r, "installed"), 10),
-                        vs(r, "license"),
-                        upv,
-                        vs(r, "folder"),
-                    ];
-                    for (j, v) in vals.iter().enumerate() {
-                        row.col(|ui| {
-                            let t = if j == 5 {
-                                RichText::new(v).color(GREEN)
-                            } else {
-                                RichText::new(v)
                             };
-                            ui.add(egui::Label::new(t).truncate()).on_hover_text(v);
-                        });
-                    }
-                    if row.response().clicked() {
-                        let m = ui_modifiers(&row.response());
-                        if m.command {
-                            if !self.inst_sel.remove(&id) {
-                                self.inst_sel.insert(id);
-                            }
-                        } else {
-                            self.inst_sel = [id].into_iter().collect();
+                            ui.label(RichText::new(v).color(GREEN));
+                        }
+                    });
+                    row.col(|ui| {
+                        let p = r.path.display().to_string();
+                        ui.add(egui::Label::new(RichText::new(&p).weak()).truncate())
+                            .on_hover_text(&p);
+                    });
+                    let resp = row.response();
+                    if let Some(p) = resp.dnd_hover_payload::<MineDrag>() {
+                        if p.0 != r.name {
+                            let y = resp.rect.top();
+                            ui_line(&resp, y);
                         }
                     }
+                    if let Some(p) = resp.dnd_release_payload::<MineDrag>() {
+                        drop = Some((p.0.clone(), ri));
+                    }
+                    if resp.clicked() {
+                        clicked = Some((ri, resp.ctx.input(|i| i.modifiers)));
+                    }
+                    if resp.double_clicked() {
+                        double = Some(r.name.clone());
+                    }
+                    resp.context_menu(|ui| {
+                        if !self.mine_sel.contains(&r.name) {
+                            self.mine_sel = [r.name.clone()].into_iter().collect();
+                        }
+                        if ui.button(tr("Bilgi")).clicked() {
+                            menu_events.push(Event::Info(r.name.clone()));
+                            ui.close_menu();
+                        }
+                        if ui.button(tr("Yalnızca bunu etkinleştir")).clicked() {
+                            menu_events.push(Event::Solo(self.mine_sel.iter().cloned().collect()));
+                            ui.close_menu();
+                        }
+                        if ui.button(tr("Yeniden indeksle")).clicked() {
+                            menu_events
+                                .push(Event::Reindex(self.mine_sel.iter().cloned().collect()));
+                            ui.close_menu();
+                        }
+                        if ui.button(tr("Klasörü aç")).clicked() {
+                            if let Some(d) = r.path.parent() {
+                                let _ = open_external(&d.display().to_string());
+                            }
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button(tr("En üste")).clicked() {
+                            menu_move = Some(true);
+                            ui.close_menu();
+                        }
+                        if ui.button(tr("En alta")).clicked() {
+                            menu_move = Some(false);
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button(tr("Kaldır…")).clicked() {
+                            menu_remove = true;
+                            ui.close_menu();
+                        }
+                    });
                 });
             });
+        self.events.append(&mut menu_events);
+        if let Some((name, at)) = drop {
+            let mut order: Vec<String> = rows
+                .iter()
+                .filter(|r| r.loaded)
+                .map(|r| r.name.clone())
+                .collect();
+            let target = rows.get(at).map(|r| r.name.clone());
+            order.retain(|n| *n != name);
+            let j = target
+                .and_then(|t| order.iter().position(|n| *n == t))
+                .unwrap_or(order.len());
+            order.insert(j, name);
+            self.events.push(Event::SetOrder(order));
+        }
+        if let Some((ri, m)) = clicked {
+            let name = rows[ri].name.clone();
+            if m.command {
+                if !self.mine_sel.remove(&name) {
+                    self.mine_sel.insert(name);
+                }
+            } else if m.shift && !self.mine_sel.is_empty() {
+                let first = rows
+                    .iter()
+                    .position(|r| self.mine_sel.contains(&r.name))
+                    .unwrap_or(ri);
+                let (lo, hi) = (first.min(ri), first.max(ri));
+                self.mine_sel = rows[lo..=hi].iter().map(|r| r.name.clone()).collect();
+            } else {
+                self.mine_sel = [name].into_iter().collect();
+            }
+        }
+        if let Some(n) = double {
+            self.events.push(Event::Info(n));
+        }
+        if let Some(top) = menu_move {
+            self.move_mine(if top { "top" } else { "bottom" });
+        }
+        if menu_remove {
+            self.remove_mine();
+        }
         ui.horizontal_wrapped(|ui| {
-            if button(ui, "download", &tr("Güncelle")).clicked() {
-                for (_r, e) in self.installer.updates(&all) {
-                    if self.inst_sel.contains(&e.id) {
-                        self.queue.add(e);
-                    }
-                }
-                self.tab = 2;
+            if button(ui, "open", &tr("Dosya ekle…")).clicked() {
+                self.events.push(Event::AddFiles);
             }
-            if button(ui, "refresh", &tr("Hepsini güncelle")).clicked() {
-                let ups = self.installer.updates(&all);
-                if ups.is_empty() {
-                    self.info(tr("Güncelle"), tr("Kurulu sözlüklerin hepsi güncel."));
-                } else {
-                    for (_r, e) in ups {
-                        self.queue.add(e);
-                    }
-                    self.tab = 2;
+            if button(ui, "folder", &tr("Klasör ekle…")).clicked() {
+                self.events.push(Event::AddFolder);
+            }
+            if button(ui, "link", &tr("Bağlantıdan ekle…")).clicked() {
+                self.link = Some(String::new());
+            }
+            if button(ui, "remove", &tr("Kaldır…")).clicked() {
+                self.remove_mine();
+            }
+            ui.separator();
+            for (icon, text, how) in [
+                ("up", tr("En üste"), "top"),
+                ("up", tr("Yukarı"), "up"),
+                ("down", tr("Aşağı"), "down"),
+                ("down", tr("En alta"), "bottom"),
+            ] {
+                if button(ui, icon, &text).clicked() {
+                    self.move_mine(how);
                 }
             }
-            if button(ui, "remove", &tr("Kaldır")).clicked() {
-                let ids: Vec<String> = self.inst_sel.iter().cloned().collect();
-                self.uninstall(ids);
+            ui.separator();
+            let sel: Vec<String> = self.mine_sel.iter().cloned().collect();
+            if button(ui, "help", &tr("Bilgi")).clicked() {
+                if let Some(n) = sel.first() {
+                    self.events.push(Event::Info(n.clone()));
+                }
+            }
+            if button(ui, "refresh", &tr("Yeniden indeksle")).clicked() && !sel.is_empty() {
+                self.events.push(Event::Reindex(sel.clone()));
             }
             if button(ui, "folder", &tr("Klasörü aç")).clicked() {
-                for i in self.inst_sel.iter().take(3) {
-                    if let Some(f) = self
-                        .installed
-                        .get(i)
-                        .map(|r| vs(r, "folder"))
-                        .filter(|f| !f.is_empty())
-                    {
-                        let _ = open_external(&f);
+                for r in rows
+                    .iter()
+                    .filter(|r| self.mine_sel.contains(&r.name))
+                    .take(3)
+                {
+                    if let Some(d) = r.path.parent() {
+                        let _ = open_external(&d.display().to_string());
                     }
                 }
             }
-            if button(ui, "license", &tr("Lisansı aç")).clicked() {
-                for i in self.inst_sel.iter().take(3) {
-                    if let Some(u) = self
-                        .installed
-                        .get(i)
-                        .map(|r| vs(r, "license_url"))
-                        .filter(|u| !u.is_empty())
+            if button(ui, "download", &tr("Güncelle")).clicked() {
+                let mut todo = Vec::new();
+                for r in rows.iter().filter(|r| self.mine_sel.contains(&r.name)) {
+                    if let Some((rid, _)) =
+                        self.rec_by_path.get(&crate::registry::norm_path(&r.path))
                     {
-                        let _ = open_external(&u);
+                        if let Some(e) = self.update_by_id.get(rid) {
+                            todo.push(e.clone());
+                        }
                     }
                 }
+                self.queue_updates(todo);
             }
-            ui.checkbox(&mut self.keep_files, tr("Dosyaları sakla"));
+            if button(ui, "refresh", &tr("Hepsini güncelle")).clicked() {
+                let todo: Vec<Entry> = self.update_by_id.values().cloned().collect();
+                self.queue_updates(todo);
+            }
         });
+        let enabled: Vec<&MineRow> = rows.iter().filter(|r| r.enabled && r.loaded).collect();
+        let words: u64 = enabled.iter().map(|r| r.words).sum();
+        muted(
+            ui,
+            tr_args(
+                "{n} / {m} sözlük etkin · {w} kelime",
+                &[
+                    ("n", &enabled.len()),
+                    ("m", &rows.len()),
+                    ("w", &group(words)),
+                ],
+            ),
+        );
+    }
+
+    fn queue_updates(&mut self, todo: Vec<Entry>) {
+        if todo.is_empty() {
+            self.info(tr("Güncelle"), tr("Kurulu sözlüklerin hepsi güncel."));
+            return;
+        }
+        for e in todo {
+            self.queue.add(e);
+        }
+        self.tab = TAB_DOWNLOADS;
+    }
+
+    fn move_mine(&mut self, how: &str) {
+        let mut order: Vec<String> = self
+            .mine_rows
+            .iter()
+            .filter(|r| r.loaded)
+            .map(|r| r.name.clone())
+            .collect();
+        let sel: Vec<String> = order
+            .iter()
+            .filter(|n| self.mine_sel.contains(*n))
+            .cloned()
+            .collect();
+        if sel.is_empty() {
+            return;
+        }
+        match how {
+            "top" => {
+                order.retain(|n| !sel.contains(n));
+                order.splice(0..0, sel);
+            }
+            "bottom" => {
+                order.retain(|n| !sel.contains(n));
+                order.extend(sel);
+            }
+            _ => {
+                let d: isize = if how == "up" { -1 } else { 1 };
+                let names: Vec<String> = if d < 0 {
+                    sel
+                } else {
+                    sel.into_iter().rev().collect()
+                };
+                for n in names {
+                    let i = order.iter().position(|x| *x == n).unwrap_or(0);
+                    let j = (i as isize + d).clamp(0, order.len() as isize - 1) as usize;
+                    let x = order.remove(i);
+                    order.insert(j, x);
+                }
+            }
+        }
+        self.events.push(Event::SetOrder(order));
+    }
+
+    fn folders_tab(&mut self, ui: &mut egui::Ui) {
+        muted(
+            ui,
+            format!(
+                "{} {}",
+                tr("Açılışta bu klasörlerdeki .ifo / .dsl / .dsl.dz / .bgl dosyaları otomatik eklenir."),
+                tr("Kutu = alt klasörleri de tara. Bir klasörü kaldırmak sözlüklerini listeden çıkarmaz.")
+            ),
+        );
+        ui.add_space(6.0);
+        egui::ScrollArea::vertical()
+            .id_salt("center-folders")
+            .show(ui, |ui| {
+                self.settings_ed.folder_sources(ui);
+            });
+        self.settings_changed();
+    }
+
+    fn settings_tab(&mut self, ui: &mut egui::Ui) {
+        let h = (ui.available_height() - 34.0).max(120.0);
+        egui::ScrollArea::vertical()
+            .id_salt("center-settings")
+            .max_height(h)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                self.settings_ed
+                    .form(ui, PAGES_IN_DICTIONARIES_WINDOW, &["dictionaries.folders"]);
+            });
+        if ui.button(tr("Bu sayfayı varsayılana döndür")).clicked() {
+            self.settings_ed
+                .reset_sections(PAGES_IN_DICTIONARIES_WINDOW, &["dictionaries.folders"]);
+        }
+        self.settings_changed();
+    }
+
+    /// Send an edit of the folders / settings to the main window at once.
+    fn settings_changed(&mut self) {
+        for e in self.settings_ed.take_events() {
+            if let super::prefs_window::Event::Action(super::prefs_window::Advanced::Rescan) = e {
+                self.events.push(Event::Rescan);
+            }
+        }
+        if self.settings_ed.draft.export() != self.prefs.export() {
+            self.prefs = self.settings_ed.draft.clone();
+            self.events.push(Event::PrefsChanged(self.prefs.clone()));
+        }
     }
 
     // ------------------------------------------------------------ import / export tab
@@ -2407,6 +2872,7 @@ impl CenterWindow {
 
         if let Some(a) = self.ask.take() {
             let mut answer: Option<bool> = None;
+            let mut extra = false;
             egui::Window::new(a.title.clone())
                 .id(egui::Id::new("center-ask"))
                 .collapsible(false)
@@ -2423,15 +2889,28 @@ impl CenterWindow {
                                 answer = Some(true);
                             }
                         } else {
-                            if ui.button(tr("Evet")).clicked() {
+                            let (yes, no) =
+                                a.texts.clone().unwrap_or_else(|| (tr("Evet"), tr("Hayır")));
+                            if ui.button(yes).clicked() {
                                 answer = Some(true);
                             }
-                            if ui.button(tr("Hayır")).clicked() {
+                            if let Some((text, _)) = &a.extra {
+                                if ui.button(RichText::new(text).color(RED)).clicked() {
+                                    extra = true;
+                                }
+                            }
+                            if ui.button(no).clicked() {
                                 answer = Some(false);
                             }
                         }
                     });
                 });
+            if extra {
+                if let Some((_, next)) = a.extra {
+                    self.follow(next, open);
+                }
+                return;
+            }
             match answer {
                 Some(true) => self.follow(a.yes, open),
                 Some(false) => self.follow(a.no, open),
@@ -2439,6 +2918,17 @@ impl CenterWindow {
             }
         }
     }
+}
+
+/// The drop line above a row.
+fn ui_line(r: &egui::Response, y: f32) {
+    let stroke = egui::Stroke::new(2.0_f32, r.ctx.style().visuals.selection.stroke.color);
+    r.ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("dnd-line"),
+        ))
+        .hline(r.rect.x_range(), y, stroke);
 }
 
 fn ui_modifiers(r: &egui::Response) -> egui::Modifiers {

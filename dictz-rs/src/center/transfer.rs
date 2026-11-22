@@ -34,6 +34,32 @@ fn zerr<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+/// The files that make one dictionary — what it is read from (a StarDict is
+/// three or four files) and its media zips: what "delete with its files"
+/// removes. Media folders and anything else in the folder stay.
+pub fn own_files(path: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = crate::articles::source_files(path)
+        .into_iter()
+        .filter(|f| f.is_file())
+        .collect();
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("ifo"))
+    {
+        let syn = path.with_extension("syn");
+        if syn.is_file() {
+            out.push(syn);
+        }
+    }
+    let locs = crate::media::MediaResolver::for_dictionary(path).search_locations();
+    for loc in &locs[..locs.len().saturating_sub(1)] {
+        if loc.is_file() && !out.contains(loc) {
+            out.push(loc.clone());
+        }
+    }
+    out
+}
+
 fn media_of(path: &Path) -> Vec<PathBuf> {
     let r = crate::media::MediaResolver::for_dictionary(path);
     let locs = r.search_locations();

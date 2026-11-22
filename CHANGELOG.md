@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **One Sözlükler window** (Sözlükler → Sözlükler…, Ctrl+M; the cloud button) replaces the dictionary manager, the Dictionary Center and the dictionary pages of Tercihler. Seven tabs: **Sözlüklerim** (search order with drag and ▲ ▼, on / off, only this, info, reindex, open folder, add files / folder, remove from the list or **with the files**, catalog licence and ↑ update per row), **Klasörler** (scanned folders, subfolders box, scan now), **Katalog**, **Kaynaklar**, **İndirmeler**, **İçe / Dışa aktar**, **Ayarlar** (dictionary and catalog settings, saved as you change them). The old *Kurulu* tab is folded into Sözlüklerim and Katalog (update one / all).
+- **One Sözlükler menu**: Sözlükler… (Ctrl+M), Sözlük ekle… (Ctrl+O), Klasör ekle… (Ctrl+Shift+O), Bağlantıdan sözlük ekle… (Ctrl+Shift+L), Sözlük klasörleri…, Sözlük indir (katalog)… (Ctrl+Shift+M), Kaynaklar (sunucular)…, Kurulumu dışa / içe aktar…, Tümünü etkinleştir / devre dışı bırak, Sözlük ayarları…. Dosya keeps only the article, favourites, desktop shortcut and Çıkış; Tercihler loses the Sözlükler and Sözlük Merkezi pages (a link to the new tab instead).
+- **Dictionary icons do something:** in the dictionary bar a click goes to that dictionary's article, **Ctrl+click** switches it on / off (an off dictionary is drawn faded), right click opens a menu (aç / kapa, yalnızca bunu etkinleştir, bilgi, Sözlüklerimde göster, kaldır). Switching re-runs the current search.
+
+### Added
+- **Drag to reorder** dictionaries in the Sözlüklerim tab, the dictionary bar, the "Bulunduğu yer" panel and the left pane; the order is saved at once (`move_before` / `set_order`, same in both editions).
+- Removing a dictionary *with its files* deletes only its own files (`own_files`: source files, `.syn`, media archive), the same in both editions (`tests/test_center.py`, `dictz-rs/tests/center.rs`).
+- 24 new texts in all 25 interface languages.
+
+### Notes
+- The red source errors are expected: **dictz-data** answers 404 until the repository is created (v0.1.8); **download.huzheng.org** refuses connections (the site is down at the moment).
+
 ## [0.1.7] — 2026-11-22
 
 The **Dictionary Center**: find, download, install, update and remove free dictionaries from many servers — or from your own server, folder or link — with every dictionary's **licence**; export and import the whole setup. In **both editions**, with the same files, commands and results.

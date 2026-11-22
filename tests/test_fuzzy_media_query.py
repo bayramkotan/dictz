@@ -103,6 +103,13 @@ def test_order_enable_fuzzy_and_restore(tmp_path: Path) -> None:
     assert qm.loaded_names() == ["A", "B"]
     qm.move_dictionary("B", -1)
     assert qm.loaded_names() == ["B", "A"]
+    qm.move_before("B", None)  # drag to the end
+    assert qm.loaded_names() == ["A", "B"]
+    qm.move_before("B", "A")  # drag onto the first one
+    assert qm.loaded_names() == ["B", "A"]
+    qm.set_order(["A", "nope"])
+    assert qm.loaded_names() == ["A", "B"]
+    qm.set_order(["B", "A"])
     assert qm.search("apple")[0].definition == "Apfel"
     qm.set_enabled("B", False)
     assert len(qm.search("apple")) == 1
