@@ -66,10 +66,11 @@ BUILTIN: tuple[dict, ...] = (
          url="https://github.com/skywind3000/ECDICT", homepage="https://github.com/skywind3000/ECDICT",
          license="MIT", source_lang="en", target_lang="zh", filter=r"(?i)stardict.*\.(zip|7z|tar\.gz)$",
          description="Free English–Chinese dictionary database, with a StarDict build."),
-    _src(id="huzheng", name="StarDict archive (download.huzheng.org)", type="http-index",
-         url="http://download.huzheng.org/", homepage="http://download.huzheng.org/", license="unknown",
+    _src(id="huzheng", name="StarDict archive (huzheng mirror)", type="http-index",
+         url="https://stardict.uber.space/", homepage="https://stardict.uber.space/", license="unknown",
          filter=r"\.(tar\.bz2|tar\.gz|tgz|zip)$", depth=2,
-         description="The oldest, largest StarDict archive, many languages. Licences are mostly not stated."),
+         description="The huzheng.org StarDict archive (the oldest, largest, many languages), recovered from the "
+                     "Internet Archive; download.huzheng.org itself is gone. Licences are mostly not stated."),
     _src(id="archive-org", name="Internet Archive", type="archive-org", url="https://archive.org",
          homepage="https://archive.org/", license="unknown",
          filter=r'(stardict OR "babylon bgl" OR "lingvo dsl" OR goldendict) AND mediatype:(data OR software OR texts)',
@@ -83,6 +84,23 @@ BUILTIN: tuple[dict, ...] = (
          license="unknown",
          description="A channel with packs in 40+ languages. Listed here; the files open in Telegram."),
 )
+
+
+# Earlier addresses of built-in sources. A stored built-in still on one of
+# them is moved to today's address (and its cached answer dropped); an
+# address the user typed stays. Mirrored in ``sources.rs``.
+RETIRED_URLS: dict[str, tuple[str, ...]] = {
+    "dictz-data": ("https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",),
+    "huzheng": ("https://download.huzheng.org/", "http://download.huzheng.org/"),
+}
+_RENEWED_KEYS = ("name", "type", "url", "homepage", "description", "filter", "depth", "license")
+
+
+def _retired(s: dict) -> dict | None:
+    """Today's built-in for a stored built-in still on a retired address."""
+    if s.get("builtin") and s.get("url") in RETIRED_URLS.get(s.get("id", ""), ()):
+        return next((b for b in BUILTIN if b["id"] == s["id"]), None)
+    return None
 
 
 def center_dir(data_dir: Path | str) -> Path:
@@ -164,6 +182,11 @@ class Sources:
         rows = [clean(s) for s in data.get("sources") or [] if isinstance(s, dict)]
         have = {s["id"] for s in rows}
         changed = False
+        for s in rows:
+            b = _retired(s)
+            if b is not None:
+                s.update({k: b[k] for k in _RENEWED_KEYS})
+                changed = True
         for i, b in enumerate(BUILTIN):
             if b["id"] not in have and b["id"] not in data["removed"]:
                 rows.insert(min(i, len(rows)), clean(b))
@@ -173,6 +196,11 @@ class Sources:
 
     def data(self) -> dict:
         raw = self.file.read()
+        for s in (raw.get("sources") or []) if isinstance(raw, dict) else []:
+            if isinstance(s, dict) and _retired(clean(s)) is not None:
+                # its cached answer is the old address's error
+                with contextlib.suppress(OSError):
+                    (self.dir / "cache" / f"{clean(s)['id']}.json").unlink(missing_ok=True)
         data, changed = self._complete(raw)
         if changed or not self.file.path.exists():
             with contextlib.suppress(OSError):

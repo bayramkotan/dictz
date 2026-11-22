@@ -198,10 +198,10 @@ pub fn builtin() -> Vec<Source> {
             "description": "Free English–Chinese dictionary database, with a StarDict build."}),
         ),
         mk(
-            json!({"id": "huzheng", "name": "StarDict archive (download.huzheng.org)", "type": "http-index",
-            "url": "http://download.huzheng.org/", "homepage": "http://download.huzheng.org/", "license": "unknown",
+            json!({"id": "huzheng", "name": "StarDict archive (huzheng mirror)", "type": "http-index",
+            "url": "https://stardict.uber.space/", "homepage": "https://stardict.uber.space/", "license": "unknown",
             "filter": "\\.(tar\\.bz2|tar\\.gz|tgz|zip)$", "depth": 2,
-            "description": "The oldest, largest StarDict archive, many languages. Licences are mostly not stated."}),
+            "description": "The huzheng.org StarDict archive (the oldest, largest, many languages), recovered from the Internet Archive; download.huzheng.org itself is gone. Licences are mostly not stated."}),
         ),
         mk(
             json!({"id": "archive-org", "name": "Internet Archive", "type": "archive-org", "url": "https://archive.org",
@@ -274,6 +274,35 @@ pub struct Sources {
     secrets: JsonFile,
 }
 
+/// Earlier addresses of built-in sources. A stored built-in still on one of
+/// them is moved to today's address (and its cached answer dropped); an
+/// address the user typed stays. Mirrors `RETIRED_URLS` in `sources.py`.
+pub const RETIRED_URLS: &[(&str, &[&str])] = &[
+    (
+        "dictz-data",
+        &["https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json"],
+    ),
+    (
+        "huzheng",
+        &[
+            "https://download.huzheng.org/",
+            "http://download.huzheng.org/",
+        ],
+    ),
+];
+
+/// Today's built-in for a stored built-in still on a retired address.
+fn retired(s: &Source) -> Option<Source> {
+    if !s.builtin {
+        return None;
+    }
+    let old = RETIRED_URLS.iter().find(|(id, _)| *id == s.id)?.1;
+    if !old.contains(&s.url.as_str()) {
+        return None;
+    }
+    builtin().into_iter().find(|b| b.id == s.id)
+}
+
 fn complete(data: &mut Value) -> bool {
     if !data.is_object() {
         *data = empty_file();
@@ -296,6 +325,19 @@ fn complete(data: &mut Value) -> bool {
         .map(|a| a.iter().filter(|x| x.is_object()).map(clean).collect())
         .unwrap_or_default();
     let mut changed = false;
+    for r in rows.iter_mut() {
+        if let Some(b) = retired(r) {
+            r.name = b.name;
+            r.kind = b.kind;
+            r.url = b.url;
+            r.homepage = b.homepage;
+            r.description = b.description;
+            r.filter = b.filter;
+            r.depth = b.depth;
+            r.license = b.license;
+            changed = true;
+        }
+    }
     for (i, b) in builtin().into_iter().enumerate() {
         if !rows.iter().any(|r| r.id == b.id) && !removed.contains(&b.id) {
             let at = i.min(rows.len());
@@ -324,6 +366,15 @@ impl Sources {
     /// The whole file (built-ins completed).
     pub fn data(&self) -> Value {
         let mut d = self.file.read();
+        if let Some(rows) = d.get("sources").and_then(|v| v.as_array()) {
+            for s in rows.iter().filter(|x| x.is_object()).map(clean) {
+                if retired(&s).is_some() {
+                    // its cached answer is the old address's error
+                    let _ =
+                        std::fs::remove_file(self.dir.join("cache").join(format!("{}.json", s.id)));
+                }
+            }
+        }
         let changed = complete(&mut d);
         if changed || !self.file.path.exists() {
             let _ = self.file.update(|x| {

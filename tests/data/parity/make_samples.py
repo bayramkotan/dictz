@@ -439,6 +439,8 @@ def write_i18n() -> None:
     flags.mkdir(parents=True, exist_ok=True)
     for f in (root / "dictz" / "resources" / "flags").iterdir():
         shutil.copyfile(f, flags / f.name)
+    # the interface themes (dictz-rs/src/gui/themes.rs embeds them)
+    shutil.copyfile(root / "dictz" / "resources" / "themes.json", root / "dictz-rs" / "src" / "gui" / "themes.json")
 
 
 def write_languages() -> None:

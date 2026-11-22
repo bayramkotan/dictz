@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-11-22
+
+**27 themes** and default sources that really work — in both editions.
+
+### Added
+- **27 interface themes** (Otomatik = the system's light or dark, plus Açık, Koyu, Sepya, Solarized Light / Dark, Gruvbox Light / Dark, GitHub Light / Dark, Catppuccin Latte / Mocha, Rosé Pine Dawn / Rosé Pine, Nord Light / Nord, One Light / One Dark, Nane, Lavanta, Dracula, Monokai, Tokyo Night, Everforest, Gece mavisi, Gece siyahı, Yüksek kontrast (açık / koyu)), from one table shared by both editions: `dictz/resources/themes.json` (Rust copy `dictz-rs/src/gui/themes.json`, made by `make_samples.py`). Each theme colours the window and the article page and brings its own accent colour, used while *Vurgu rengi* is left at its default. Pick one in **Görünüm → Tema**, under the toolbar's theme button (a menu now, light themes first, then the dark ones) or in Tercihler → Görünüm.
+
+### Fixed
+- **Default sources still showed errors after v0.1.8:** built-in sources are stored in `sources.json` the first time it is read, so a changed built-in address never reached an existing setup. A stored built-in still on a retired address now moves to today's address (its on / off switch stays, its cached error is dropped; an address the user typed is kept) — `RETIRED_URLS` in `sources.py` / `sources.rs`.
+- **StarDict archive:** download.huzheng.org no longer answers at all; the built-in source now reads the huzheng mirror recovered from the Internet Archive, **https://stardict.uber.space/**. The web-folder reader also follows static sites whose folders are `…/index.html` pages.
+
 ## [0.1.8] — 2026-11-22
 
 Everything about dictionaries in **one window**, a search that **never freezes**, and a search box that **stays put** — in both editions.

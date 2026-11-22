@@ -344,3 +344,36 @@ fn own_files_of_a_dictionary() {
         .collect();
     assert_eq!(got, vec!["sample.dsl", "sample.dsl.files.zip"]);
 }
+
+#[test]
+fn retired_builtin_addresses_move() {
+    // the same case as tests/test_center.py::test_retired_builtin_addresses_move
+    let t = Tmp::new("retired");
+    let center = t.0.join("center");
+    std::fs::create_dir_all(center.join("cache")).unwrap();
+    let mut old: Vec<Value> = builtin().iter().map(|s| s.to_value()).collect();
+    for s in old.iter_mut() {
+        if s["id"] == "huzheng" {
+            s["url"] = json!("https://download.huzheng.org/");
+            s["enabled"] = json!(false);
+        }
+        if s["id"] == "dictz-data" {
+            s["url"] = json!("https://my.example.org/catalog.json");
+        }
+    }
+    std::fs::write(
+        center.join("sources.json"),
+        json!({"version": 1, "default": "dictz-data", "removed": [], "sources": old}).to_string(),
+    )
+    .unwrap();
+    std::fs::write(center.join("cache/huzheng.json"), r#"{"ok": false}"#).unwrap();
+    let src = Sources::new(&t.0);
+    let hz = src.get("huzheng").unwrap();
+    assert_eq!(hz.url, "https://stardict.uber.space/");
+    assert!(!hz.enabled);
+    assert!(!center.join("cache/huzheng.json").exists());
+    assert_eq!(
+        src.get("dictz-data").unwrap().url,
+        "https://my.example.org/catalog.json"
+    );
+}

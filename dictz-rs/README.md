@@ -64,7 +64,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
   - collapsible article cards per dictionary: its icon (or monogram badge in its own colour), language pair, format, copy / "only this dictionary" buttons
   - find in page with highlighting, save article as HTML / text
   - background loading with progress; dictionary folders scanned on start
-  - light, dark and auto themes, accent color, fonts by name or file, zoom, full screen, always on top
+  - 27 themes (the same table as the Python edition: auto, light, dark, Sepya, Solarized, Gruvbox, GitHub, Catppuccin, Rosé Pine, Nord, One, Dracula, Monokai, Tokyo Night, Everforest, high contrast…), accent color, fonts by name or file, zoom, full screen, always on top
   - drag and drop dictionary files onto the window
   - **Dosya → Masaüstü kısayolu oluştur**: desktop and menu shortcut with the dictz icon
   - scan popup: Ctrl+C+C / every copy / selection (Linux) in any program shows the articles next to the mouse; tray icon, global hotkeys (Ctrl+F11, Ctrl+F12, Ctrl+Shift+F11), single instance

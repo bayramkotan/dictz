@@ -75,7 +75,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - tabs, back/forward, a dictionary bar and a "found in" panel
   - collapsible articles and find in page
   - favorites and history
-  - light and dark themes, accent color, fonts and zoom
+  - **27 themes** (Otomatik, Açık, Koyu, Sepya, Solarized, Gruvbox, GitHub, Catppuccin, Rosé Pine, Nord, One, Nane, Lavanta, Dracula, Monokai, Tokyo Night, Everforest, Gece mavisi, Gece siyahı, high contrast…) from Görünüm → Tema or the toolbar's theme button; accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
 - **Adding never freezes the window:** new or changed dictionaries are read in the background by several workers at once (separate processes in the Python edition, threads in the Rust edition), with a progress bar and a stop button in the status bar.
 - **One Sözlükler window** (Ctrl+M): your dictionaries (drag to reorder, on / off, remove with or without the files), folders, catalog, sources, downloads, import / export and settings in seven tabs. **Catalog** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
@@ -345,7 +345,7 @@ The order is the search order everywhere, and it is saved at once
 | Wiktionary Dictionaries (Vuizur) | GitHub folder | Wiktionary → StarDict, almost every language → English | CC BY-SA 3.0 |
 | Wiktionary StarDict (xxyzz) | GitHub releases | Wiktionary dictionaries rebuilt monthly | CC BY-SA |
 | ECDICT | GitHub releases | English → Chinese | MIT |
-| StarDict archive (http://download.huzheng.org — the site has no HTTPS) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
+| StarDict archive (the huzheng mirror at [stardict.uber.space](https://stardict.uber.space/); download.huzheng.org is gone) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
 | Internet Archive | archive.org search | community uploads (StarDict, Babylon, DSL) | vary |
 | FreeMdict cloud | Nextcloud share | MDict, StarDict and DSL packs | vary |
 | Telegram: Dictionaries_GoldenDict | Telegram channel | listed; the files open in Telegram | vary |
@@ -549,6 +549,7 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 
 - **Çoklu format:** StarDict, DSL, Babylon.
 - **Çoklu sözlük:** tek arama hepsinde çalışır.
+- **27 tema:** Görünüm → Tema ya da araç çubuğundaki tema düğmesi (Otomatik, Açık, Koyu, Sepya, Solarized, Gruvbox, Nord, Dracula, Tokyo Night, Gece siyahı, yüksek kontrast…).
 - **Hızlı:** SQLite FTS5 ve diakritik duyarsız arama; öneriler ayrı bir iş parçacığında hazırlanır, yazarken pencere hiç takılmaz. Arama kutusu sol bölmenin üstünde sabittir (yanında Enter ⏎ düğmesi), Favoriler ya da Geçmiş açıkken de görünür.
 - **Bulanık arama:** sonuç yoksa "Bunu mu demek istediniz?" önerileri.
 - **Resim ve ses:** DSL `[s]` dosyaları.

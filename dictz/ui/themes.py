@@ -1,6 +1,8 @@
-"""Light and dark Qt style sheets, built from the user's preferences."""
+"""Qt style sheets built from the user's preferences and the shared theme
+table (``dictz/resources/themes.json``, also read by the Rust edition)."""
 from __future__ import annotations
 
+from ..core.themes import DEFAULT_ACCENT, resolve, theme
 from ..storage.settings import Preferences
 
 
@@ -11,11 +13,8 @@ def _mix(hex_color: str, other: str, t: float) -> str:
     return "#" + "".join(f"{v:02x}" for v in c)
 
 
-def is_dark(theme: str) -> bool:
-    if theme == "dark":
-        return True
-    if theme == "light":
-        return False
+def system_dark() -> bool:
+    """The desktop's own colour scheme (for the "auto" theme)."""
     try:
         from PySide6.QtCore import Qt
         from PySide6.QtGui import QGuiApplication
@@ -36,15 +35,33 @@ def is_dark(theme: str) -> bool:
     return False
 
 
+def current(prefs: Preferences) -> dict:
+    """The theme in use ("auto" follows the desktop: light or dark)."""
+    tid = prefs["appearance.theme"]
+    return theme(resolve(tid, system_dark() if tid == "auto" else False))
+
+
+def is_dark(theme_id: str) -> bool:
+    if theme_id == "auto":
+        return system_dark()
+    return bool(theme(theme_id)["dark"])
+
+
+def accent_of(prefs: Preferences) -> str:
+    """The accent colour: the user's, or the theme's own while the setting is
+    left at its default."""
+    a = str(prefs["appearance.accent_color"] or DEFAULT_ACCENT)
+    return current(prefs)["accent"] if a.lower() == DEFAULT_ACCENT else a
+
+
 def palette(prefs: Preferences) -> dict[str, str]:
-    """The interface colours (same values as the Rust edition's ``gui::window``)."""
-    dark = is_dark(prefs["appearance.theme"])
-    accent = prefs["appearance.accent_color"]
-    if dark:
-        c = {"bg": "#1e2127", "panel": "#25282f", "border": "#363a43", "text": "#e3e5e9", "muted": "#9aa1ac", "hover": "#2f333b", "header": "#2a2e36", "icon": "#c9cdd4"}
+    """The interface colours (the Rust edition's ``compact_style`` uses the same table)."""
+    th = current(prefs)
+    accent = accent_of(prefs)
+    c = dict(th["ui"])
+    if th["dark"]:
         c["sel_bg"], c["sel_fg"] = _mix(accent, "#000000", 0.45), "#ffffff"
     else:
-        c = {"bg": "#f5f6f8", "panel": "#ffffff", "border": "#d7dbe0", "text": "#1f2328", "muted": "#5f6670", "hover": "#e8ecf1", "header": "#eef1f4", "icon": "#3d4450"}
         c["sel_bg"], c["sel_fg"] = _mix(accent, "#ffffff", 0.78), _mix(accent, "#000000", 0.5)
     c["accent"] = accent
     return c
@@ -128,8 +145,9 @@ QToolTip {{ background: {panel}; color: {text}; border: 1px solid {border}; padd
 def definition_css(prefs: Preferences) -> str:
     """Article style like GoldenDict: a thin header strip per dictionary, then
     the text — no cards, no shadows, little padding."""
-    dark = is_dark(prefs["appearance.theme"])
-    accent = prefs["appearance.accent_color"]
+    th = current(prefs)
+    dark = bool(th["dark"])
+    accent = accent_of(prefs)
     fam = prefs["article.font_family"] or prefs["appearance.ui_font_family"]
     family = f'"{fam}", ' if fam else ""
     size = int(prefs["article.font_size"])
@@ -138,11 +156,11 @@ def definition_css(prefs: Preferences) -> str:
     maxw = int(prefs["article.max_width"])
     img_h = int(prefs["article.max_image_height"])
     hl = prefs["article.highlight_color"]
+    art = th["article"]
+    bg, fg, muted, card, border, strip = art["bg"], art["fg"], art["muted"], art["card"], art["border"], art["strip"]
     if dark:
-        bg, fg, muted, card, border, strip = "#1b1d22", "#e3e5e9", "#9aa1ac", "#25282f", "#363a43", "#262a31"
         head_fg, link = _mix(accent, "#ffffff", 0.55), _mix(accent, "#ffffff", 0.35)
     else:
-        bg, fg, muted, card, border, strip = "#ffffff", "#1f2328", "#6a717c", "#f3f5f8", "#d7dbe0", "#eef1f4"
         head_fg, link = _mix(accent, "#000000", 0.35), accent
     width = f"max-width: {maxw}px;" if maxw else ""
     return f"""

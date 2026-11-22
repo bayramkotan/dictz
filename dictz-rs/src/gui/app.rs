@@ -27,6 +27,7 @@ use crate::{DictionaryEntry, VERSION};
 use super::prefs_window::{self, Advanced, PrefsWindow};
 use super::render::{self, Click, MediaSource};
 use super::services::{Event as SvcEvent, Services, TrayAction};
+use super::themes;
 use super::uiicons;
 use super::window::MainWindow;
 use super::{audio, fonts, system};
@@ -125,7 +126,6 @@ enum Action {
     Zoom(f64),
     ZoomReset,
     SetTheme(&'static str),
-    CycleTheme,
     SetLanguage(String),
     AddDictionaryDialog,
     AddFolderDialog,
@@ -905,9 +905,14 @@ impl DictzApp {
 
     // ------------------------------------------------------------ prefs
 
+    /// The accent colour: the user's, or the theme's own while the setting
+    /// is left at its default.
     fn accent(&self) -> Color32 {
-        prefs_window::parse_hex(&self.prefs.str("appearance.accent_color"))
-            .unwrap_or(Color32::from_rgb(0x25, 0x63, 0xeb))
+        let a = self.prefs.str("appearance.accent_color");
+        if a.eq_ignore_ascii_case(themes::DEFAULT_ACCENT) || a.is_empty() {
+            return themes::resolve(&self.prefs.str("appearance.theme"), false).accent;
+        }
+        prefs_window::parse_hex(&a).unwrap_or(Color32::from_rgb(0x25, 0x63, 0xeb))
     }
 
     /// Started at log-in (`--autostart`): hidden in the tray.
@@ -929,12 +934,23 @@ impl DictzApp {
     fn apply_prefs(&mut self, ctx: &egui::Context) {
         i18n::set_language(&self.prefs.str("general.language"));
         let p = &self.prefs;
-        ctx.set_theme(match p.str("appearance.theme").as_str() {
-            "light" => egui::ThemePreference::Light,
-            "dark" => egui::ThemePreference::Dark,
-            _ => egui::ThemePreference::System,
+        let theme_id = p.str("appearance.theme");
+        let auto = theme_id == "auto";
+        ctx.set_theme(if auto {
+            egui::ThemePreference::System
+        } else if themes::resolve(&theme_id, false).dark {
+            egui::ThemePreference::Dark
+        } else {
+            egui::ThemePreference::Light
         });
-        let accent = self.accent();
+        let user_accent = {
+            let a = p.str("appearance.accent_color");
+            if a.eq_ignore_ascii_case(themes::DEFAULT_ACCENT) || a.is_empty() {
+                None
+            } else {
+                prefs_window::parse_hex(&a)
+            }
+        };
         let base = p.int("appearance.ui_font_size") as f32;
         ctx.all_styles_mut(|style| {
             use egui::{FontId, TextStyle};
@@ -958,6 +974,9 @@ impl DictzApp {
                 ),
             ]
             .into();
+            // "auto": each of egui's two styles gets the light or dark theme
+            let th = themes::resolve(&theme_id, style.visuals.dark_mode);
+            let accent = user_accent.unwrap_or(th.accent);
             style.visuals.hyperlink_color = if style.visuals.dark_mode {
                 lighten(accent)
             } else {
@@ -965,7 +984,7 @@ impl DictzApp {
             };
             style.visuals.selection.bg_fill =
                 accent.gamma_multiply(if style.visuals.dark_mode { 0.6 } else { 0.35 });
-            compact_style(style);
+            compact_style(style, &th.ui);
         });
         // interface scale (Preferences → Appearance), on top of the system's own
         let zoom = (p.int("appearance.ui_scale").clamp(50, 250) as f32) / 100.0;
@@ -2047,7 +2066,10 @@ impl DictzApp {
             "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>{}</title>\n<style>body{{font-family:sans-serif;max-width:52em;margin:2em auto;line-height:{}}} h2.dict{{color:{};font-size:1em;border-bottom:1px solid #ccc}}</style></head>\n<body>\n{}</body></html>\n",
             esc(&tab.word),
             self.prefs.float("article.line_spacing"),
-            self.prefs.str("appearance.accent_color"),
+            {
+                let c = self.accent();
+                format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())
+            },
             body
         )
     }
@@ -2146,14 +2168,7 @@ impl DictzApp {
             Action::SetTheme(t) => {
                 self.set_pref("appearance.theme", Value::from(t));
                 self.apply_prefs(ctx);
-            }
-            Action::CycleTheme => {
-                let order = ["auto", "light", "dark"];
-                let cur = self.prefs.str("appearance.theme");
-                let i = order.iter().position(|t| *t == cur).unwrap_or(0);
-                let next = order[(i + 1) % order.len()];
-                self.apply(ctx, Action::SetTheme(next));
-                self.set_status(format!("{}: {}", tr("Tema"), theme_label(next)), 3);
+                self.set_status(format!("{}: {}", tr("Tema"), theme_label(t)), 3);
             }
             Action::SetLanguage(code) => {
                 let _ = self
@@ -2669,16 +2684,7 @@ impl DictzApp {
                 }
                 ui.menu_button(tr("Tema"), |ui| {
                     let cur = self.prefs.str("appearance.theme");
-                    for (v, l) in [
-                        ("auto", tr("Otomatik")),
-                        ("light", tr("Açık")),
-                        ("dark", tr("Koyu")),
-                    ] {
-                        if ui.radio(cur == v, l).clicked() {
-                            actions.push(Action::SetTheme(v));
-                            ui.close_menu();
-                        }
-                    }
+                    theme_list(ui, &cur, actions);
                 });
             });
             ui.menu_button(tr("Git"), |ui| {
@@ -2839,14 +2845,30 @@ impl DictzApp {
                 }
                 ui.separator();
                 let theme = self.prefs.str("appearance.theme");
-                let tip = format!(
-                    "{} · {}",
-                    tr("Tema: Otomatik → Açık → Koyu"),
-                    theme_label(&theme)
-                );
-                if uiicons::button(ui, "theme", &tip, false, true).clicked() {
-                    actions.push(Action::CycleTheme);
+                let tip = format!("{} · {}", tr("Tema"), theme_label(&theme));
+                let r = uiicons::button(ui, "theme", &tip, false, true);
+                let pid = ui.make_persistent_id("theme-menu");
+                if r.clicked() {
+                    ui.memory_mut(|m| m.toggle_popup(pid));
                 }
+                egui::popup::popup_below_widget(
+                    ui,
+                    pid,
+                    &r,
+                    egui::PopupCloseBehavior::CloseOnClickOutside,
+                    |ui| {
+                        ui.set_min_width(190.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(480.0)
+                            .show(ui, |ui| {
+                                let before = actions.len();
+                                theme_list(ui, &theme, actions);
+                                if actions.len() > before {
+                                    ui.memory_mut(|m| m.close_popup());
+                                }
+                            });
+                    },
+                );
                 if uiicons::button(ui, "zoom-in", &tr("Büyüt (Ctrl+=)"), false, true).clicked() {
                     actions.push(Action::Zoom(0.1));
                 }
@@ -4327,19 +4349,14 @@ impl eframe::App for DictzApp {
 }
 
 /// The compact, GoldenDict-like look: small paddings, square-ish corners,
-/// the same colours as the Python edition (`dictz/ui/themes.py: palette`).
-fn compact_style(style: &mut egui::Style) {
+/// the theme's colours (the same table as the Python edition's
+/// `dictz/ui/themes.py: palette`).
+fn compact_style(style: &mut egui::Style, pal: &themes::Palette) {
     let dark = style.visuals.dark_mode;
-    let hex = |s: &str| Color32::from_hex(s).unwrap_or(Color32::GRAY);
-    let (bg, panel, border, text, muted, hover, header) = if dark {
-        (
-            "#1e2127", "#25282f", "#363a43", "#e3e5e9", "#9aa1ac", "#2f333b", "#2a2e36",
-        )
-    } else {
-        (
-            "#f5f6f8", "#ffffff", "#d7dbe0", "#1f2328", "#5f6670", "#e8ecf1", "#eef1f4",
-        )
-    };
+    let hex = |c: Color32| c;
+    let (bg, panel, border, text, muted, hover, header) = (
+        pal.bg, pal.panel, pal.border, pal.text, pal.muted, pal.hover, pal.header,
+    );
     let v = &mut style.visuals;
     v.panel_fill = hex(bg);
     v.window_fill = hex(panel);
@@ -4380,7 +4397,11 @@ fn compact_style(style: &mut egui::Style) {
     w.hovered.bg_stroke = egui::Stroke::new(1.0_f32, hex(border));
     w.hovered.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
     w.active.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    w.open.fg_stroke = egui::Stroke::new(1.0_f32, hex(text));
+    w.open.weak_bg_fill = hex(hover);
+    w.open.bg_fill = hex(hover);
     let _ = muted;
+    v.selection.stroke = egui::Stroke::new(1.0_f32, hex(text));
     let sp = &mut style.spacing;
     sp.item_spacing = egui::vec2(6.0, 3.0);
     sp.button_padding = egui::vec2(5.0, 2.0);
@@ -4398,10 +4419,24 @@ fn lighten(c: Color32) -> Color32 {
 }
 
 fn theme_label(theme: &str) -> String {
-    match theme {
-        "light" => tr("Açık"),
-        "dark" => tr("Koyu"),
-        _ => tr("Otomatik"),
+    if theme == "auto" {
+        return tr("Otomatik");
+    }
+    tr(&themes::resolve(theme, false).name)
+}
+
+/// Radio buttons for every theme: auto, the light ones, the dark ones.
+fn theme_list(ui: &mut egui::Ui, cur: &str, actions: &mut Vec<Action>) {
+    let mut last_dark = None;
+    for (id, name) in themes::menu_order() {
+        let dark = (id != "auto").then(|| themes::resolve(id, false).dark);
+        if dark.is_some() && dark != last_dark {
+            ui.separator();
+            last_dark = dark;
+        }
+        if ui.radio(cur == id, tr(name)).clicked() {
+            actions.push(Action::SetTheme(id));
+        }
     }
 }
 

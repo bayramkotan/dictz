@@ -566,6 +566,110 @@
    "version": ""
   }
  ],
+ "uber": [
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-cedict-gb-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://mirror.example.org/zh_CN/stardict-cedict-gb-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "uber:zh_cn/stardict-cedict-gb-2.4.2.tar.bz2",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-cedict-gb-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "uber",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-dictd-web1913-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://mirror.example.org/dict.org/stardict-dictd-web1913-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "uber:dict.org/stardict-dictd-web1913-2.4.2.tar.bz2",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-dictd-web1913-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "uber",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  },
+  {
+   "author": "",
+   "date": "",
+   "description": "",
+   "files": [
+    {
+     "archive": "tar.bz2",
+     "md5": "",
+     "name": "stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2",
+     "sha256": "",
+     "sha512": "",
+     "size": 0,
+     "url": "https://mirror.example.org/dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2"
+    }
+   ],
+   "format": "stardict",
+   "headwords": 0,
+   "homepage": "",
+   "id": "uber:dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2",
+   "kind": "unknown",
+   "license": "unknown",
+   "license_url": "",
+   "name": "stardict-dictd_www.dict.org_gcide-2.4.2",
+   "page": "",
+   "resolve": "",
+   "sample": "",
+   "size": 0,
+   "source": "uber",
+   "source_lang": "",
+   "supported": true,
+   "tags": [],
+   "target_lang": [],
+   "version": ""
+  }
+ ],
  "wiktionary-vuizur": [
   {
    "author": "",

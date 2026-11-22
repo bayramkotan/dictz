@@ -47,6 +47,12 @@ SECTIONS: list[tuple[str, str]] = [
     ("history", "Geçmiş ve Favoriler"),
 ]
 
+def _theme_choices() -> tuple[tuple[str, str], ...]:
+    from ..core.themes import choices
+
+    return choices()
+
+
 SCHEMA: list[Setting] = [
     # ------------------------------------------------------------- general
     Setting("general.language", "choice", "auto", "Arayüz dili",
@@ -75,7 +81,8 @@ SCHEMA: list[Setting] = [
             "dictz ikinci kez açılınca çalışan pencere öne gelir; `dictz popup` / `dictz show` bu kopyaya gider."),
     # ---------------------------------------------------------- appearance
     Setting("appearance.theme", "choice", "auto", "Tema",
-            choices=(("auto", "Otomatik (sistem)"), ("light", "Açık"), ("dark", "Koyu"))),
+            "Otomatik = sistemin açık / koyu rengi. Vurgu rengi varsayılandaysa temanın kendi vurgusu kullanılır.",
+            choices=_theme_choices()),
     Setting("appearance.accent_color", "color", "#2563eb", "Vurgu rengi",
             "Bağlantılar, sözlük başlıkları ve seçimler bu renkle gösterilir."),
     Setting("appearance.ui_font_family", "str", "", "Arayüz yazı tipi",

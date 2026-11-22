@@ -318,21 +318,32 @@ def read_github_folder(source: dict, http) -> list[dict]:
 _HREF = re.compile(r"""<a\s[^>]*?href\s*=\s*["']([^"'#]+)["']""", re.I)
 
 
+_INDEX_PAGE = re.compile(r"/index\.html?$", re.I)
+
+
+def _folder_of(url: str) -> str:
+    """``…/x/index.html`` → ``…/x/`` (a folder's own page); other addresses unchanged."""
+    return url[:url.rfind("/") + 1] if _INDEX_PAGE.search(url) else url
+
+
 def read_http_index(source: dict, http) -> list[dict]:
-    """An Apache / nginx / lighttpd folder listing, ``depth`` folders deep."""
+    """An Apache / nginx / lighttpd folder listing, ``depth`` folders deep;
+    also a static site whose folders are ``…/x/index.html`` pages (like the
+    huzheng mirror at stardict.uber.space)."""
     root = source["url"] if source["url"].endswith("/") else source["url"] + "/"
     host = urlsplit(root).netloc
     files: list[tuple[str, str, int, str]] = []
     seen: set[str] = set()
 
     def walk(url: str, depth: int) -> None:
-        if url in seen:
+        here = _folder_of(url)
+        if here in seen:
             return
-        seen.add(url)
+        seen.add(here)
         try:
             page = http.get(url).decode("utf-8", "replace")
         except Exception:  # noqa: BLE001 — a folder that fails is skipped (the root raises below)
-            if url == root:
+            if here == root:
                 raise
             return
         for href in _HREF.findall(page):
@@ -340,14 +351,14 @@ def read_http_index(source: dict, http) -> list[dict]:
             if href.startswith(("?", "mailto:", "javascript:")) or href in ("../", "./", "/"):
                 continue
             full = urljoin(url, href)
-            if urlsplit(full).netloc != host or not full.startswith(root) or full == url:
+            folder = _folder_of(full)
+            if urlsplit(full).netloc != host or not folder.startswith(root) or folder == here:
                 continue
-            rel = unquote(full[len(root):])
-            if full.endswith("/"):
+            if folder.endswith("/"):
                 if depth > 1:
                     walk(full, depth - 1)
             elif "?" not in full:
-                files.append((rel, full, 0, ""))
+                files.append((unquote(full[len(root):]), full, 0, ""))
 
     walk(root, max(1, int(source.get("depth") or 1)))
     return _group_sets(source, files)

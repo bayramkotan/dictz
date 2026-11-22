@@ -247,10 +247,10 @@ pub static SCHEMA: &[Setting] = &[
         kind: Kind::Choice,
         default: Def::Str("auto"),
         label: "Tema",
-        help: "",
+        help: "Otomatik = sistemin açık / koyu rengi. Vurgu rengi varsayılandaysa temanın kendi vurgusu kullanılır.",
         min: None,
         max: None,
-        choices: &[("auto", "Otomatik (sistem)"), ("light", "Açık"), ("dark", "Koyu")],
+        choices: &[("auto", "Otomatik (sistem)"), ("light", "Açık"), ("sepia", "Sepya"), ("solarized-light", "Solarized Light"), ("gruvbox-light", "Gruvbox Light"), ("github-light", "GitHub Light"), ("catppuccin-latte", "Catppuccin Latte"), ("rose-pine-dawn", "Rosé Pine Dawn"), ("nord-light", "Nord Light"), ("one-light", "One Light"), ("mint", "Nane"), ("lavender", "Lavanta"), ("high-contrast-light", "Yüksek kontrast (açık)"), ("dark", "Koyu"), ("solarized-dark", "Solarized Dark"), ("gruvbox-dark", "Gruvbox Dark"), ("nord", "Nord"), ("dracula", "Dracula"), ("monokai", "Monokai"), ("one-dark", "One Dark"), ("tokyo-night", "Tokyo Night"), ("catppuccin-mocha", "Catppuccin Mocha"), ("rose-pine", "Rosé Pine"), ("github-dark", "GitHub Dark"), ("everforest", "Everforest"), ("midnight", "Gece mavisi"), ("oled", "Gece siyahı"), ("high-contrast-dark", "Yüksek kontrast (koyu)")],
     },
     Setting {
         key: "appearance.accent_color",

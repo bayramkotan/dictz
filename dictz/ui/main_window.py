@@ -336,8 +336,15 @@ class MainWindow(QMainWindow):
         tb.addAction(self.zoom_out_action)
         tb.addAction(self.zoom_reset_action)
         tb.addAction(self.zoom_in_action)
-        self.theme_action = self._act(t("Tema"), self._cycle_theme, None, "theme", tip=t("Tema: Otomatik → Açık → Koyu"))
+        self._build_theme_menu()
+        self.theme_action = self._act(t("Tema"), lambda: None, None, "theme", tip=t("Tema"))
+        self.theme_action.setMenu(self.theme_menu)
         tb.addAction(self.theme_action)
+        from PySide6.QtWidgets import QToolButton
+
+        tbtn = tb.widgetForAction(self.theme_action)
+        if isinstance(tbtn, QToolButton):
+            tbtn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         tb.addSeparator()
         self.scan_action = self._act(t("Tarama"), self.set_scan, None, "scan", checkable=True,
                                      tip=t("Tarama penceresi: başka uygulamada kopyalanan / seçilen kelimeyi çevirir"))
@@ -474,15 +481,7 @@ class MainWindow(QMainWindow):
         v.addAction(self.zoom_in_action)
         v.addAction(self.zoom_out_action)
         v.addAction(self._act(t("Yakınlaştırmayı sıfırla"), self._zoom_reset, "Ctrl+0"))
-        tm = v.addMenu(t("Tema"))
-        self.theme_group = QActionGroup(self)
-        self.theme_actions = {}
-        for val, label in [("auto", t("Otomatik")), ("light", t("Açık")), ("dark", t("Koyu"))]:
-            a = QAction(label, self, checkable=True)
-            a.triggered.connect(lambda _=False, t=val: self._set_theme(t))
-            self.theme_group.addAction(a)
-            tm.addAction(a)
-            self.theme_actions[val] = a
+        v.addMenu(self.theme_menu)
 
         g = mb.addMenu(t("&Git"))
         g.addAction(self.back_action)
@@ -1345,16 +1344,32 @@ class MainWindow(QMainWindow):
     def _update_zoom_label(self) -> None:
         self.zoom_label.setText(f"{round(float(self.prefs['article.zoom']) * 100)}%")
 
+    def _build_theme_menu(self) -> None:
+        """Every theme (``dictz/resources/themes.json``): auto, the light ones,
+        the dark ones — in the View menu and under the toolbar's theme button."""
+        from ..core.themes import all_themes
+
+        self.theme_menu = QMenu(t("Tema"), self)
+        self.theme_group = QActionGroup(self)
+        self.theme_actions = {}
+        last_dark = None
+        for val, label, dark in [("auto", t("Otomatik"), None)] + [
+                (th["id"], t(th["name"]), th["dark"]) for th in sorted(all_themes(), key=lambda x: x["dark"])]:
+            if dark is not None and dark != last_dark:
+                self.theme_menu.addSeparator()
+                last_dark = dark
+            a = QAction(label, self, checkable=True)
+            a.triggered.connect(lambda _=False, v=val: self._set_theme(v))
+            self.theme_group.addAction(a)
+            self.theme_menu.addAction(a)
+            self.theme_actions[val] = a
+
     def _set_theme(self, theme: str) -> None:
         self.prefs.set("appearance.theme", theme, save=True)
         self.apply_prefs()
-        label = {"auto": t("Otomatik"), "light": t("Açık"), "dark": t("Koyu")}[theme]
-        self.statusBar().showMessage(f"Tema: {label}", 2500)
-
-    def _cycle_theme(self) -> None:
-        order = ["auto", "light", "dark"]
-        cur = self.prefs["appearance.theme"]
-        self._set_theme(order[(order.index(cur) + 1) % 3 if cur in order else 0])
+        a = self.theme_actions.get(theme)
+        label = a.text() if a is not None else theme
+        self.statusBar().showMessage(f"{t('Tema')}: {label}", 2500)
 
     def _toggle_fullscreen(self, on: bool) -> None:
         self.showFullScreen() if on else self.showNormal()

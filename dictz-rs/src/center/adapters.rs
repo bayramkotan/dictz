@@ -526,6 +526,19 @@ fn read_github_folder(src: &Source, http: &dyn Fetch) -> R<Vec<Value>> {
     Ok(out)
 }
 
+/// `…/x/index.html` → `…/x/` (a folder's own page); other addresses unchanged.
+fn folder_of(url: &str) -> String {
+    let low = url.to_ascii_lowercase();
+    if low.ends_with("/index.html") || low.ends_with("/index.htm") {
+        url[..url.rfind('/').map(|i| i + 1).unwrap_or(0)].to_string()
+    } else {
+        url.to_string()
+    }
+}
+
+/// An Apache / nginx / lighttpd folder listing, `depth` folders deep; also a
+/// static site whose folders are `…/x/index.html` pages (like the huzheng
+/// mirror at stardict.uber.space).
 fn read_http_index(src: &Source, http: &dyn Fetch) -> R<Vec<Value>> {
     let root = if src.url.ends_with('/') {
         src.url.clone()
@@ -548,13 +561,14 @@ fn read_http_index(src: &Source, http: &dyn Fetch) -> R<Vec<Value>> {
         seen: &mut HashSet<String>,
         files: &mut Vec<Listed>,
     ) -> R<()> {
-        if !seen.insert(url.to_string()) {
+        let here = folder_of(url);
+        if !seen.insert(here.clone()) {
             return Ok(());
         }
         let page = match http.get(url, &[]) {
             Ok(b) => String::from_utf8_lossy(&b).into_owned(),
             Err(e) => {
-                if url == root {
+                if here == root {
                     return Err(e.into());
                 }
                 return Ok(());
@@ -572,15 +586,16 @@ fn read_http_index(src: &Source, http: &dyn Fetch) -> R<Vec<Value>> {
                 continue;
             }
             let full = urljoin(url, &href);
-            if urlsplit(&full).1 != host || !full.starts_with(root) || full == url {
+            let folder = folder_of(&full);
+            if urlsplit(&full).1 != host || !folder.starts_with(root) || folder == here {
                 continue;
             }
-            let rel = unquote(&full[root.len()..]);
-            if full.ends_with('/') {
+            if folder.ends_with('/') {
                 if depth > 1 {
                     walk(http, re, root, host, &full, depth - 1, seen, files)?;
                 }
             } else if !full.contains('?') {
+                let rel = unquote(&full[root.len()..]);
                 files.push((rel, full, 0, String::new()));
             }
         }

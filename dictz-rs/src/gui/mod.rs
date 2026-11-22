@@ -16,6 +16,7 @@ mod prefs_window;
 mod render;
 mod services;
 pub mod system;
+mod themes;
 mod uiicons;
 mod window;
 

@@ -1,0 +1,453 @@
+{
+ "_comment": "Interface themes, shared by both editions (dictz/ui/themes.py, dictz-rs/src/gui/themes.rs). 'ui' colours the window, 'article' (optional) the article page; without it the article colours come from 'ui'. 'accent' is used while the accent colour setting is left at its default.",
+ "themes": [
+  {
+   "id": "light",
+   "name": "Açık",
+   "dark": false,
+   "accent": "#2563eb",
+   "ui": {
+    "bg": "#f5f6f8",
+    "panel": "#ffffff",
+    "border": "#d7dbe0",
+    "text": "#1f2328",
+    "muted": "#5f6670",
+    "hover": "#e8ecf1",
+    "header": "#eef1f4",
+    "icon": "#3d4450"
+   },
+   "article": {
+    "bg": "#ffffff",
+    "fg": "#1f2328",
+    "muted": "#6a717c",
+    "card": "#f3f5f8",
+    "border": "#d7dbe0",
+    "strip": "#eef1f4"
+   }
+  },
+  {
+   "id": "dark",
+   "name": "Koyu",
+   "dark": true,
+   "accent": "#2563eb",
+   "ui": {
+    "bg": "#1e2127",
+    "panel": "#25282f",
+    "border": "#363a43",
+    "text": "#e3e5e9",
+    "muted": "#9aa1ac",
+    "hover": "#2f333b",
+    "header": "#2a2e36",
+    "icon": "#c9cdd4"
+   },
+   "article": {
+    "bg": "#1b1d22",
+    "fg": "#e3e5e9",
+    "muted": "#9aa1ac",
+    "card": "#25282f",
+    "border": "#363a43",
+    "strip": "#262a31"
+   }
+  },
+  {
+   "id": "sepia",
+   "name": "Sepya",
+   "dark": false,
+   "accent": "#a0522d",
+   "ui": {
+    "bg": "#f4ecd8",
+    "panel": "#fbf5e6",
+    "border": "#dccfb0",
+    "text": "#3b2f22",
+    "muted": "#7a6a55",
+    "hover": "#ece1c6",
+    "header": "#efe5cb",
+    "icon": "#5a4a36"
+   }
+  },
+  {
+   "id": "solarized-light",
+   "name": "Solarized Light",
+   "dark": false,
+   "accent": "#268bd2",
+   "ui": {
+    "bg": "#eee8d5",
+    "panel": "#fdf6e3",
+    "border": "#d6cfb8",
+    "text": "#586e75",
+    "muted": "#839496",
+    "hover": "#e6dfc8",
+    "header": "#eae3cc",
+    "icon": "#657b83"
+   }
+  },
+  {
+   "id": "gruvbox-light",
+   "name": "Gruvbox Light",
+   "dark": false,
+   "accent": "#af3a03",
+   "ui": {
+    "bg": "#f2e5bc",
+    "panel": "#fbf1c7",
+    "border": "#d5c4a1",
+    "text": "#3c3836",
+    "muted": "#7c6f64",
+    "hover": "#ebdbb2",
+    "header": "#ebdbb2",
+    "icon": "#504945"
+   }
+  },
+  {
+   "id": "github-light",
+   "name": "GitHub Light",
+   "dark": false,
+   "accent": "#0969da",
+   "ui": {
+    "bg": "#f6f8fa",
+    "panel": "#ffffff",
+    "border": "#d0d7de",
+    "text": "#1f2328",
+    "muted": "#656d76",
+    "hover": "#eaeef2",
+    "header": "#f6f8fa",
+    "icon": "#424a53"
+   }
+  },
+  {
+   "id": "catppuccin-latte",
+   "name": "Catppuccin Latte",
+   "dark": false,
+   "accent": "#8839ef",
+   "ui": {
+    "bg": "#e6e9ef",
+    "panel": "#eff1f5",
+    "border": "#ccd0da",
+    "text": "#4c4f69",
+    "muted": "#6c6f85",
+    "hover": "#dce0e8",
+    "header": "#e6e9ef",
+    "icon": "#5c5f77"
+   }
+  },
+  {
+   "id": "rose-pine-dawn",
+   "name": "Rosé Pine Dawn",
+   "dark": false,
+   "accent": "#907aa9",
+   "ui": {
+    "bg": "#faf4ed",
+    "panel": "#fffaf3",
+    "border": "#dfdad9",
+    "text": "#575279",
+    "muted": "#797593",
+    "hover": "#f2e9e1",
+    "header": "#f4ede8",
+    "icon": "#575279"
+   }
+  },
+  {
+   "id": "nord-light",
+   "name": "Nord Light",
+   "dark": false,
+   "accent": "#5e81ac",
+   "ui": {
+    "bg": "#e5e9f0",
+    "panel": "#eceff4",
+    "border": "#d8dee9",
+    "text": "#2e3440",
+    "muted": "#4c566a",
+    "hover": "#d8dee9",
+    "header": "#e5e9f0",
+    "icon": "#3b4252"
+   }
+  },
+  {
+   "id": "one-light",
+   "name": "One Light",
+   "dark": false,
+   "accent": "#4078f2",
+   "ui": {
+    "bg": "#f0f0f1",
+    "panel": "#fafafa",
+    "border": "#dbdbdc",
+    "text": "#383a42",
+    "muted": "#696c77",
+    "hover": "#e5e5e6",
+    "header": "#eaeaeb",
+    "icon": "#4f525e"
+   }
+  },
+  {
+   "id": "mint",
+   "name": "Nane",
+   "dark": false,
+   "accent": "#0f9d76",
+   "ui": {
+    "bg": "#eef6f2",
+    "panel": "#f8fcfa",
+    "border": "#cfe3d9",
+    "text": "#1f2d27",
+    "muted": "#5b6f66",
+    "hover": "#e0eee7",
+    "header": "#e6f2ec",
+    "icon": "#2f4a3f"
+   }
+  },
+  {
+   "id": "lavender",
+   "name": "Lavanta",
+   "dark": false,
+   "accent": "#7c3aed",
+   "ui": {
+    "bg": "#f3f0fa",
+    "panel": "#fbfaff",
+    "border": "#ddd6f0",
+    "text": "#2a2440",
+    "muted": "#6b6485",
+    "hover": "#e9e3f7",
+    "header": "#ede8f8",
+    "icon": "#463d63"
+   }
+  },
+  {
+   "id": "high-contrast-light",
+   "name": "Yüksek kontrast (açık)",
+   "dark": false,
+   "accent": "#0000cc",
+   "ui": {
+    "bg": "#ffffff",
+    "panel": "#ffffff",
+    "border": "#000000",
+    "text": "#000000",
+    "muted": "#333333",
+    "hover": "#e6e6e6",
+    "header": "#f0f0f0",
+    "icon": "#000000"
+   }
+  },
+  {
+   "id": "solarized-dark",
+   "name": "Solarized Dark",
+   "dark": true,
+   "accent": "#268bd2",
+   "ui": {
+    "bg": "#002b36",
+    "panel": "#073642",
+    "border": "#0f4a57",
+    "text": "#93a1a1",
+    "muted": "#839496",
+    "hover": "#0a3f4c",
+    "header": "#08394a",
+    "icon": "#93a1a1"
+   }
+  },
+  {
+   "id": "gruvbox-dark",
+   "name": "Gruvbox Dark",
+   "dark": true,
+   "accent": "#fe8019",
+   "ui": {
+    "bg": "#282828",
+    "panel": "#32302f",
+    "border": "#504945",
+    "text": "#ebdbb2",
+    "muted": "#a89984",
+    "hover": "#3c3836",
+    "header": "#3c3836",
+    "icon": "#d5c4a1"
+   }
+  },
+  {
+   "id": "nord",
+   "name": "Nord",
+   "dark": true,
+   "accent": "#88c0d0",
+   "ui": {
+    "bg": "#2e3440",
+    "panel": "#3b4252",
+    "border": "#4c566a",
+    "text": "#eceff4",
+    "muted": "#a3acbd",
+    "hover": "#434c5e",
+    "header": "#3b4252",
+    "icon": "#d8dee9"
+   }
+  },
+  {
+   "id": "dracula",
+   "name": "Dracula",
+   "dark": true,
+   "accent": "#bd93f9",
+   "ui": {
+    "bg": "#282a36",
+    "panel": "#303241",
+    "border": "#44475a",
+    "text": "#f8f8f2",
+    "muted": "#9ea8c7",
+    "hover": "#383a4a",
+    "header": "#343746",
+    "icon": "#e2e2dc"
+   }
+  },
+  {
+   "id": "monokai",
+   "name": "Monokai",
+   "dark": true,
+   "accent": "#a6e22e",
+   "ui": {
+    "bg": "#272822",
+    "panel": "#2f302a",
+    "border": "#49483e",
+    "text": "#f8f8f2",
+    "muted": "#a59f85",
+    "hover": "#3e3d32",
+    "header": "#34352d",
+    "icon": "#e6e6e0"
+   }
+  },
+  {
+   "id": "one-dark",
+   "name": "One Dark",
+   "dark": true,
+   "accent": "#61afef",
+   "ui": {
+    "bg": "#282c34",
+    "panel": "#2f333d",
+    "border": "#3e4451",
+    "text": "#dcdfe4",
+    "muted": "#9da5b4",
+    "hover": "#353b45",
+    "header": "#31353f",
+    "icon": "#c8ccd4"
+   }
+  },
+  {
+   "id": "tokyo-night",
+   "name": "Tokyo Night",
+   "dark": true,
+   "accent": "#7aa2f7",
+   "ui": {
+    "bg": "#1a1b26",
+    "panel": "#20222e",
+    "border": "#2f3348",
+    "text": "#c0caf5",
+    "muted": "#9099c0",
+    "hover": "#292e42",
+    "header": "#232433",
+    "icon": "#a9b1d6"
+   }
+  },
+  {
+   "id": "catppuccin-mocha",
+   "name": "Catppuccin Mocha",
+   "dark": true,
+   "accent": "#cba6f7",
+   "ui": {
+    "bg": "#1e1e2e",
+    "panel": "#262637",
+    "border": "#3a3a50",
+    "text": "#cdd6f4",
+    "muted": "#a6adc8",
+    "hover": "#313244",
+    "header": "#2a2a3c",
+    "icon": "#bac2de"
+   }
+  },
+  {
+   "id": "rose-pine",
+   "name": "Rosé Pine",
+   "dark": true,
+   "accent": "#ebbcba",
+   "ui": {
+    "bg": "#191724",
+    "panel": "#1f1d2e",
+    "border": "#312e45",
+    "text": "#e0def4",
+    "muted": "#908caa",
+    "hover": "#26233a",
+    "header": "#232136",
+    "icon": "#c4c1db"
+   }
+  },
+  {
+   "id": "github-dark",
+   "name": "GitHub Dark",
+   "dark": true,
+   "accent": "#2f81f7",
+   "ui": {
+    "bg": "#0d1117",
+    "panel": "#161b22",
+    "border": "#30363d",
+    "text": "#e6edf3",
+    "muted": "#8d96a0",
+    "hover": "#1f2630",
+    "header": "#161b22",
+    "icon": "#c9d1d9"
+   }
+  },
+  {
+   "id": "everforest",
+   "name": "Everforest",
+   "dark": true,
+   "accent": "#a7c080",
+   "ui": {
+    "bg": "#2d353b",
+    "panel": "#343f44",
+    "border": "#475258",
+    "text": "#d3c6aa",
+    "muted": "#9da9a0",
+    "hover": "#3d484d",
+    "header": "#374145",
+    "icon": "#c5baa0"
+   }
+  },
+  {
+   "id": "midnight",
+   "name": "Gece mavisi",
+   "dark": true,
+   "accent": "#38bdf8",
+   "ui": {
+    "bg": "#0f172a",
+    "panel": "#131d33",
+    "border": "#263352",
+    "text": "#e2e8f0",
+    "muted": "#94a3b8",
+    "hover": "#1c2944",
+    "header": "#162038",
+    "icon": "#cbd5e1"
+   }
+  },
+  {
+   "id": "oled",
+   "name": "Gece siyahı",
+   "dark": true,
+   "accent": "#3b82f6",
+   "ui": {
+    "bg": "#000000",
+    "panel": "#0b0b0b",
+    "border": "#262626",
+    "text": "#e6e6e6",
+    "muted": "#9a9a9a",
+    "hover": "#1a1a1a",
+    "header": "#111111",
+    "icon": "#d0d0d0"
+   }
+  },
+  {
+   "id": "high-contrast-dark",
+   "name": "Yüksek kontrast (koyu)",
+   "dark": true,
+   "accent": "#ffd400",
+   "ui": {
+    "bg": "#000000",
+    "panel": "#000000",
+    "border": "#ffffff",
+    "text": "#ffffff",
+    "muted": "#dddddd",
+    "hover": "#222222",
+    "header": "#111111",
+    "icon": "#ffffff"
+   }
+  }
+ ]
+}

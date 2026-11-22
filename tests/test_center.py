@@ -345,3 +345,28 @@ def test_own_files_of_a_dictionary() -> None:
 
     p = Path(__file__).parent / "data" / "parity" / "sample.dsl"
     assert [f.name for f in own_files(p)] == ["sample.dsl", "sample.dsl.files.zip"]
+
+
+def test_retired_builtin_addresses_move(tmp_path: Path) -> None:
+    """A stored built-in on an old address gets today's address (its switch
+    stays, its cached error goes); an address the user typed stays."""
+    from dictz.center.sources import BUILTIN, Sources
+
+    center = tmp_path / "center"
+    (center / "cache").mkdir(parents=True)
+    old = [dict(clean(b)) for b in BUILTIN]
+    for s in old:
+        if s["id"] == "huzheng":
+            s.update(url="https://download.huzheng.org/", enabled=False)
+        if s["id"] == "dictz-data":
+            s.update(url="https://my.example.org/catalog.json")
+    (center / "sources.json").write_text(json.dumps({"version": 1, "default": "dictz-data", "removed": [],
+                                                     "sources": old}), encoding="utf-8")
+    (center / "cache" / "huzheng.json").write_text('{"ok": false, "error": "refused"}', encoding="utf-8")
+    src = Sources(tmp_path)
+    hz = src.get("huzheng")
+    assert hz["url"] == "https://stardict.uber.space/" and hz["enabled"] is False
+    assert not (center / "cache" / "huzheng.json").exists()
+    assert src.get("dictz-data")["url"] == "https://my.example.org/catalog.json"
+    stored = json.loads((center / "sources.json").read_text(encoding="utf-8"))
+    assert next(s for s in stored["sources"] if s["id"] == "huzheng")["url"] == "https://stardict.uber.space/"
