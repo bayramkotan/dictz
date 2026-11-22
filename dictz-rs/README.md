@@ -8,7 +8,7 @@ Cross-platform, multi-format **offline dictionary** — a GoldenDict-style deskt
 
 This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The Python edition (`pip install dictz`) has the same features and ships from the same tag with the same version number. Both editions read dictionaries the same way: CI checks it against shared golden files. They also share one data folder (`dictionaries.json`, `settings.json`, `dictz_index.db`, `dictz_history.db`), so dictionaries, history and favorites added in one edition show up in the other.
 
-<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, dark theme: the search pane on the left, five dictionaries answer “apple”, each under a thin strip with the dictionary's icon and language pair" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="dictz Rust edition, Dracula theme (one of 27): the search pane on the left, five dictionaries answer “apple”, each under a thin strip with the dictionary's icon and language pair" width="100%"></p>
 
 <table>
 <tr>
@@ -17,7 +17,9 @@ This is the Rust edition of [dictz](https://github.com/bayramkotan/dictz). The P
 </tr>
 </table>
 
-<sub>The dictionaries in the pictures are small invented samples; dictz ships no dictionary content.</sub>
+<sub>The dictionaries in the pictures are small invented samples; dictz ships no dictionary content. The pictures are taken again with `docs/screenshots/shoot_rust.sh`.</sub>
+
+This crate is also the core of the phone edition ([`dictz-mobile/`](https://github.com/bayramkotan/dictz/tree/main/dictz-mobile), Android and iOS): built with `default-features = false, features = ["center"]` — no window, but the readers, index, search and the catalog / download queue that fills the phone's one dictionary folder.
 
 ## Install the app
 
@@ -51,7 +53,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **25 interface languages** from the flag at the top right (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語, 한국어 …); Arabic, Persian and Urdu interface texts are shaped and drawn right to left.
 - **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
 - **One Sözlükler window** (Ctrl+M) with seven tabs — Sözlüklerim (drag rows to reorder, on / off, only this, info, reindex, remove from the list or with the files), Klasörler, Katalog, Kaynaklar, İndirmeler, İçe / Dışa aktar, Ayarlar — and one **Sözlükler** menu; Dosya keeps only article, favourites, shortcut and quit.
-- **Catalog** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
+- **Catalog** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
 - **Multi-dictionary search** in your own order. Change the order by dragging in the Sözlüklerim tab, the dictionary bar, the found-in panel or the left pane.
 - **Fuzzy search:** "did you mean" suggestions, worked out on their own thread (`suggest.rs`) so typing never freezes. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
 - **DSL pictures and sounds** are read from `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same names as folders (any letter case), StarDict's from `res/`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).

@@ -42,26 +42,32 @@ Both read dictionaries identically, which CI checks against shared golden files.
 
 Both install two commands: **`dictz`** and its short name **`dct`**. They are the same program.
 
-**On the phone:** [`dictz-mobile/`](dictz-mobile/README.md) — Android and iOS from one Flutter app on the same Rust core (StarDict with synonyms, DSL, Babylon; search, "did you mean", favourites, history, the 27 themes and 25 languages). In development; the APK is built by GitHub Actions (*Actions → CI → Run workflow*, artifact `dictz-android`).
+**On the phone:** [`dictz-mobile/`](dictz-mobile/README.md) — Android and iOS from one compact, GoldenDict-Mobile-like Flutter app on the same Rust core (StarDict with synonyms, DSL, Babylon; search, "did you mean", favourites, history, the 27 themes and 25 languages). All dictionaries live in **one folder** — by default `/storage/emulated/0/dictz` on Android (like GoldenDict's `/sdcard/GoldenDict`), `Documents/dictionaries` on iOS (visible in the Files app) — and you can change it in Settings. Dictionaries you copy into it by hand are found by **Scan**; the **Catalog** downloads free dictionaries (FreeDict, Wiktionary, the StarDict archive …) straight into it. The APK is built by GitHub Actions (*Actions → CI → Run workflow*, artifact `dictz-android`, attached to every release).
 
 ## Screenshots
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="Rust edition, dark theme"><br><sub><b>Rust edition, dark theme</b> — one native binary, same features</sub></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/languages.png" alt="Language picker with flags"><br><sub><b>25 interface languages</b> — the flag at the top right</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/main-dark.png" alt="Rust edition, Dracula theme"><br><sub><b>Rust edition, Dracula theme</b> — one native binary, same features</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/python-dark.png" alt="Python edition, Nord theme"><br><sub><b>Python edition, Nord theme</b> — 27 themes, or follow the system</sub></td>
+</tr>
+<tr>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/themes.png" alt="Four themes side by side"><br><sub><b>Themes</b> — Solarized Light, Dracula, Mint, Gruvbox Dark …</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/languages.png" alt="Language picker with flags"><br><sub><b>25 interface languages</b> — the flag at the top right</sub></td>
 </tr>
 <tr>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/scan-popup.png" alt="Scan popup"><br><sub><b>Scan popup</b> — copy a word anywhere (Ctrl+C+C)</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window"><br><sub><b>Preferences</b> — 90 settings, searchable, per-setting reset</sub></td>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/preferences.png" alt="Preferences window, Sound page"><br><sub><b>Preferences → Sound</b> — pick the player (built-in, mpv, FFplay, VLC, MPlayer, system, own command) and the speed</sub></td>
 </tr>
 <tr>
+<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/dictionaries.png" alt="Dictionaries window"><br><sub><b>Dictionaries</b> — your list in search order, folders, catalog, sources, downloads</sub></td>
 <td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/arabic.png" alt="Arabic interface, right to left"><br><sub><b>العربية</b> — Arabic, Persian and Urdu run right to left</sub></td>
-<td><img src="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/screenshots/python-dark.png" alt="Python edition, dark theme"><br><sub><b>Python edition, dark theme</b> — light, dark or follow the system</sub></td>
 </tr>
 </table>
 
-<sub>The dictionaries in the pictures are small invented samples (`docs/screenshots/demo_dicts.py`); dictz ships no dictionary content.</sub>
+Phone screenshots are made by CI from the app itself (`flutter test test_screens`, artifact `dictz-mobile-screenshots`): article, word list, "did you mean", dark / Nord / Sepia themes, menu, dictionaries with the folder, catalog, history and settings.
+
+<sub>The dictionaries in the pictures are small invented samples (`docs/screenshots/demo_dicts.py`); dictz ships no dictionary content. `docs/screenshots/shoot.py` (Python edition, no display needed) and `shoot_rust.sh` (Rust edition, under Xvfb) take all these pictures again.</sub>
 
 ## Highlights
 
@@ -80,7 +86,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
   - **27 themes** (Otomatik, Açık, Koyu, Sepya, Solarized, Gruvbox, GitHub, Catppuccin, Rosé Pine, Nord, One, Nane, Lavanta, Dracula, Monokai, Tokyo Night, Everforest, Gece mavisi, Gece siyahı, high contrast…) from Görünüm → Tema or the toolbar's theme button; accent color, fonts and zoom
 - **25 interface languages** with a flag picker at the top right: Türkçe, English, Azərbaycan türkcəsi, Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Русский, Українська, العربية, فارسی, اردو, Қазақша, Кыргызча, Oʻzbekcha, Türkmençe, 中文, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, हिन्दी. Arabic, Persian and Urdu run right to left.
 - **Adding never freezes the window:** new or changed dictionaries are read in the background by several workers at once (separate processes in the Python edition, threads in the Rust edition), with a progress bar and a stop button in the status bar.
-- **One Sözlükler window** (Ctrl+M): your dictionaries (drag to reorder, on / off, remove with or without the files), folders, catalog, sources, downloads, import / export and settings in seven tabs. **Catalog** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
+- **One Sözlükler window** (Ctrl+M): your dictionaries (drag to reorder, on / off, remove with or without the files), folders, catalog, sources, downloads, import / export and settings in seven tabs. **Catalog** (Ctrl+Shift+M): browse, download and install free dictionaries from many servers — dictz's own server, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, a Telegram channel — or from **your own server, folder or link**. Every dictionary shows its **licence** (open / free / unknown / personal use) before you download it. Add, edit, remove, reorder and switch servers; pause, resume and retry downloads; uninstall and update; export / import your whole setup.
 - **90 settings** in 10 pages with search and per-setting reset.
 - **Full command line:** `dct lookup`, `dct add`, `dct config`, `dct doctor`, `dct update`, `dct shortcut` and more, with shell completion.
 - **Offline and private:** no telemetry. dictz goes online only for `dct update` / the update check and for the Dictionary Center's servers, and both can be switched off (`center.online`).
@@ -553,14 +559,24 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 - **27 tema:** Görünüm → Tema ya da araç çubuğundaki tema düğmesi (Otomatik, Açık, Koyu, Sepya, Solarized, Gruvbox, Nord, Dracula, Tokyo Night, Gece siyahı, yüksek kontrast…).
 - **Hızlı:** SQLite FTS5 ve diakritik duyarsız arama; öneriler ayrı bir iş parçacığında hazırlanır, yazarken pencere hiç takılmaz. Arama kutusu sol bölmenin üstünde sabittir (yanında Enter ⏎ düğmesi), Favoriler ya da Geçmiş açıkken de görünür.
 - **Bulanık arama:** sonuç yoksa "Bunu mu demek istediniz?" önerileri.
-- **Resim ve ses:** DSL `[s]` dosyaları.
+- **Resim ve ses:** DSL `[s]` dosyaları. Sesler sonuna kadar çalar (son hece kesilmesin diye sona kısa bir sessizlik eklenir); hız 0.5–1.5×, oynatıcı **Tercihler → Ses** açılır listesinden seçilir: yerleşik, mpv, FFplay, VLC, MPlayer, sistemin oynatıcısı ya da kendi komutunuz. Son sesi yeniden çal / durdur düğmeleri durum çubuğunda.
+- **StarDict eş anlamlıları (`.syn`):** *went* araması *go* maddesini bulur.
 - **Çevrimdışı:** telemetri yok.
 - **Tarama penceresi:** herhangi bir programda Ctrl+C+C, her kopyalama ya da Linux'ta yalnızca seçmek, makaleyi imlecin yanında açar. Ayrıca tepsi simgesi, genel kısayollar ve tek kopya çalışma.
 - **25 arayüz dili:** pencerenin sağ üstündeki bayraktan seçilir (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語…). Arapça, Farsça ve Urduca sağdan sola.
 - **Tek Sözlükler penceresi** (Ctrl+M): sözlükleriniz (sürükleyerek sıralama, aç / kapa, listeden ya da dosyalarıyla kaldırma), klasörler, katalog, kaynaklar, indirmeler, içe / dışa aktarma ve ayarlar yedi sekmede. Araç çubuğundaki sözlük simgesine tıklamak o sözlüğün makalesine gider, Ctrl+tık açar / kapatır, sürüklemek sırayı değiştirir.
-- **Katalog** (Ctrl+Shift+M): ücretsiz ve açık kaynak sözlükleri birçok sunucudan (dictz'in kendi sunucusu, FreeDict, Wiktionary, ECDICT, StarDict arşivi, Internet Archive, FreeMdict, Telegram) ya da **kendi sunucunuzdan, klasörünüzden, bağlantınızdan** arayın, indirin, kurun. Her sözlüğün **lisansı** indirmeden önce görünür. Sunucu ekleme / düzenleme / silme / sıralama / varsayılan yapma, indirmeyi duraklatma / sürdürme, kaldırma, güncelleme ve tüm kurulumu içe / dışa aktarma.
+- **Katalog** (Ctrl+Shift+M): ücretsiz ve açık kaynak sözlükleri birçok sunucudan (dictz'in kendi sunucusu, FreeDict, Wiktionary, ECDICT, StarDict arşivi, Internet Archive, Telegram) ya da **kendi sunucunuzdan, klasörünüzden, bağlantınızdan** arayın, indirin, kurun. Her sözlüğün **lisansı** indirmeden önce görünür. Sunucu ekleme / düzenleme / silme / sıralama / varsayılan yapma, indirmeyi duraklatma / sürdürme, kaldırma, güncelleme ve tüm kurulumu içe / dışa aktarma.
 - **Ayarlar:** 10 sayfada 90 ayar, arama kutusu ve ayar başına sıfırlama.
 - **Tam komut satırı:** iki sürümde aynıdır (`dct help`), kabuk tamamlama hem `dictz` hem `dct` için çalışır.
+
+### Telefonda (Android / iOS)
+
+[`dictz-mobile/`](dictz-mobile/README.md): aynı Rust çekirdeği üzerinde, GoldenDict Mobile gibi kompakt bir Flutter uygulaması (arama, "Bunu mu demek istediniz?", favoriler, geçmiş, 27 tema, 25 dil).
+
+- **Tek sözlük klasörü:** varsayılanı Android'de `/storage/emulated/0/dictz` (GoldenDict'teki `/sdcard/GoldenDict` gibi), iOS'ta `Belgeler/dictionaries` (Dosyalar uygulamasında görünür). **Ayarlar → Sözlük klasörü**'nden değiştirilebilir ya da varsayılana döndürülebilir.
+- **Tarama:** bilgisayardan bu klasöre kopyaladığınız sözlükleri açılışta ve **Sözlükler → Tara** düğmesiyle bulur.
+- **Katalog:** FreeDict, Wiktionary, StarDict arşivi gibi kaynaklardaki ücretsiz sözlükleri doğrudan bu klasöre indirir, açar ve listeye ekler (ilerleme çubuğu, iptal).
+- APK her CI çalışmasında derlenir (*Actions → CI → Run workflow*, `dictz-android`) ve sürümlere eklenir; ekran görüntüleri `dictz-mobile-screenshots` içindedir.
 
 ### Lisans
 

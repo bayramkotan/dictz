@@ -134,7 +134,8 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 ## Mobile apps (dictz-mobile/) — what they need
 
 - Build machine: Flutter 3.24.5, Java 17, Rust stable; Android: the NDK (`ANDROID_NDK_HOME`) and `cargo-ndk`; iOS: macOS with Xcode and CocoaPods. `tool/prepare.sh android|ios` does the rest (assets from `dictz/resources`, `flutter create` for the platform folders, the Rust core).
-- The core crate `dictz-mobile/rust` uses `dictz` with `default-features = false` (no window, no network); rusqlite's bundled SQLite is compiled by the NDK / Xcode toolchain.
+- The core crate `dictz-mobile/rust` uses `dictz` with `default-features = false, features = ["center"]` (no window; the catalog and download queue over ureq + rustls with `ring`, which cross-compile with cargo-ndk and for iOS without OpenSSL); rusqlite's bundled SQLite is compiled by the NDK / Xcode toolchain.
+- **Permissions** (written into the generated platform files by `tool/prepare.sh`): Android `INTERNET` (catalog), `READ_/WRITE_EXTERNAL_STORAGE` (Android ≤ 10, with `requestLegacyExternalStorage`) and `MANAGE_EXTERNAL_STORAGE` (Android 11+, *All files access*, for the shared folder `/storage/emulated/0/dictz`). Google Play allows `MANAGE_EXTERNAL_STORAGE` only for some app kinds: a Play build may have to drop it and keep the dictionaries in the app's own folder (`Android/data/com.bayramkotan.dictz_mobile/files/dictionaries`, which dictz already falls back to). iOS: `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`, so `Documents/dictionaries` shows in the Files app.
 - Distribution: the APK from *Actions → CI → Run workflow* (artifact `dictz-android`) (debug-key signed: sideload; Play Store needs an upload key). iOS needs an Apple developer account for TestFlight / App Store; the workflow builds `--no-codesign`.
 
 ## Parity between the editions
