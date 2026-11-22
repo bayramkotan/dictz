@@ -741,12 +741,13 @@ impl QueryManager {
 
     fn prepared(&mut self) -> std::sync::Arc<crate::fuzzy::Prepared> {
         if self.headword_cache.is_none() {
-            let mut seen = HashSet::new();
+            let mut seen: HashSet<String> = HashSet::new();
             let mut out = Vec::new();
             for d in self.dicts.iter().filter(|d| d.enabled) {
-                for w in d.dict.words().sorted() {
-                    if seen.insert(w.as_str()) {
-                        out.push(w.clone());
+                // headwords and synonyms, like the index
+                for w in d.dict.search_words() {
+                    if seen.insert(w.clone()) {
+                        out.push(w);
                     }
                 }
             }

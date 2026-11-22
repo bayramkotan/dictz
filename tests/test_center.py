@@ -360,13 +360,21 @@ def test_retired_builtin_addresses_move(tmp_path: Path) -> None:
             s.update(url="https://download.huzheng.org/", enabled=False)
         if s["id"] == "dictz-data":
             s.update(url="https://my.example.org/catalog.json")
-    (center / "sources.json").write_text(json.dumps({"version": 1, "default": "dictz-data", "removed": [],
+    old.append(dict(clean({"id": "freemdict", "name": "FreeMdict cloud", "type": "nextcloud-share",
+                           "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", "builtin": True})))
+    old.append(dict(clean({"id": "mine", "name": "Mine", "type": "local", "url": "/x"})))
+    (center / "sources.json").write_text(json.dumps({"version": 1, "default": "freemdict", "removed": [],
                                                      "sources": old}), encoding="utf-8")
+    (center / "cache" / "freemdict.json").write_text('{"ok": false}', encoding="utf-8")
     (center / "cache" / "huzheng.json").write_text('{"ok": false, "error": "refused"}', encoding="utf-8")
     src = Sources(tmp_path)
     hz = src.get("huzheng")
     assert hz["url"] == "https://stardict.uber.space/" and hz["enabled"] is False
     assert not (center / "cache" / "huzheng.json").exists()
     assert src.get("dictz-data")["url"] == "https://my.example.org/catalog.json"
+    # a built-in that was dropped goes, with its cache; the default falls back
+    assert src.get("freemdict") is None and src.get("mine") is not None
+    assert not (center / "cache" / "freemdict.json").exists()
+    assert src.data()["default"] == "dictz-data"
     stored = json.loads((center / "sources.json").read_text(encoding="utf-8"))
     assert next(s for s in stored["sources"] if s["id"] == "huzheng")["url"] == "https://stardict.uber.space/"

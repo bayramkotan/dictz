@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.1.9", default-features = false }
+//! dictz = { version = "0.2.0", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -142,11 +142,70 @@ impl DictionaryMetadata {
     }
 }
 
+/// Synonym pairs without duplicates, ordered by (lower-cased synonym,
+/// synonym, headword) — the order kept in the article store. Same as
+/// `sort_synonyms` in `dictz/parsers/base.py`.
+pub fn sort_synonyms(pairs: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut v: Vec<(String, (String, String))> =
+        pairs.into_iter().map(|p| (p.0.to_lowercase(), p)).collect();
+    v.sort();
+    v.dedup();
+    v.into_iter().map(|(_, p)| p).collect()
+}
+
+/// The headwords `word` is a synonym of: the pairs whose synonym is exactly
+/// `word`, otherwise those of the first synonym equal to it ignoring case.
+/// Each headword once, in pair order.
+pub fn synonym_targets(pairs: &[(String, String)], word: &str) -> Vec<String> {
+    let mut hits: Vec<&str> = pairs
+        .iter()
+        .filter(|(s, _)| s == word)
+        .map(|(_, t)| t.as_str())
+        .collect();
+    if hits.is_empty() {
+        let low = word.to_lowercase();
+        if let Some((first, _)) = pairs.iter().find(|(s, _)| s.to_lowercase() == low) {
+            hits = pairs
+                .iter()
+                .filter(|(s, _)| s == first)
+                .map(|(_, t)| t.as_str())
+                .collect();
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    hits.into_iter()
+        .filter(|t| seen.insert(*t))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Headwords plus the synonyms that are not headwords, sorted
+/// case-insensitively (headwords first among equals).
+pub fn merge_search_words(headwords: &[String], pairs: &[(String, String)]) -> Vec<String> {
+    if pairs.is_empty() {
+        return headwords.to_vec();
+    }
+    let have: std::collections::HashSet<&str> = headwords.iter().map(String::as_str).collect();
+    let mut seen = std::collections::HashSet::new();
+    let mut all: Vec<(String, String)> = headwords
+        .iter()
+        .map(|w| (w.to_lowercase(), w.clone()))
+        .collect();
+    for (s, _) in pairs {
+        if !have.contains(s.as_str()) && seen.insert(s.as_str()) {
+            all.push((s.to_lowercase(), s.clone()));
+        }
+    }
+    all.sort_by(|a, b| a.0.cmp(&b.0)); // stable: headwords first among equals
+    all.into_iter().map(|(_, w)| w).collect()
+}
+
 /// Trait every format parser implements.
 ///
 /// Mirrors the Python `dictz.parsers.base.Dictionary` class, including the
 /// lookup rules: exact match first, then the first case-insensitive match,
-/// then (when `exact == false`) up to 50 case-insensitive prefix matches.
+/// then the synonyms (StarDict `.syn`), then (when `exact == false`) up to
+/// 50 case-insensitive prefix matches.
 pub trait Dictionary: Send {
     /// Read the dictionary into memory. Idempotent.
     fn load(&mut self) -> Result<(), DictzError>;
@@ -176,6 +235,18 @@ pub trait Dictionary: Send {
         self.close();
     }
 
+    /// `(synonym, headword)` pairs in [`sort_synonyms`] order (StarDict's
+    /// `.syn`: "went" → "go"); empty for other formats.
+    fn synonyms(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
+    /// Headwords and synonyms: what the index, the word list and "did you
+    /// mean" offer ([`merge_search_words`]).
+    fn search_words(&self) -> Vec<String> {
+        merge_search_words(self.words().sorted(), &self.synonyms())
+    }
+
     /// Look up a headword. Returns an empty vector when nothing matches.
     fn lookup(&self, word: &str, exact: bool) -> Vec<DictionaryEntry> {
         let table = self.words();
@@ -186,6 +257,12 @@ pub trait Dictionary: Send {
         if hits.is_empty() {
             if let Some(w) = table.find_case_insensitive(word) {
                 hits.push(w.to_string());
+            }
+        }
+        if hits.is_empty() {
+            let syn = self.synonyms();
+            if !syn.is_empty() {
+                hits = synonym_targets(&syn, word);
             }
         }
         if !exact && hits.is_empty() {

@@ -1,0 +1,166 @@
+{
+ "meta": {
+  "name": "Synonym Test",
+  "author": "",
+  "description": "",
+  "source": "",
+  "target": "",
+  "count": 5
+ },
+ "entries": [
+  [
+   "go",
+   "gitmek"
+  ],
+  [
+   "goose",
+   "kaz"
+  ],
+  [
+   "Mouse",
+   "fare; bilgisayar faresi"
+  ],
+  [
+   "run",
+   "koşmak"
+  ],
+  [
+   "ışık",
+   "light"
+  ]
+ ],
+ "synonyms": [
+  [
+   "geese",
+   "goose"
+  ],
+  [
+   "gone",
+   "go"
+  ],
+  [
+   "Işık",
+   "ışık"
+  ],
+  [
+   "Mice",
+   "Mouse"
+  ],
+  [
+   "mice",
+   "Mouse"
+  ],
+  [
+   "Ran",
+   "go"
+  ],
+  [
+   "ran",
+   "run"
+  ],
+  [
+   "went",
+   "go"
+  ]
+ ],
+ "search_words": [
+  "geese",
+  "go",
+  "gone",
+  "goose",
+  "Işık",
+  "Mice",
+  "mice",
+  "Mouse",
+  "Ran",
+  "ran",
+  "run",
+  "went",
+  "ışık"
+ ],
+ "lookups": {
+  "went|1": [
+   "go"
+  ],
+  "went|0": [
+   "go"
+  ],
+  "WENT|1": [
+   "go"
+  ],
+  "WENT|0": [
+   "go"
+  ],
+  "gone|1": [
+   "go"
+  ],
+  "gone|0": [
+   "go"
+  ],
+  "geese|1": [
+   "goose"
+  ],
+  "geese|0": [
+   "goose"
+  ],
+  "mice|1": [
+   "Mouse"
+  ],
+  "mice|0": [
+   "Mouse"
+  ],
+  "Mice|1": [
+   "Mouse"
+  ],
+  "Mice|0": [
+   "Mouse"
+  ],
+  "MICE|1": [
+   "Mouse"
+  ],
+  "MICE|0": [
+   "Mouse"
+  ],
+  "ran|1": [
+   "run"
+  ],
+  "ran|0": [
+   "run"
+  ],
+  "Ran|1": [
+   "go"
+  ],
+  "Ran|0": [
+   "go"
+  ],
+  "run|1": [
+   "run"
+  ],
+  "run|0": [
+   "run"
+  ],
+  "nowhere|1": [],
+  "nowhere|0": [],
+  "Işık|1": [
+   "ışık"
+  ],
+  "Işık|0": [
+   "ışık"
+  ],
+  "ışık|1": [
+   "ışık"
+  ],
+  "ışık|0": [
+   "ışık"
+  ],
+  "g|1": [],
+  "g|0": [
+   "go",
+   "goose"
+  ],
+  "mi|1": [],
+  "mi|0": [],
+  "x|1": [],
+  "x|0": []
+ }
+}

@@ -406,7 +406,7 @@ impl IndexStore {
         {
             let mut st =
                 tx.prepare("INSERT INTO entries (headword, dictionary) VALUES (?1, ?2)")?;
-            for w in dict.words().sorted() {
+            for w in dict.search_words() {
                 st.execute(params![w, name])?;
                 count += 1;
             }

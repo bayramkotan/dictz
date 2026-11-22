@@ -6,7 +6,7 @@ import struct
 from pathlib import Path
 from typing import Iterator
 
-from .base import Dictionary, DictionaryEntry
+from .base import Dictionary, DictionaryEntry, sort_synonyms, synonym_targets
 
 
 class StarDictError(Exception):
@@ -27,6 +27,8 @@ class StarDictDictionary(Dictionary):
         self._idx_offset_bits = 32
         self._index: dict[str, tuple[int, int]] = {}
         self._sorted_words: list[str] = []
+        self._idx_order: list[str] = []  # every .idx entry in file order (the .syn refers to it)
+        self._synonyms: list[tuple[str, str]] = []
         self._dict_data: bytes | None = None
         self.metadata.format = "stardict"
 
@@ -35,6 +37,7 @@ class StarDictDictionary(Dictionary):
             return
         self._parse_ifo()
         self._parse_idx()
+        self._parse_syn()
         self._load_dict_data()
         self.metadata.word_count = len(self._index)
         self._sorted_words = sorted(self._index.keys(), key=str.lower)
@@ -92,7 +95,41 @@ class StarDictDictionary(Dictionary):
             size = struct.unpack(">I", data[tail_start + offset_size : tail_start + entry_tail_size])[0]
             if word and word not in self._index:
                 self._index[word] = (offset, size)
+            self._idx_order.append(word)
             pos = tail_start + entry_tail_size
+
+    def _parse_syn(self) -> None:
+        """``.syn``: ``synonym\\0`` + the 32-bit number of an ``.idx`` entry
+        (in file order). A synonym that is a headword itself is left out."""
+        data = b""
+        for ext in (".syn", ".syn.dz"):
+            p = Path(str(self._basepath) + ext)
+            if p.is_file():
+                if ext.endswith(".dz"):
+                    with gzip.open(p, "rb") as f:
+                        data = f.read()
+                else:
+                    data = p.read_bytes()
+                break
+        pairs = []
+        pos, n = 0, len(data)
+        while pos < n:
+            nul = data.find(b"\x00", pos)
+            if nul == -1 or nul + 5 > n:
+                break
+            word = data[pos:nul].decode("utf-8", errors="replace")
+            (i,) = struct.unpack(">I", data[nul + 1:nul + 5])
+            pos = nul + 5
+            if word and i < len(self._idx_order) and word not in self._index:
+                target = self._idx_order[i]
+                if target in self._index:
+                    pairs.append((word, target))
+        self._synonyms = sort_synonyms(pairs)
+
+    def synonyms(self) -> list[tuple[str, str]]:
+        if not self._loaded:
+            self.load()
+        return list(self._synonyms)
 
     def _load_dict_data(self) -> None:
         dict_path = self._basepath.with_suffix(".dict")
@@ -117,6 +154,8 @@ class StarDictDictionary(Dictionary):
                 if indexed_word.lower() == word_lower:
                     results.append(self._entry_for(indexed_word))
                     break
+        if not results and self._synonyms:
+            results = [self._entry_for(t) for t in synonym_targets(self._synonyms, word)]
         if not exact and not results:
             word_lower = word.lower()
             for indexed_word in self._sorted_words:
@@ -151,4 +190,6 @@ class StarDictDictionary(Dictionary):
         self._dict_data = None
         self._index.clear()
         self._sorted_words.clear()
+        self._idx_order.clear()
+        self._synonyms = []
         super().close()

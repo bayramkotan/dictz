@@ -27,15 +27,20 @@ def _read(sample: str) -> dict:
         "meta": {"name": m.name, "author": m.author, "description": m.description,
                  "source": m.source_language, "target": m.target_language, "count": m.word_count},
         "entries": [[e.headword, e.definition] for e in d.iter_entries()],
-    }
+    } | ({
+        "synonyms": [list(p) for p in d.synonyms()],
+        "search_words": d.search_words(),
+    } if m.format == "stardict" else {})
 
 
 @pytest.mark.parametrize(("sample", "golden"), [
     ("sample.dsl", "dsl_golden.json"),
     ("sample.bgl", "bgl_golden.json"),
+    ("stardict/sample.ifo", "stardict_golden.json"),
 ])
 def test_python_edition_matches_golden(sample: str, golden: str) -> None:
     expected = json.loads((PARITY / golden).read_text(encoding="utf-8"))
+    expected.pop("lookups", None)  # checked in test_fuzzy_media_query
     assert _read(sample) == expected
 
 

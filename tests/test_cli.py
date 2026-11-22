@@ -64,7 +64,8 @@ def test_add_lookup_and_manage(data_dir, capsys) -> None:
     assert out.startswith("disabled: dictz parity BGL")
     rc, out, _ = run(capsys, "add", "-r", str(PARITY), "--disabled")
     rows = {r["name"]: r["enabled"] for r in json.loads(run(capsys, "dicts", "--json")[1])}
-    assert rows == {"dictz parity BGL — Türkçe": False, "dictz parity sample": False}
+    # -r also finds stardict/sample.ifo (the synonym sample)
+    assert rows == {"dictz parity BGL — Türkçe": False, "dictz parity sample": False, "Synonym Test": False}
     run(capsys, "enable", "sample")
     rc, out, _ = run(capsys, "move", "sample", "top")
     assert out.strip() == "dictz parity sample: position 1"

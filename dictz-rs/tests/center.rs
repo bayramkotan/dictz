@@ -361,12 +361,18 @@ fn retired_builtin_addresses_move() {
             s["url"] = json!("https://my.example.org/catalog.json");
         }
     }
+    old.push(
+        json!({"id": "freemdict", "name": "FreeMdict cloud", "type": "nextcloud-share",
+        "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", "builtin": true}),
+    );
+    old.push(json!({"id": "mine", "name": "Mine", "type": "local", "url": "/x"}));
     std::fs::write(
         center.join("sources.json"),
-        json!({"version": 1, "default": "dictz-data", "removed": [], "sources": old}).to_string(),
+        json!({"version": 1, "default": "freemdict", "removed": [], "sources": old}).to_string(),
     )
     .unwrap();
     std::fs::write(center.join("cache/huzheng.json"), r#"{"ok": false}"#).unwrap();
+    std::fs::write(center.join("cache/freemdict.json"), r#"{"ok": false}"#).unwrap();
     let src = Sources::new(&t.0);
     let hz = src.get("huzheng").unwrap();
     assert_eq!(hz.url, "https://stardict.uber.space/");
@@ -376,4 +382,9 @@ fn retired_builtin_addresses_move() {
         src.get("dictz-data").unwrap().url,
         "https://my.example.org/catalog.json"
     );
+    // a built-in that was dropped goes, with its cache; the default falls back
+    assert!(src.get("freemdict").is_none());
+    assert!(src.get("mine").is_some());
+    assert!(!center.join("cache/freemdict.json").exists());
+    assert_eq!(src.data()["default"], "dictz-data");
 }

@@ -160,6 +160,37 @@ def write_bgl() -> None:
     (HERE / "sample.bgl").write_bytes(b"\x12\x34\x00\x01\x00\x06" + gz)
 
 
+def write_stardict_sample() -> None:
+    """sample.ifo / .idx / .dict / .syn: a StarDict with synonyms ("went" →
+    "go"), a synonym that is a headword itself (left out), one pointing past
+    the end of the .idx (left out) and two synonyms differing only in case."""
+    import struct
+
+    entries = [("go", "gitmek"), ("goose", "kaz"), ("Mouse", "fare; bilgisayar faresi"), ("run", "koşmak"),
+               ("ışık", "light")]
+    body, idx = b"", b""
+    for w, d in entries:
+        data = d.encode("utf-8")
+        idx += w.encode("utf-8") + b"\x00" + struct.pack(">II", len(body), len(data))
+        body += data
+    syn = [("went", 0), ("gone", 0), ("geese", 1), ("mice", 2), ("Mice", 2), ("ran", 3), ("Ran", 0),
+           ("run", 0), ("nowhere", 99), ("Işık", 4)]
+    raw = b"".join(w.encode("utf-8") + b"\x00" + struct.pack(">I", i) for w, i in syn)
+    sd = HERE / "stardict"  # its own folder: tests that add the parity folder see only the DSL and BGL
+    sd.mkdir(exist_ok=True)
+    (sd / "sample.dict").write_bytes(body)
+    (sd / "sample.idx").write_bytes(idx)
+    (sd / "sample.syn").write_bytes(raw)
+    (sd / "sample.ifo").write_text(
+        "StarDict's dict ifo file\nversion=2.4.2\nbookname=Synonym Test\n"
+        f"wordcount={len(entries)}\nsynwordcount={len(syn)}\nidxfilesize={len(idx)}\nsametypesequence=m\n",
+        encoding="utf-8")
+
+
+SYN_QUERIES = ["went", "WENT", "gone", "geese", "mice", "Mice", "MICE", "ran", "Ran", "run", "nowhere",
+               "Işık", "ışık", "g", "mi", "x"]
+
+
 # --------------------------------------------------------------- golden
 
 FUZZY_PAIRS = [
@@ -182,7 +213,12 @@ def golden_for(path: Path) -> dict:
             "source": m.source_language, "target": m.target_language, "count": m.word_count,
         },
         "entries": [[e.headword, e.definition] for e in d.iter_entries()],
-    }
+    } | ({
+        "synonyms": [list(p) for p in d.synonyms()],
+        "search_words": d.search_words(),
+        "lookups": {f"{q}|{int(exact)}": [e.headword for e in d.lookup(q, exact)]
+                    for q in SYN_QUERIES for exact in (True, False)},
+    } if m.format == "stardict" else {})
 
 
 TEXT_SNIPPETS = [
@@ -259,9 +295,9 @@ def write_rust_schema() -> None:
 def write_golden() -> None:
     from rapidfuzz import fuzz
 
-    for name in ("sample.dsl", "sample.bgl"):
+    for name in ("sample.dsl", "sample.bgl", "stardict/sample.ifo"):
         g = golden_for(HERE / name)
-        stem = name.split(".")[1]
+        stem = {"ifo": "stardict"}.get(name.split(".")[1], name.split(".")[1])
         (HERE / f"{stem}_golden.json").write_text(
             json.dumps(g, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
         )
@@ -387,6 +423,13 @@ def write_articles_golden() -> None:
 
     out = HERE / "articles_golden.db"
     articles.build(QueryManager.open_file(HERE / "sample.dsl"), out)
+    _fix_stamp(out)
+    out = HERE / "articles_stardict_golden.db"
+    articles.build(QueryManager.open_file(HERE / "stardict" / "sample.ifo"), out)
+    _fix_stamp(out)
+
+
+def _fix_stamp(out: Path) -> None:
     # a fixed stamp: the golden file must not depend on the checkout's mtimes
     import sqlite3
 
@@ -469,6 +512,7 @@ if __name__ == "__main__":
     write_i18n()
     write_dsl()
     write_bgl()
+    write_stardict_sample()
     write_golden()
     write_registry_golden()
     write_ui_icons()

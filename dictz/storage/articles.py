@@ -20,9 +20,13 @@ Tables::
 
     meta(key TEXT PRIMARY KEY, value TEXT)
     articles(id INTEGER PRIMARY KEY, word TEXT, folded TEXT, z INTEGER, body BLOB)
+    synonyms(id INTEGER PRIMARY KEY, word TEXT, folded TEXT, target TEXT)
 
 ``folded`` is ``word.lower()``; ``z = 1`` means ``body`` is zlib-compressed
-UTF-8, ``z = 0`` plain UTF-8.
+UTF-8, ``z = 0`` plain UTF-8. ``synonyms`` (since v0.2.0; a store without it
+has none) holds StarDict's ``.syn`` — "went" → the article of "go" — in
+``parsers.base.sort_synonyms`` order; a word that is not a headword is looked
+up there before the prefix step.
 """
 from __future__ import annotations
 
@@ -49,21 +53,30 @@ CREATE TABLE articles (
     z INTEGER NOT NULL,
     body BLOB NOT NULL
 );
+CREATE TABLE synonyms (
+    id INTEGER PRIMARY KEY,
+    word TEXT NOT NULL,
+    folded TEXT NOT NULL,
+    target TEXT NOT NULL
+);
 """
 _INDEXES = """
 CREATE UNIQUE INDEX articles_word ON articles(word);
 CREATE INDEX articles_folded ON articles(folded, id);
+CREATE INDEX synonyms_word ON synonyms(word, id);
+CREATE INDEX synonyms_folded ON synonyms(folded, id);
 """
 META_KEYS = ("name", "description", "author", "source_lang", "target_lang", "word_count", "format")
 
 
 def source_files(path: Path | str) -> list[Path]:
-    """The files a dictionary is read from (a StarDict is three files)."""
+    """The files a dictionary is read from (a StarDict is three files, four
+    with its ``.syn``)."""
     p = Path(path)
     if p.suffix.lower() == ".ifo":
         base = p.with_suffix("")
         out = [p]
-        for group in ((".idx", ".idx.gz"), (".dict", ".dict.dz")):
+        for group in ((".idx", ".idx.gz"), (".dict", ".dict.dz"), (".syn", ".syn.dz")):
             for ext in group:
                 q = Path(str(base) + ext)
                 if q.is_file():
@@ -161,6 +174,8 @@ def build(dictionary: Dictionary, store: Path | str, builder: str = "python",
         if rows:
             con.executemany("INSERT INTO articles (word, folded, z, body) VALUES (?, ?, ?, ?)", rows)
             count += len(rows)
+        con.executemany("INSERT INTO synonyms (word, folded, target) VALUES (?, ?, ?)",
+                        [(s, s.lower(), t) for s, t in dictionary.synonyms()])
         con.executescript(_INDEXES)
         meta = {
             "version": STORE_VERSION,
@@ -208,6 +223,8 @@ class StoredDictionary(Dictionary):
         self.store = Path(store)
         self._con: sqlite3.Connection | None = None
         self._words: list[str] | None = None
+        self._syn: list[tuple[str, str]] | None = None
+        self._has_syn: bool | None = None  # stores before v0.2.0 have no synonyms table
         self.lazy = meta is not None  # opened from the list alone
         self.suspended = False  # being rebuilt: closed, answers nothing
         if meta is None:
@@ -254,6 +271,16 @@ class StoredDictionary(Dictionary):
         if not rows:
             rows = self._rows("SELECT word, z, body FROM articles WHERE folded = ? ORDER BY id LIMIT 1",
                               (word.lower(),))
+        if not rows and self._synonym_table():
+            # the same rule as parsers.base.synonym_targets
+            targets = [t for (t,) in self._rows("SELECT target FROM synonyms WHERE word = ? ORDER BY id", (word,))]
+            if not targets:
+                first = self._rows("SELECT word FROM synonyms WHERE folded = ? ORDER BY id LIMIT 1", (word.lower(),))
+                if first:
+                    targets = [t for (t,) in self._rows("SELECT target FROM synonyms WHERE word = ? ORDER BY id",
+                                                        (first[0][0],))]
+            for t in dict.fromkeys(targets):
+                rows += self._rows("SELECT word, z, body FROM articles WHERE word = ?", (t,))
         if not exact and not rows:
             p = word.lower()
             rows = self._rows("SELECT word, z, body FROM articles WHERE folded >= ? AND folded < ? "
@@ -266,6 +293,20 @@ class StoredDictionary(Dictionary):
         if self._words is None:
             self._words = [w for (w,) in self._rows("SELECT word FROM articles ORDER BY id", ())]
         return list(self._words)
+
+    def _synonym_table(self) -> bool:
+        if self._has_syn is None:
+            rows = self._rows("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'synonyms'", ())
+            if self.suspended:
+                return False
+            self._has_syn = bool(rows)
+        return self._has_syn
+
+    def synonyms(self) -> list[tuple[str, str]]:
+        if self._syn is None:
+            self._syn = ([(w, t) for w, t in self._rows("SELECT word, target FROM synonyms ORDER BY id", ())]
+                         if self._synonym_table() else [])
+        return list(self._syn)
 
     def iter_entries(self) -> Iterator[DictionaryEntry]:
         if self.suspended:
@@ -283,4 +324,6 @@ class StoredDictionary(Dictionary):
                 self._con.close()
         self._con = None
         self._words = None
+        self._syn = None
+        self._has_syn = None
         super().close()

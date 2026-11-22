@@ -47,7 +47,7 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 
 ## Features
 
-- **Formats:** StarDict (`.ifo` / `.idx[.gz]` / `.dict[.dz]`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`) and Babylon (`.bgl`). All three are parsed natively, with no Python and no PyGlossary.
+- **Formats:** StarDict (`.ifo` / `.idx[.gz]` / `.dict[.dz]`, synonyms from `.syn`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`) and Babylon (`.bgl`). All three are parsed natively, with no Python and no PyGlossary.
 - **25 interface languages** from the flag at the top right (Türkçe, English, Azərbaycan türkcəsi, Deutsch, Русский, العربية, فارسی, 中文, 日本語, 한국어 …); Arabic, Persian and Urdu interface texts are shaped and drawn right to left.
 - **Dictionary icons:** a dictionary's own icon (`Name.png` / `.ico` / `.bmp` next to it, or the icon inside a `.bgl`), otherwise a monogram badge in its own colour; every article card shows it with the language pair and format.
 - **One Sözlükler window** (Ctrl+M) with seven tabs — Sözlüklerim (drag rows to reorder, on / off, only this, info, reindex, remove from the list or with the files), Klasörler, Katalog, Kaynaklar, İndirmeler, İçe / Dışa aktar, Ayarlar — and one **Sözlükler** menu; Dosya keeps only article, favourites, shortcut and quit.

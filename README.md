@@ -63,7 +63,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 
 ## Highlights
 
-- **Multi-format:** StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`).
+- **Multi-format:** StarDict (`.ifo`, with its `.syn` synonyms: *went* finds *go*), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`).
 - **Multi-dictionary:** one query hits every dictionary, in your order.
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
 - **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first. Suggestions are worked out on their own thread, so typing never freezes, even with dozens of dictionaries and millions of headwords.
@@ -347,7 +347,6 @@ The order is the search order everywhere, and it is saved at once
 | ECDICT | GitHub releases | English → Chinese | MIT |
 | StarDict archive (the huzheng mirror at [stardict.uber.space](https://stardict.uber.space/); download.huzheng.org is gone) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
 | Internet Archive | archive.org search | community uploads (StarDict, Babylon, DSL) | vary |
-| FreeMdict cloud | Nextcloud share | MDict, StarDict and DSL packs | vary |
 | Telegram: Dictionaries_GoldenDict | Telegram channel | listed; the files open in Telegram | vary |
 
 Source types you can add: `dictz-catalog` (a `catalog.json`), `freedict`, `github-releases`, `github-folder`, `http-index` (any web folder listing), `webdav`, `nextcloud-share` (with password), `archive-org` (a search query), `local` (a folder on this computer or a network drive) and `telegram`. Passwords and tokens stay in `center/credentials.json` on this computer (or `DICTZ_SOURCE_<ID>_PASSWORD` / `_TOKEN`), never in an exported list. `GITHUB_TOKEN` raises GitHub's request limit.
@@ -466,7 +465,7 @@ All of them are shared by the Python and the Rust edition.
 
 | Format | Extension | Python edition | Rust edition |
 |--------|-----------|----------------|--------------|
-| StarDict | `.ifo` / `.idx` / `.dict(.dz)` | native | native |
+| StarDict | `.ifo` / `.idx` / `.dict(.dz)` / `.syn` | native | native |
 | ABBYY Lingvo DSL | `.dsl` / `.dsl.dz` | [PyGlossary](https://github.com/ilius/pyglossary) | native (port of PyGlossary's reader) |
 | Babylon | `.bgl` | [PyGlossary](https://github.com/ilius/pyglossary) | native (port of PyGlossary's reader) |
 

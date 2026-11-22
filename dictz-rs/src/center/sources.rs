@@ -210,12 +210,6 @@ pub fn builtin() -> Vec<Source> {
             "description": "Dictionary packs uploaded by the community (StarDict, Babylon, DSL). Licences vary."}),
         ),
         mk(
-            json!({"id": "freemdict", "name": "FreeMdict cloud", "type": "nextcloud-share",
-            "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", "homepage": "https://forum.freemdict.com/",
-            "license": "unknown", "depth": 2,
-            "description": "The FreeMdict community's shared folder: MDict, StarDict and DSL packs. Licences vary."}),
-        ),
-        mk(
             json!({"id": "telegram-goldendict", "name": "Telegram: Dictionaries_GoldenDict", "type": "telegram",
             "url": "https://t.me/s/Dictionaries_GoldenDict", "homepage": "https://t.me/Dictionaries_GoldenDict",
             "license": "unknown",
@@ -291,6 +285,24 @@ pub const RETIRED_URLS: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Built-in sources that were dropped, with their built-in addresses. A
+/// stored copy still on that address goes (with its cache); one the user
+/// pointed elsewhere stays as the user's own source. Mirrors
+/// `RETIRED_BUILTINS` in `sources.py`.
+pub const RETIRED_BUILTINS: &[(&str, &[&str])] = &[(
+    // its server answers HTTP 500 to folder listings (v0.2.0)
+    "freemdict",
+    &["https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs"],
+)];
+
+/// A stored built-in that is no longer built in.
+fn dropped(s: &Source) -> bool {
+    s.builtin
+        && RETIRED_BUILTINS
+            .iter()
+            .any(|(id, urls)| *id == s.id && urls.contains(&s.url.as_str()))
+}
+
 /// Today's built-in for a stored built-in still on a retired address.
 fn retired(s: &Source) -> Option<Source> {
     if !s.builtin {
@@ -325,6 +337,20 @@ fn complete(data: &mut Value) -> bool {
         .map(|a| a.iter().filter(|x| x.is_object()).map(clean).collect())
         .unwrap_or_default();
     let mut changed = false;
+    let before = rows.len();
+    rows.retain(|r| !dropped(r));
+    if rows.len() != before {
+        changed = true;
+    }
+    let default_ok = o
+        .get("default")
+        .and_then(|v| v.as_str())
+        .map(|d| d == DEFAULT_SERVER || rows.iter().any(|r| r.id == d))
+        .unwrap_or(false);
+    if !default_ok {
+        o.insert("default".into(), json!(DEFAULT_SERVER));
+        changed = true;
+    }
     for r in rows.iter_mut() {
         if let Some(b) = retired(r) {
             r.name = b.name;
@@ -368,7 +394,7 @@ impl Sources {
         let mut d = self.file.read();
         if let Some(rows) = d.get("sources").and_then(|v| v.as_array()) {
             for s in rows.iter().filter(|x| x.is_object()).map(clean) {
-                if retired(&s).is_some() {
+                if retired(&s).is_some() || dropped(&s) {
                     // its cached answer is the old address's error
                     let _ =
                         std::fs::remove_file(self.dir.join("cache").join(format!("{}.json", s.id)));

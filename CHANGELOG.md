@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-22
+
+StarDict **synonyms** and one broken source less — in both editions.
+
+### Added
+- **StarDict synonyms (`.syn`, also `.syn.dz`):** a word that is not a headword is looked up among the dictionary's synonyms — *went* opens the article of *go*, *mice* the one of *mouse* (exact first, then ignoring case; each article once). Synonyms are offered by the word list, the index and "Bunu mu demek istediniz?" too. Many StarDict dictionaries (Wiktionary builds above all) keep their inflected forms only there, so far more words are found.
+- Article stores keep the synonyms (`synonyms` table, same in both editions); a store from an earlier version still works. The `.syn` is part of a StarDict's stamp, so **only StarDicts that have one are read again** on the next start (in the background, as after a file change).
+
+### Removed
+- **FreeMdict cloud** is no longer a built-in source: its server answers HTTP 500 to folder listings. A setup that still has it loses it (and its cached list) at the next start, and the default server falls back to dictz-data; a copy pointed at another address is kept as the user's own source. It can still be added by hand (*Kaynaklar → Ekle…*, type Nextcloud share).
+
 ## [0.1.9] — 2026-11-22
 
 **27 themes** and default sources that really work — in both editions.

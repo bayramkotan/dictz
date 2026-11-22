@@ -213,3 +213,45 @@ def test_suggestion_thread_answers_like_suggest(tmp_path: Path) -> None:
     qm.set_enabled("A", False)
     assert not qm.candidates.ready(qm.enabled_snapshot())
     store.close()
+
+
+def test_stardict_synonyms_parser_store_and_index(tmp_path: Path) -> None:
+    """StarDict .syn: "went" finds "go" in the parser and in the article store,
+    and the index / "did you mean" know the synonyms (parity sample)."""
+    import json
+
+    from dictz.parsers.stardict import StarDictDictionary
+    from dictz.storage import articles
+
+    parity = Path(__file__).parent / "data" / "parity"
+    g = json.loads((parity / "stardict_golden.json").read_text(encoding="utf-8"))
+    parity_sd = parity / "stardict"
+    parsed = StarDictDictionary(parity_sd / "sample.ifo")
+    parsed.load()
+    store = tmp_path / "s.db"
+    articles.build(parsed, store)
+    stored = articles.StoredDictionary(store, parity_sd / "sample.ifo")
+    for d in (parsed, stored):
+        assert [list(p) for p in d.synonyms()] == g["synonyms"]
+        assert d.search_words() == g["search_words"]
+        for key, want in g["lookups"].items():
+            q, exact = key.rsplit("|", 1)
+            assert [e.headword for e in d.lookup(q, exact == "1")] == want, key
+    assert stored.lookup("went")[0].definition == "gitmek"
+    assert "sample.syn" in [p.name for p in articles.source_files(parity_sd / "sample.ifo")]
+    # a store from before v0.2.0 (no synonyms table) still works
+    import sqlite3
+
+    con = sqlite3.connect(store)
+    con.execute("DROP TABLE synonyms")
+    con.commit()
+    con.close()
+    old = articles.StoredDictionary(store, parity_sd / "sample.ifo")
+    assert old.synonyms() == [] and old.lookup("went") == [] and old.lookup("go")[0].definition == "gitmek"
+    # the index offers synonyms
+    idx = IndexStore(tmp_path / "index.db")
+    qm = QueryManager(idx)
+    qm.add_dictionary(parity_sd / "sample.ifo")
+    assert "went" in [s.word for s in qm.suggest("wen")]
+    assert qm.search("went")[0].headword == "go"
+    idx.close()

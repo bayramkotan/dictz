@@ -75,10 +75,6 @@ BUILTIN: tuple[dict, ...] = (
          homepage="https://archive.org/", license="unknown",
          filter=r'(stardict OR "babylon bgl" OR "lingvo dsl" OR goldendict) AND mediatype:(data OR software OR texts)',
          description="Dictionary packs uploaded by the community (StarDict, Babylon, DSL). Licences vary."),
-    _src(id="freemdict", name="FreeMdict cloud", type="nextcloud-share",
-         url="https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", homepage="https://forum.freemdict.com/",
-         license="unknown", depth=2,
-         description="The FreeMdict community's shared folder: MDict, StarDict and DSL packs. Licences vary."),
     _src(id="telegram-goldendict", name="Telegram: Dictionaries_GoldenDict", type="telegram",
          url="https://t.me/s/Dictionaries_GoldenDict", homepage="https://t.me/Dictionaries_GoldenDict",
          license="unknown",
@@ -93,7 +89,19 @@ RETIRED_URLS: dict[str, tuple[str, ...]] = {
     "dictz-data": ("https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",),
     "huzheng": ("https://download.huzheng.org/", "http://download.huzheng.org/"),
 }
+# Built-in sources that were dropped, with their built-in addresses. A stored
+# copy still on that address goes (with its cache); one the user pointed
+# elsewhere stays as the user's own source. Mirrored in ``sources.rs``.
+RETIRED_BUILTINS: dict[str, tuple[str, ...]] = {
+    # its server answers HTTP 500 to folder listings (v0.2.0)
+    "freemdict": ("https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs",),
+}
 _RENEWED_KEYS = ("name", "type", "url", "homepage", "description", "filter", "depth", "license")
+
+
+def _dropped(s: dict) -> bool:
+    """A stored built-in that is no longer built in (``RETIRED_BUILTINS``)."""
+    return bool(s.get("builtin")) and s.get("url") in RETIRED_BUILTINS.get(s.get("id", ""), ())
 
 
 def _retired(s: dict) -> dict | None:
@@ -180,8 +188,13 @@ class Sources:
         data.setdefault("default", DEFAULT_SERVER)
         data.setdefault("removed", [])
         rows = [clean(s) for s in data.get("sources") or [] if isinstance(s, dict)]
-        have = {s["id"] for s in rows}
         changed = False
+        kept = [s for s in rows if not _dropped(s)]
+        if len(kept) != len(rows):
+            rows, changed = kept, True
+        have = {s["id"] for s in rows}
+        if data["default"] not in have and data["default"] != DEFAULT_SERVER:
+            data["default"], changed = DEFAULT_SERVER, True
         for s in rows:
             b = _retired(s)
             if b is not None:
@@ -197,7 +210,7 @@ class Sources:
     def data(self) -> dict:
         raw = self.file.read()
         for s in (raw.get("sources") or []) if isinstance(raw, dict) else []:
-            if isinstance(s, dict) and _retired(clean(s)) is not None:
+            if isinstance(s, dict) and (_retired(clean(s)) is not None or _dropped(clean(s))):
                 # its cached answer is the old address's error
                 with contextlib.suppress(OSError):
                     (self.dir / "cache" / f"{clean(s)['id']}.json").unlink(missing_ok=True)

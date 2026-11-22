@@ -241,7 +241,7 @@ class IndexStore:
         count = 0
         BATCH_SIZE = 5000
         with self._cursor() as cur:
-            for word in dictionary.headwords():
+            for word in dictionary.search_words():  # synonyms too (v0.2.0)
                 batch.append((word, dictionary.metadata.name))
                 if len(batch) >= BATCH_SIZE:
                     cur.executemany("INSERT INTO entries (headword, dictionary) VALUES (?, ?)", batch)

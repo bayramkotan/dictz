@@ -13,6 +13,9 @@ pub struct StarDictDictionary {
     meta: DictionaryMetadata,
     words: WordTable,
     spans: Vec<(usize, usize)>,
+    /// Every `.idx` entry in file order (the `.syn` refers to it).
+    idx_order: Vec<String>,
+    synonyms: Vec<(String, String)>,
     data: Vec<u8>,
     offset_bits: u32,
     loaded: bool,
@@ -59,6 +62,8 @@ impl StarDictDictionary {
             meta,
             words: WordTable::new(),
             spans: Vec::new(),
+            idx_order: Vec::new(),
+            synonyms: Vec::new(),
             data: Vec::new(),
             offset_bits: 32,
             loaded: false,
@@ -138,12 +143,52 @@ impl StarDictDictionary {
             };
             let size =
                 u32::from_be_bytes(data[t + off_size..t + tail].try_into().unwrap()) as usize;
-            if let Some(slot) = self.words.insert(&word) {
-                debug_assert_eq!(slot, self.spans.len());
-                self.spans.push((offset, size));
+            if !word.is_empty() {
+                if let Some(slot) = self.words.insert(&word) {
+                    debug_assert_eq!(slot, self.spans.len());
+                    self.spans.push((offset, size));
+                }
             }
+            self.idx_order.push(word);
             pos = t + tail;
         }
+        Ok(())
+    }
+
+    /// `.syn`: `synonym\0` + the 32-bit number of an `.idx` entry (in file
+    /// order). A synonym that is a headword itself is left out.
+    fn parse_syn(&mut self) -> Result<(), DictzError> {
+        let plain = with_ext(&self.base, ".syn");
+        let dz = with_ext(&self.base, ".syn.dz");
+        let data = if plain.is_file() {
+            std::fs::read(&plain)?
+        } else if dz.is_file() {
+            read_maybe_gzip(&dz)?
+        } else {
+            return Ok(());
+        };
+        let mut pairs = Vec::new();
+        let mut pos = 0usize;
+        while pos < data.len() {
+            let Some(nul) = data[pos..].iter().position(|&b| b == 0).map(|p| p + pos) else {
+                break;
+            };
+            if nul + 5 > data.len() {
+                break;
+            }
+            let word = String::from_utf8_lossy(&data[pos..nul]).into_owned();
+            let i = u32::from_be_bytes(data[nul + 1..nul + 5].try_into().unwrap()) as usize;
+            pos = nul + 5;
+            if word.is_empty() || self.words.contains(&word) {
+                continue;
+            }
+            if let Some(target) = self.idx_order.get(i) {
+                if self.words.contains(target) {
+                    pairs.push((word, target.clone()));
+                }
+            }
+        }
+        self.synonyms = crate::sort_synonyms(pairs);
         Ok(())
     }
 
@@ -171,6 +216,7 @@ impl Dictionary for StarDictDictionary {
         }
         self.parse_ifo()?;
         self.parse_idx()?;
+        self.parse_syn()?;
         self.load_dict()?;
         self.words.finish();
         self.meta.word_count = self.words.len();
@@ -201,9 +247,15 @@ impl Dictionary for StarDictDictionary {
         Some(String::from_utf8_lossy(&self.data[start..end]).into_owned())
     }
 
+    fn synonyms(&self) -> Vec<(String, String)> {
+        self.synonyms.clone()
+    }
+
     fn close(&mut self) {
         self.data = Vec::new();
         self.spans.clear();
+        self.idx_order.clear();
+        self.synonyms.clear();
         self.words.clear();
         self.loaded = false;
     }

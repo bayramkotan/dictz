@@ -20,7 +20,10 @@
 //!
 //! Rows are in the parser's sorted order, so `ORDER BY id` is that order;
 //! `folded` is the lower-cased word; `z = 1` means `body` is zlib-compressed
-//! UTF-8, `z = 0` plain UTF-8.
+//! UTF-8, `z = 0` plain UTF-8. `synonyms(id, word, folded, target)` (since
+//! v0.2.0; a store without it has none) holds StarDict's `.syn` — "went" →
+//! the article of "go" — in [`crate::sort_synonyms`] order; a word that is
+//! not a headword is looked up there before the prefix step.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -48,10 +51,18 @@ CREATE TABLE articles (
     z INTEGER NOT NULL,
     body BLOB NOT NULL
 );
+CREATE TABLE synonyms (
+    id INTEGER PRIMARY KEY,
+    word TEXT NOT NULL,
+    folded TEXT NOT NULL,
+    target TEXT NOT NULL
+);
 ";
 const INDEXES: &str = "
 CREATE UNIQUE INDEX articles_word ON articles(word);
 CREATE INDEX articles_folded ON articles(folded, id);
+CREATE INDEX synonyms_word ON synonyms(word, id);
+CREATE INDEX synonyms_folded ON synonyms(folded, id);
 ";
 
 /// The files a dictionary is read from (a StarDict is three files).
@@ -64,7 +75,11 @@ pub fn source_files(path: &Path) -> Vec<PathBuf> {
     if is_ifo {
         let base = path.with_extension("");
         let base = base.to_string_lossy();
-        for group in [[".idx", ".idx.gz"], [".dict", ".dict.dz"]] {
+        for group in [
+            [".idx", ".idx.gz"],
+            [".dict", ".dict.dz"],
+            [".syn", ".syn.dz"],
+        ] {
             for ext in group {
                 let q = PathBuf::from(format!("{}{}", base, ext));
                 if q.is_file() {
@@ -212,6 +227,13 @@ pub fn build_with(
                 }
             }
         }
+        {
+            let mut ins =
+                tx.prepare("INSERT INTO synonyms (word, folded, target) VALUES (?1, ?2, ?3)")?;
+            for (s, t) in dict.synonyms() {
+                ins.execute(params![s, s.to_lowercase(), t])?;
+            }
+        }
         tx.execute_batch(INDEXES)?;
         let m = dict.metadata();
         let mut meta = vec![
@@ -357,6 +379,28 @@ impl StoredDictionary {
             .unwrap_or_default()
     }
 
+    fn strings(&self, sql: &str, args: &[&dyn rusqlite::ToSql]) -> Vec<String> {
+        let Some(con) = self.con() else {
+            return Vec::new();
+        };
+        let Ok(mut st) = con.prepare_cached(sql) else {
+            return Vec::new();
+        };
+        st.query_map(args, |r| r.get(0))
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default()
+    }
+
+    /// Stores before v0.2.0 have no synonyms table.
+    fn has_synonyms(&self) -> bool {
+        !self
+            .strings(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'synonyms'",
+                &[],
+            )
+            .is_empty()
+    }
+
     fn to_entries(&self, rows: Vec<(String, i64, Vec<u8>)>) -> Vec<DictionaryEntry> {
         rows.into_iter()
             .map(|(w, z, b)| DictionaryEntry {
@@ -438,6 +482,32 @@ impl Dictionary for StoredDictionary {
                 &[&folded],
             );
         }
+        if rows.is_empty() && self.has_synonyms() {
+            // the same rule as crate::synonym_targets
+            let targets = |w: &str| -> Vec<String> {
+                self.strings(
+                    "SELECT target FROM synonyms WHERE word = ?1 ORDER BY id",
+                    &[&w],
+                )
+            };
+            let mut ts = targets(word);
+            if ts.is_empty() {
+                if let Some(first) = self
+                    .strings(
+                        "SELECT word FROM synonyms WHERE folded = ?1 ORDER BY id LIMIT 1",
+                        &[&folded],
+                    )
+                    .into_iter()
+                    .next()
+                {
+                    ts = targets(&first);
+                }
+            }
+            let mut seen = std::collections::HashSet::new();
+            for t in ts.into_iter().filter(|t| seen.insert(t.clone())) {
+                rows.extend(self.rows("SELECT word, z, body FROM articles WHERE word = ?1", &[&t]));
+            }
+        }
         if !exact && rows.is_empty() {
             let hi = format!("{}\u{10ffff}", folded);
             let limit = PREFIX_LIMIT as i64;
@@ -454,6 +524,21 @@ impl Dictionary for StoredDictionary {
     fn entries(&self) -> Vec<DictionaryEntry> {
         let rows = self.rows("SELECT word, z, body FROM articles ORDER BY id", &[]);
         self.to_entries(rows)
+    }
+
+    fn synonyms(&self) -> Vec<(String, String)> {
+        if !self.has_synonyms() {
+            return Vec::new();
+        }
+        let Some(con) = self.con() else {
+            return Vec::new();
+        };
+        let Ok(mut st) = con.prepare_cached("SELECT word, target FROM synonyms ORDER BY id") else {
+            return Vec::new();
+        };
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default()
     }
 }
 

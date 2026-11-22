@@ -62,7 +62,7 @@ class Candidates:
             for item in key:
                 ws = per.get(item)
                 if ws is None:
-                    ws = per[item] = list(item[1].headwords())
+                    ws = per[item] = list(item[1].search_words())
                 for w in ws:
                     if w not in seen:
                         seen.add(w)

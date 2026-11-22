@@ -50,6 +50,68 @@ fn check(sample: &str, golden: &str) {
     for (a, b) in ours.iter().zip(&theirs) {
         assert_eq!(a, b);
     }
+    check_synonyms(d.as_ref(), &g);
+}
+
+/// Synonyms, the words offered to the index and the lookups of the golden
+/// file (StarDict `.syn`).
+fn check_synonyms(d: &dyn dictz::Dictionary, g: &Value) {
+    let syn: Vec<(String, String)> = g["synonyms"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|p| {
+                    (
+                        p[0].as_str().unwrap().to_string(),
+                        p[1].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(d.synonyms(), syn);
+    if let Some(sw) = g["search_words"].as_array() {
+        let want: Vec<String> = sw.iter().map(|w| w.as_str().unwrap().to_string()).collect();
+        assert_eq!(d.search_words(), want);
+    }
+    if let Some(l) = g["lookups"].as_object() {
+        for (key, want) in l {
+            let (q, exact) = key.rsplit_once('|').unwrap();
+            let got: Vec<String> = d
+                .lookup(q, exact == "1")
+                .into_iter()
+                .map(|e| e.headword)
+                .collect();
+            let want: Vec<String> = want
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|w| w.as_str().unwrap().to_string())
+                .collect();
+            assert_eq!(got, want, "{key}");
+        }
+    }
+}
+
+#[test]
+fn stardict_synonyms_match_python_edition() {
+    check("stardict/sample.ifo", "stardict_golden.json");
+}
+
+#[test]
+fn stardict_store_written_by_python_has_the_synonyms() {
+    use dictz::articles::StoredDictionary;
+    let dir = parity_dir();
+    let g: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("stardict_golden.json")).unwrap())
+            .unwrap();
+    let stored = StoredDictionary::open(
+        &dir.join("articles_stardict_golden.db"),
+        &dir.join("stardict").join("sample.ifo"),
+    )
+    .unwrap();
+    check_synonyms(&stored, &g);
+    assert_eq!(stored.lookup("went", true)[0].definition, "gitmek");
 }
 
 #[test]
@@ -345,7 +407,13 @@ fn dictionary_list_file_matches_python() {
 fn same_answers(parsed: &dyn dictz::Dictionary, stored: &dyn dictz::Dictionary) {
     let words: Vec<String> = parsed.words().sorted().to_vec();
     assert_eq!(stored.words().sorted(), &words[..]);
+    assert_eq!(stored.synonyms(), parsed.synonyms());
+    assert_eq!(stored.search_words(), parsed.search_words());
     let mut qs = vec![String::new(), "zzzz-none".into(), "a".into(), "A".into()];
+    for (syn, _) in parsed.synonyms() {
+        qs.push(syn.clone());
+        qs.push(syn.to_uppercase());
+    }
     for w in words.iter().step_by((words.len() / 15).max(1)) {
         qs.push(w.clone());
         qs.push(w.to_uppercase());
@@ -381,7 +449,7 @@ fn article_store_built_by_rust_answers_like_the_parser() {
     use dictz::articles::{build, is_fresh, open_cached, StoredDictionary};
     let dir = std::env::temp_dir().join(format!("dictz-art-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    for sample in ["sample.dsl", "sample.bgl"] {
+    for sample in ["sample.dsl", "sample.bgl", "stardict/sample.ifo"] {
         let src = parity_dir().join(sample);
         let parsed = dictz::query::QueryManager::open_file(&src).unwrap();
         let store = dir.join(format!("{sample}.db"));

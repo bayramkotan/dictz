@@ -37,6 +37,35 @@ class DictionaryMetadata:
         return self.name
 
 
+def sort_synonyms(pairs) -> list[tuple[str, str]]:
+    """Synonym pairs without duplicates, ordered by (lower-cased synonym,
+    synonym, headword) — the order kept in the article store."""
+    return sorted(set(pairs), key=lambda p: (p[0].lower(), p[0], p[1]))
+
+
+def synonym_targets(pairs: list[tuple[str, str]], word: str) -> list[str]:
+    """The headwords ``word`` is a synonym of: the pairs whose synonym is
+    exactly ``word``, otherwise those of the first synonym equal to it
+    ignoring case. Each headword once, in pair order."""
+    hits = [t for s, t in pairs if s == word]
+    if not hits:
+        low = word.lower()
+        first = next((s for s, _ in pairs if s.lower() == low), None)
+        if first is not None:
+            hits = [t for s, t in pairs if s == first]
+    return list(dict.fromkeys(hits))
+
+
+def merge_search_words(headwords: list[str], pairs: list[tuple[str, str]]) -> list[str]:
+    """Headwords plus the synonyms that are not headwords, sorted case-insensitively
+    (headwords first among equals)."""
+    if not pairs:
+        return list(headwords)
+    have = set(headwords)
+    extra = list(dict.fromkeys(s for s, _ in pairs if s not in have))
+    return sorted(list(headwords) + extra, key=str.lower)
+
+
 class Dictionary(ABC):
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -57,10 +86,20 @@ class Dictionary(ABC):
     def iter_entries(self) -> Iterator[DictionaryEntry]: ...
 
     def headwords(self) -> list[str]:
-        """Headwords sorted case-insensitively (fuzzy candidate list)."""
+        """Headwords sorted case-insensitively (the articles' own words)."""
         if not self._loaded:
             self.load()
         return list(getattr(self, "_sorted_words", []))
+
+    def synonyms(self) -> list[tuple[str, str]]:
+        """``(synonym, headword)`` pairs in :func:`sort_synonyms` order
+        (StarDict's ``.syn``: "went" → "go"); empty for other formats."""
+        return []
+
+    def search_words(self) -> list[str]:
+        """Headwords and synonyms: what the index, the word list and "did you
+        mean" offer. Same rule as ``Dictionary::search_words`` in Rust."""
+        return merge_search_words(self.headwords(), self.synonyms())
 
     def close(self) -> None:
         self._loaded = False
