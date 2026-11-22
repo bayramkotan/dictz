@@ -127,6 +127,10 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 
 - `dictz/resources/themes.json` ships with the other resources (`MANIFEST.in` takes all of `dictz/resources`). The Rust crate embeds `src/gui/themes.json` with `include_str!` — it is listed in `Cargo.toml`'s `include`; **without it the crates.io package does not build**. `make_samples.py` copies it; `tests/test_themes.py` checks the copy is identical.
 
+## Sound players (0.2.0b) — what they need
+
+- Nothing new is required: the built-in players are Qt Multimedia (Python; `QAudioDecoder` decodes MP3 / Ogg into a padded WAV) and rodio (Rust, the `audio` feature). The external players (`mpv`, `ffplay`, `vlc`/`cvlc`, `mplayer`) are optional and looked up on `PATH` and in their usual Windows / macOS folders; a package may *recommend* `mpv` or `ffmpeg`.
+
 ## Mobile apps (dictz-mobile/) — what they need
 
 - Build machine: Flutter 3.24.5, Java 17, Rust stable; Android: the NDK (`ANDROID_NDK_HOME`) and `cargo-ndk`; iOS: macOS with Xcode and CocoaPods. `tool/prepare.sh android|ios` does the rest (assets from `dictz/resources`, `flutter create` for the platform folders, the Rust core).

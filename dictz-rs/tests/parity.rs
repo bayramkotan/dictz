@@ -468,3 +468,52 @@ fn article_store_built_by_rust_answers_like_the_parser() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn audio_players_match_python_edition() {
+    use dictz::audioplay::{pad_wav, player_command, wav, TAIL_MS};
+    let g: Value = serde_json::from_str(
+        &std::fs::read_to_string(parity_dir().join("audio_golden.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(g["tail_ms"].as_u64().unwrap(), TAIL_MS as u64);
+    for c in g["commands"].as_array().unwrap() {
+        let s = |i: usize| c[i].as_str().unwrap().to_string();
+        let want: Vec<String> = c[6]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            player_command(
+                &s(0),
+                &s(1),
+                &s(2),
+                c[3].as_i64().unwrap(),
+                c[4].as_f64().unwrap(),
+                &s(5)
+            ),
+            want,
+            "{c}"
+        );
+    }
+    let hex = |v: &Value| -> Vec<u8> {
+        let s = v.as_str().unwrap();
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    };
+    for w in g["wavs"].as_array().unwrap() {
+        assert_eq!(pad_wav(&hex(&w[0]), TAIL_MS).unwrap(), hex(&w[1]));
+    }
+    for w in g["not_wav"].as_array().unwrap() {
+        assert!(pad_wav(&hex(w), TAIL_MS).is_none());
+    }
+    let pcm = &g["pcm"];
+    let tail = (16000 * TAIL_MS / 1000) as usize * 2;
+    let mut body = hex(&pcm[0]);
+    body.extend(std::iter::repeat_n(0u8, tail));
+    assert_eq!(wav(&body, 16000, 1, 2), hex(&pcm[1]));
+}

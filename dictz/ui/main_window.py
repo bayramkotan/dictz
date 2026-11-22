@@ -1481,22 +1481,36 @@ class MainWindow(QMainWindow):
         if not target.exists():
             target.write_bytes(data)
         self.statusBar().showMessage(t("Çalınıyor: {name}", name=name), 3000)
-        if self.prefs["audio.system_player"]:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
-            return
-        try:
-            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+        p = self.prefs
+        self._audio().play(target, p["audio.player"], int(p["audio.volume"]), float(p["audio.speed"]),
+                           p["audio.command"])
+        self._sound_bar.show()
 
-            if not hasattr(self, "_player"):
-                self._audio_out = QAudioOutput(self)
-                self._player = QMediaPlayer(self)
-                self._player.setAudioOutput(self._audio_out)
-            self._audio_out.setVolume(int(self.prefs["audio.volume"]) / 100.0)
-            self._player.stop()
-            self._player.setSource(QUrl.fromLocalFile(str(target)))
-            self._player.play()
-        except Exception:  # noqa: BLE001 — no multimedia backend: hand it to the OS
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+    def _audio(self):
+        """The sound player and its small bar in the status bar (replay, stop)."""
+        if getattr(self, "_player", None) is None:
+            from PySide6.QtWidgets import QHBoxLayout, QToolButton
+
+            from .audio_player import AudioPlayer
+
+            self._player = AudioPlayer(self)
+            self._player.message.connect(lambda m: self.statusBar().showMessage(m, 5000))
+            bar = QWidget(self)
+            lay = QHBoxLayout(bar)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(0)
+            for ic, tip, fn in (("sound", t("Son sesi yeniden çal"), self._player.replay),
+                                ("stop", t("Durdur"), self._player.stop)):
+                b = QToolButton(bar)
+                b.setAutoRaise(True)
+                b.setIcon(icon(ic))
+                b.setToolTip(tip)
+                b.clicked.connect(fn)
+                lay.addWidget(b)
+            bar.hide()
+            self.statusBar().addPermanentWidget(bar)
+            self._sound_bar = bar
+        return self._player
 
     # ================================================================ help
     def _show_shortcuts(self) -> None:

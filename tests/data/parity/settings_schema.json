@@ -870,11 +870,61 @@
   "max": 100
  },
  {
-  "key": "audio.system_player",
-  "kind": "bool",
-  "default": false,
-  "label": "Sistem oynatıcısını kullan",
-  "help": "Sesler uygulama içinde değil, işletim sisteminin oynatıcısıyla açılır."
+  "key": "audio.player",
+  "kind": "choice",
+  "default": "auto",
+  "label": "Ses oynatıcısı",
+  "help": "Otomatik = dahili oynatıcı; yoksa kurulu ilk dış oynatıcı (mpv, FFplay, VLC, MPlayer), o da yoksa sistemin oynatıcısı. Kurulu olmayan bir oynatıcı seçilirse sistemin oynatıcısı açılır.",
+  "choices": [
+   [
+    "auto",
+    "Otomatik"
+   ],
+   [
+    "internal",
+    "Dahili oynatıcı"
+   ],
+   [
+    "mpv",
+    "mpv"
+   ],
+   [
+    "ffplay",
+    "FFplay (FFmpeg)"
+   ],
+   [
+    "vlc",
+    "VLC"
+   ],
+   [
+    "mplayer",
+    "MPlayer"
+   ],
+   [
+    "system",
+    "Sistemin oynatıcısı"
+   ],
+   [
+    "command",
+    "Özel komut"
+   ]
+  ]
+ },
+ {
+  "key": "audio.speed",
+  "kind": "float",
+  "default": 1.0,
+  "label": "Çalma hızı",
+  "help": "1 = normal. Son heceleri daha iyi duymak için yavaşlatın (0.5–1.5).",
+  "min": 0.5,
+  "max": 1.5
+ },
+ {
+  "key": "audio.command",
+  "kind": "str",
+  "default": "",
+  "label": "Özel oynatıcı komutu",
+  "help": "Oynatıcı “Özel komut” iken kullanılır. {file} = ses dosyası; {volume} ve {speed} de yazılabilir. Örnek: mpv --no-video --speed={speed} {file}"
  },
  {
   "key": "history.enabled",

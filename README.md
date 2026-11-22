@@ -69,7 +69,7 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 - **Multi-dictionary:** one query hits every dictionary, in your order.
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
 - **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first. Suggestions are worked out on their own thread, so typing never freezes, even with dozens of dictionaries and millions of headwords.
-- **Pictures and sounds:** DSL `[s]` media and StarDict `res/`, found under every name GoldenDict uses — `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same as folders, in any letter case.
+- **Pictures and sounds:** DSL `[s]` media and StarDict `res/`, found under every name GoldenDict uses — `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same as folders, in any letter case. Sounds play to the very end (a short silence is added so the last syllable is never cut), at the speed you choose (0.5–1.5×), with the player you pick in **Tercihler → Ses**: built-in, mpv, FFplay, VLC, MPlayer, the system's, or a command of your own; replay / stop sit in the status bar.
 - **Compact, GoldenDict-like window:** search box (always on top of the left pane, with an Enter button ⏎) and word list in the left pane (with Dictionaries, Favourites and History as icon tabs), one toolbar row with the dictionary bar as small toggles, thin article headers, no tab row while there is one tab, dictz's own line icons, and an **interface scale** setting (50–250 %) for high-resolution screens.
 - **Dictionary icons:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
 - **Scan popup:** copy a word in any program and its articles pop up next to the mouse. Also a tray icon, global hotkeys and a single running instance.
@@ -424,7 +424,7 @@ Every dictionary has a face: its own icon if it has one, otherwise a monogram ba
 | Tarama penceresi | scanning on/off, Ctrl+C+C, every copy, selection (Linux), Ctrl+C+C interval, max text length, open near the mouse, always on top, hide when the mouse leaves + delay, size, record in history |
 | Genel kısayollar | on/off, show/hide main window, scanning on/off, look up the clipboard |
 | Sözlükler (now in **Sözlükler → Klasörler / Ayarlar**) | dictionary folders scanned on every start — several folders, each with its own **Subfolders** box (like GoldenDict's Sources → Files) — reindex changed files, **dictionaries prepared at once** (0 = automatic) |
-| Ses | auto-play, volume, system player |
+| Ses | auto-play, volume, **player** (Otomatik, Dahili, mpv, FFplay, VLC, MPlayer, Sistemin oynatıcısı, Özel komut), playback speed, custom command (`{file}`, `{volume}`, `{speed}`) |
 | Geçmiş ve Favoriler | history on/off, sidebar counts, database limit, clear on exit |
 | Sözlük Merkezi (now in **Sözlükler → Ayarlar**) | use internet sources, refresh catalogs every N days, downloads at once, folder for downloaded dictionaries, check checksums, keep archives, add after install, show unknown licences, proxy, timeout |
 

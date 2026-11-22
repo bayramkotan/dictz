@@ -39,6 +39,7 @@ const ICONS: &[(&str, &[u8])] = &[
     ("settings", include_bytes!("../uiicons/settings.png")),
     ("sound", include_bytes!("../uiicons/sound.png")),
     ("star", include_bytes!("../uiicons/star.png")),
+    ("stop", include_bytes!("../uiicons/stop.png")),
     ("star-filled", include_bytes!("../uiicons/star-filled.png")),
     ("theme", include_bytes!("../uiicons/theme.png")),
     ("up", include_bytes!("../uiicons/up.png")),

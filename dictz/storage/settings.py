@@ -47,6 +47,12 @@ SECTIONS: list[tuple[str, str]] = [
     ("history", "Geçmiş ve Favoriler"),
 ]
 
+def _player_choices() -> tuple[tuple[str, str], ...]:
+    from ..core.audio import PLAYERS
+
+    return PLAYERS
+
+
 def _theme_choices() -> tuple[tuple[str, str], ...]:
     from ..core.themes import choices
 
@@ -195,8 +201,15 @@ SCHEMA: list[Setting] = [
     # --------------------------------------------------------------- audio
     Setting("audio.auto_play", "bool", False, "Aramada ilk sesi otomatik çal"),
     Setting("audio.volume", "int", 80, "Ses düzeyi", "%", min=0, max=100),
-    Setting("audio.system_player", "bool", False, "Sistem oynatıcısını kullan",
-            "Sesler uygulama içinde değil, işletim sisteminin oynatıcısıyla açılır."),
+    Setting("audio.player", "choice", "auto", "Ses oynatıcısı",
+            "Otomatik = dahili oynatıcı; yoksa kurulu ilk dış oynatıcı (mpv, FFplay, VLC, MPlayer), "
+            "o da yoksa sistemin oynatıcısı. Kurulu olmayan bir oynatıcı seçilirse sistemin oynatıcısı açılır.",
+            choices=_player_choices()),
+    Setting("audio.speed", "float", 1.0, "Çalma hızı",
+            "1 = normal. Son heceleri daha iyi duymak için yavaşlatın (0.5–1.5).", min=0.5, max=1.5),
+    Setting("audio.command", "str", "", "Özel oynatıcı komutu",
+            "Oynatıcı “Özel komut” iken kullanılır. {file} = ses dosyası; {volume} ve {speed} de "
+            "yazılabilir. Örnek: mpv --no-video --speed={speed} {file}"),
     # ------------------------------------------------------------- history
     Setting("history.enabled", "bool", True, "Arama geçmişini kaydet"),
     Setting("history.limit", "int", 200, "Yan panelde gösterilen geçmiş", min=10, max=5000),
@@ -323,6 +336,10 @@ class Preferences:
                 setting = SCHEMA_BY_KEY.get(key)
                 with contextlib.suppress(ValueError):
                     p.values[key] = coerce(setting, sec[name]) if setting else sec[name]
+        # "Sistem oynatıcısını kullan" (before v0.2.1) became audio.player = system
+        audio = raw.get("audio")
+        if isinstance(audio, dict) and audio.get("system_player") is True and "player" not in audio:
+            p.values["audio.player"] = "system"
         if raw and int(p.values.get("state.layout_version") or 0) < LAYOUT_VERSION:
             for key, (old, new) in OLD_DEFAULTS.items():
                 if p.values.get(key) == old:

@@ -1983,14 +1983,15 @@ impl DictzApp {
             return;
         };
         self.set_status(tr_args("Çalınıyor: {name}", &[("name", &name)]), 3);
-        let vol = self.prefs.int("audio.volume") as f32 / 100.0;
-        audio::play(
+        audio::play(audio::Request {
             bytes,
-            name.to_string(),
-            self.data_dir.join("media-cache"),
-            vol,
-            self.prefs.bool("audio.system_player"),
-        );
+            name: name.to_string(),
+            cache_dir: self.data_dir.join("media-cache"),
+            volume: self.prefs.int("audio.volume"),
+            speed: self.prefs.float("audio.speed"),
+            player: self.prefs.str("audio.player"),
+            command: self.prefs.str("audio.command"),
+        });
     }
 
     fn handle_link(&mut self, dict: &str, href: &str) {
@@ -3926,6 +3927,17 @@ impl DictzApp {
                     "{}%",
                     (self.prefs.float("article.zoom") * 100.0).round() as i32
                 ));
+                if audio::has_last() {
+                    // the last sound: stop / play again
+                    if super::uiicons::button(ui, "stop", &tr("Durdur"), false, true).clicked() {
+                        audio::stop();
+                    }
+                    if super::uiicons::button(ui, "sound", &tr("Son sesi yeniden çal"), false, true)
+                        .clicked()
+                    {
+                        audio::replay();
+                    }
+                }
                 let names: Vec<String> = self
                     .qm
                     .loaded_names()

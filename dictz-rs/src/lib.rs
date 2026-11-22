@@ -38,6 +38,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod articles;
+pub mod audioplay;
 pub mod autostart;
 pub mod babylon;
 #[cfg(feature = "center")]

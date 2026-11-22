@@ -953,11 +953,31 @@ pub static SCHEMA: &[Setting] = &[
         choices: &[],
     },
     Setting {
-        key: "audio.system_player",
-        kind: Kind::Bool,
-        default: Def::Bool(false),
-        label: "Sistem oynatıcısını kullan",
-        help: "Sesler uygulama içinde değil, işletim sisteminin oynatıcısıyla açılır.",
+        key: "audio.player",
+        kind: Kind::Choice,
+        default: Def::Str("auto"),
+        label: "Ses oynatıcısı",
+        help: "Otomatik = dahili oynatıcı; yoksa kurulu ilk dış oynatıcı (mpv, FFplay, VLC, MPlayer), o da yoksa sistemin oynatıcısı. Kurulu olmayan bir oynatıcı seçilirse sistemin oynatıcısı açılır.",
+        min: None,
+        max: None,
+        choices: &[("auto", "Otomatik"), ("internal", "Dahili oynatıcı"), ("mpv", "mpv"), ("ffplay", "FFplay (FFmpeg)"), ("vlc", "VLC"), ("mplayer", "MPlayer"), ("system", "Sistemin oynatıcısı"), ("command", "Özel komut")],
+    },
+    Setting {
+        key: "audio.speed",
+        kind: Kind::Float,
+        default: Def::Float(1.0),
+        label: "Çalma hızı",
+        help: "1 = normal. Son heceleri daha iyi duymak için yavaşlatın (0.5–1.5).",
+        min: Some(0.5),
+        max: Some(1.5),
+        choices: &[],
+    },
+    Setting {
+        key: "audio.command",
+        kind: Kind::Str,
+        default: Def::Str(""),
+        label: "Özel oynatıcı komutu",
+        help: "Oynatıcı “Özel komut” iken kullanılır. {file} = ses dosyası; {volume} ve {speed} de yazılabilir. Örnek: mpv --no-video --speed={speed} {file}",
         min: None,
         max: None,
         choices: &[],
@@ -1249,6 +1269,13 @@ impl Preferences {
                         p.values.insert(key, v.clone());
                     }
                 }
+            }
+        }
+        // "Sistem oynatıcısını kullan" (before v0.2.1) became audio.player = system
+        if let Some(a) = raw.get("audio") {
+            if a.get("system_player") == Some(&Value::Bool(true)) && a.get("player").is_none() {
+                p.values
+                    .insert("audio.player".into(), Value::from("system"));
             }
         }
         let has_file = !raw.is_empty();

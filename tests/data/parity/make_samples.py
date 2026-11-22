@@ -257,6 +257,48 @@ def _num(x) -> str:
     return "None" if x is None else f"Some({float(x)!r})"
 
 
+AUDIO_CASES = [
+    ("mpv", "/usr/bin/mpv", "/c/a b.wav", 80, 1.0, ""),
+    ("ffplay", "ffplay", "/c/x.mp3", 100, 0.75, ""),
+    ("vlc", r"C:\Program Files\VideoLAN\VLC\vlc.exe", r"C:\c\x.wav", 55, 1.25, ""),
+    ("mplayer", "mplayer", "x.ogg", 120, 2.0, ""),
+    ("command", "", "/c/x.wav", 30, 0.5, "play -q --volume {volume} {file} tempo {speed}"),
+    ("command", "", "/c/x.wav", 30, 1.0, "mpv --title 'a b'"),
+    ("command", "", "/c/x.wav", 30, 1.0, "   "),
+    ("command", "", r"C:\c\x.wav", 64, 0.9, '"C:\\Program Files\\mpv\\mpv.exe" --speed={speed} --volume={volume}'),
+    ("system", "", "/c/x.wav", 30, 1.0, ""),
+]
+
+
+def write_audio_golden() -> None:
+    """audio_golden.json: external player command lines and padded WAVs (Rust: audioplay.rs)."""
+    import io
+    import struct
+    import wave
+
+    from dictz.core import audio
+
+    def make(ch: int, width: int, rate: int, n: int) -> bytes:
+        out = io.BytesIO()
+        with wave.open(out, "wb") as w:
+            w.setnchannels(ch)
+            w.setsampwidth(width)
+            w.setframerate(rate)
+            w.writeframes(bytes((i * 7) % 256 for i in range(n * ch * width)))
+        return out.getvalue()
+
+    wavs = [make(1, 2, 22050, 1000), make(2, 1, 8000, 333), make(2, 2, 44100, 10)]
+    g = {
+        "commands": [[*c, audio.player_command(*c)] for c in AUDIO_CASES],
+        "wavs": [[w.hex(), audio.pad_wav(w).hex()] for w in wavs],
+        "not_wav": [b"ID3\x03junk".hex(), b"RIFF\x10\x00\x00\x00WAVEfmt ".hex()],
+        "pcm": [b"\x01\x02\x03\x04".hex(), audio.pcm_to_wav(b"\x01\x02\x03\x04", 16000, 1, 2).hex()],
+        "tail_ms": audio.TAIL_MS,
+    }
+    _ = struct
+    (HERE / "audio_golden.json").write_text(json.dumps(g, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
 def write_rust_schema() -> None:
     """Regenerate the schema block of dictz-rs/src/settings.rs from the Python schema."""
     from dictz.storage.settings import SCHEMA, SECTIONS
@@ -513,6 +555,7 @@ if __name__ == "__main__":
     write_dsl()
     write_bgl()
     write_stardict_sample()
+    write_audio_golden()
     write_golden()
     write_registry_golden()
     write_ui_icons()

@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Sounds lost their last syllable** (both editions). The players closed the audio device as soon as the data ended, before its buffer had been heard. Now every sound of the built-in players ends with 350 ms of silence: Python pads a WAV (`core/audio.pad_wav`) and decodes MP3 / Ogg / … with `QAudioDecoder` into such a WAV (kept in the media cache); Rust appends silence to the rodio sink and keeps the stream open until the device has drained. FFplay gets the same tail (`apad`).
+
 ### Added
+- **Choose the sound player** in Tercihler → Ses (`audio.player`): Otomatik (built-in; else the first of mpv, FFplay, VLC, MPlayer that is installed; else the system's), Dahili oynatıcı, mpv, FFplay, VLC, MPlayer, Sistemin oynatıcısı, Özel komut (`audio.command`, with `{file}`, `{volume}`, `{speed}`). A player that is not installed falls back to the system's. VLC / mpv are also found in their usual Windows and macOS folders.
+- **Playback speed** (`audio.speed`, 0.5–1.5): slow a sound down to hear it better (built-in players and every external one).
+- **Replay / stop** buttons for the last sound in the status bar (both editions).
+- The old "Sistem oynatıcısını kullan" setting becomes `audio.player = system` by itself. Command lines and padded WAVs are the same in both editions (`audio_golden.json`).
+- **Phone app, GoldenDict-Mobile-like and compact:** one slim bar (menu, search box, Enter, ⋮), a side menu for Favoriler / Geçmiş / Sözlükler / Ayarlar, articles under thin foldable strips with the dictionary's badge, a small button that lists the dictionaries of the word and jumps to one, the phone's back key goes to the previous word. **Screenshots** are drawn by CI (`test_screens/`, artifact `dictz-mobile-screenshots`), and the **APK is one of every release's files**.
 - **dictz-mobile/** — the Android and iOS apps (first build, for testing): one Flutter interface on the same Rust core (`dictz-mobile/rust`: a C interface with JSON in and out over the `dictz` library, used through `dart:ffi`). Search box always on top with Enter and random-word buttons, word list while typing (background isolate), articles one strip per dictionary (`bword://` links, DSL pictures, back), favourites and history, dictionaries added from the phone's files (StarDict set with `.syn`, DSL, Babylon or a `.zip`; copied into the app), on / off, drag to reorder, remove with or without the files, the 27 themes and the 25 interface languages (the desktop's `themes.json` and catalogues). `tool/prepare.sh` makes the platform folders (`flutter create`) and builds the core (cargo-ndk for Android, a `DictzCore.xcframework` for iOS). New jobs in the CI workflow (`mobile-core`, `mobile-android`, `mobile-ios`; on tags and manual runs, not on pull requests, never holding up the release): core tests, APK, unsigned iOS app as artifacts; a tag attaches the APK to the release.
 
 ## [0.2.0] — 2026-11-22
