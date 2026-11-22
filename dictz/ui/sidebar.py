@@ -1,5 +1,6 @@
-"""Dockable side pane like GoldenDict's: the search box with its word list
-first, then Sözlükler, Favoriler, Geçmiş (each with a filter box). The tabs
+"""Dockable side pane like GoldenDict's: the search box on top — always
+there, whichever tab is open, with an Enter button beside it — then the tabs
+word list, Sözlükler, Favoriler, Geçmiş (each with a filter box). The tabs
 show icons only; their names are in the tooltips."""
 from __future__ import annotations
 
@@ -24,17 +25,15 @@ from .icons import icon
 
 
 class SearchPane(QWidget):
-    """The search box and the word list under it (GoldenDict's search pane)."""
+    """The word list under the search box (GoldenDict's search pane). The
+    box itself (``box``) sits above the tabs, in ``Sidebar``."""
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, box: QLineEdit, parent: QWidget | None = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
-        self.box = QLineEdit()
-        self.box.setObjectName("search_box")
-        self.box.setClearButtonEnabled(True)
-        layout.addWidget(self.box)
+        self.box = box
         self.list = QListWidget(self)
         self.list.setObjectName("word_list")
         self.list.setUniformItemSizes(True)
@@ -123,6 +122,7 @@ class Sidebar(QDockWidget):
     history_remove_requested = Signal(str)
     favorite_remove_requested = Signal(str)
     export_favorites_requested = Signal()
+    search_requested = Signal()  # the Enter button beside the search box
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(t("Kenar çubuğu"), parent)
@@ -132,12 +132,36 @@ class Sidebar(QDockWidget):
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        from PySide6.QtWidgets import QToolButton
+
+        body = QWidget(self)
+        body_lay = QVBoxLayout(body)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(0)
+        # the search box: fixed on top, never hidden by the Favoriler / Geçmiş tabs
+        row = QHBoxLayout()
+        row.setContentsMargins(4, 4, 4, 2)
+        row.setSpacing(2)
+        self.search_box = QLineEdit()
+        self.search_box.setObjectName("search_box")
+        self.search_box.setClearButtonEnabled(True)
+        row.addWidget(self.search_box, 1)
+        self.enter_btn = QToolButton()
+        self.enter_btn.setObjectName("search_enter")
+        self.enter_btn.setAutoRaise(True)
+        self.enter_btn.setIcon(icon("enter"))
+        self.enter_btn.setToolTip(t("Ara (Enter)"))
+        self.enter_btn.clicked.connect(self.search_requested)
+        row.addWidget(self.enter_btn)
+        body_lay.addLayout(row)
         self.tabs = QTabWidget(self)
         self.tabs.setObjectName("side_tabs")
         self.tabs.setDocumentMode(True)
         self.tabs.tabBar().setExpanding(True)
         self.tabs.tabBar().setUsesScrollButtons(False)
-        self.search_pane = SearchPane()
+        self.search_pane = SearchPane(self.search_box)
+        # typing while another tab is open brings the word list back
+        self.search_box.textEdited.connect(lambda _t: self.tabs.setCurrentWidget(self.search_pane))
 
         self.dicts_pane = _ListPane(t("Sözlükler"), action_label=t("Sözlükler…"))
         self.dicts_pane.action_triggered.connect(self.manage_dictionaries_requested)
@@ -173,7 +197,8 @@ class Sidebar(QDockWidget):
                                 (self.history_pane, "history", t("Geçmiş"))):
             i = self.tabs.addTab(pane, icon(name), "")
             self.tabs.setTabToolTip(i, tip)
-        self.setWidget(self.tabs)
+        body_lay.addWidget(self.tabs, 1)
+        self.setWidget(body)
         self.setTitleBarWidget(QWidget())  # no title row: the icon tabs are the header
 
     def show_search(self) -> None:
@@ -181,6 +206,7 @@ class Sidebar(QDockWidget):
         self.tabs.setCurrentWidget(self.search_pane)
 
     def restyle_icons(self) -> None:
+        self.enter_btn.setIcon(icon("enter"))
         for i, name in enumerate(self._tab_icons):
             self.tabs.setTabIcon(i, icon(name))
 

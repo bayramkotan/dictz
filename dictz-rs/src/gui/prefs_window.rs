@@ -27,8 +27,6 @@ pub enum Advanced {
     Import,
     /// Scan the dictionary folders now (with the draft's folders).
     Rescan,
-    /// Open the Dictionaries window on its settings tab.
-    DictionariesSettings,
 }
 
 /// Pages shown in the Dictionaries window (Sözlükler → Ayarlar) instead.
@@ -37,7 +35,6 @@ pub const PAGES_IN_DICTIONARIES_WINDOW: &[&str] = &["dictionaries", "center"];
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
     Section(usize),
-    DictionariesLink,
     Shortcuts,
     Advanced,
 }
@@ -107,10 +104,7 @@ impl PrefsWindow {
         let mut v = Vec::new();
         for (i, (sec, title)) in SECTIONS.iter().enumerate() {
             if PAGES_IN_DICTIONARIES_WINDOW.contains(sec) {
-                if *sec == PAGES_IN_DICTIONARIES_WINDOW[0] {
-                    v.push(("Sözlükler", Page::DictionariesLink));
-                }
-                continue;
+                continue; // edited in Sözlükler → Ayarlar
             }
             v.push((*title, Page::Section(i)));
         }
@@ -201,19 +195,6 @@ impl PrefsWindow {
     fn page_body(&mut self, ui: &mut egui::Ui, events: &mut Vec<Event>) {
         let pages = Self::pages();
         let (_, page) = pages[self.page.min(pages.len() - 1)];
-        if page == Page::DictionariesLink {
-            ui.heading(tr("Sözlükler"));
-            ui.add_space(6.0);
-            ui.label(tr("Sözlük klasörleri, sözlük ve Sözlük Merkezi ayarları Sözlükler penceresinde, listeniz, kataloğunuz ve indirmelerinizle bir arada."));
-            ui.add_space(6.0);
-            if ui
-                .button(tr("Sözlükler penceresinde aç (Ctrl+M)"))
-                .clicked()
-            {
-                events.push(Event::Action(Advanced::DictionariesSettings));
-            }
-            return;
-        }
         if page == Page::Shortcuts {
             ui.heading(tr(PAGE_SHORTCUTS));
             ui.add_space(6.0);

@@ -17,6 +17,7 @@ const ICONS: &[(&str, &[u8])] = &[
     ("dict", include_bytes!("../uiicons/dict.png")),
     ("down", include_bytes!("../uiicons/down.png")),
     ("download", include_bytes!("../uiicons/download.png")),
+    ("enter", include_bytes!("../uiicons/enter.png")),
     ("folder", include_bytes!("../uiicons/folder.png")),
     ("forward", include_bytes!("../uiicons/forward.png")),
     ("fullscreen", include_bytes!("../uiicons/fullscreen.png")),

@@ -6,7 +6,7 @@
   "description": "dictz's own dictionary server: every dictionary dictz offers, with its licence.",
   "enabled": true,
   "filter": "",
-  "homepage": "https://github.com/bayramkotan/dictz-data",
+  "homepage": "https://github.com/bayramkotan/dictz/tree/main/docs/dictz-data",
   "id": "dictz-data",
   "license": "",
   "name": "dictz-data (default server)",
@@ -15,7 +15,7 @@
   "source_lang": "",
   "target_lang": "",
   "type": "dictz-catalog",
-  "url": "https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",
+  "url": "https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
   "user": ""
  },
  {
@@ -101,7 +101,7 @@
   "description": "The oldest, largest StarDict archive, many languages. Licences are mostly not stated.",
   "enabled": true,
   "filter": "\\.(tar\\.bz2|tar\\.gz|tgz|zip)$",
-  "homepage": "https://download.huzheng.org/",
+  "homepage": "http://download.huzheng.org/",
   "id": "huzheng",
   "license": "unknown",
   "name": "StarDict archive (download.huzheng.org)",
@@ -110,7 +110,7 @@
   "source_lang": "",
   "target_lang": "",
   "type": "http-index",
-  "url": "https://download.huzheng.org/",
+  "url": "http://download.huzheng.org/",
   "user": ""
  },
  {

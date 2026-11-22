@@ -19,7 +19,7 @@
 //! Library-only use (no GUI dependencies):
 //!
 //! ```toml
-//! dictz = { version = "0.1.7", default-features = false }
+//! dictz = { version = "0.1.8", default-features = false }
 //! ```
 //!
 //! ```no_run
@@ -68,6 +68,7 @@ pub mod selftest;
 pub mod settings;
 pub mod shortcuts;
 pub mod stardict;
+pub mod suggest;
 pub mod text;
 #[cfg(feature = "update")]
 pub mod updater;

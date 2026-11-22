@@ -47,8 +47,8 @@ def _src(**kw: Any) -> dict:
 # can be edited in the Sources page).
 BUILTIN: tuple[dict, ...] = (
     _src(id="dictz-data", name="dictz-data (default server)", type="dictz-catalog",
-         url="https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",
-         homepage="https://github.com/bayramkotan/dictz-data",
+         url="https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
+         homepage="https://github.com/bayramkotan/dictz/tree/main/docs/dictz-data",
          description="dictz's own dictionary server: every dictionary dictz offers, with its licence."),
     _src(id="freedict", name="FreeDict", type="freedict", url="https://freedict.org/freedict-database.json",
          homepage="https://freedict.org/", license="freedict",
@@ -67,7 +67,7 @@ BUILTIN: tuple[dict, ...] = (
          license="MIT", source_lang="en", target_lang="zh", filter=r"(?i)stardict.*\.(zip|7z|tar\.gz)$",
          description="Free English–Chinese dictionary database, with a StarDict build."),
     _src(id="huzheng", name="StarDict archive (download.huzheng.org)", type="http-index",
-         url="https://download.huzheng.org/", homepage="https://download.huzheng.org/", license="unknown",
+         url="http://download.huzheng.org/", homepage="http://download.huzheng.org/", license="unknown",
          filter=r"\.(tar\.bz2|tar\.gz|tgz|zip)$", depth=2,
          description="The oldest, largest StarDict archive, many languages. Licences are mostly not stated."),
     _src(id="archive-org", name="Internet Archive", type="archive-org", url="https://archive.org",

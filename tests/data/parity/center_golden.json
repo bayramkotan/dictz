@@ -365,7 +365,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/zh_CN/cedict-gb.ifo"
+     "url": "http://download.huzheng.org/zh_CN/cedict-gb.ifo"
     },
     {
      "archive": "",
@@ -374,7 +374,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/zh_CN/cedict-gb.dict.dz"
+     "url": "http://download.huzheng.org/zh_CN/cedict-gb.dict.dz"
     },
     {
      "archive": "",
@@ -383,7 +383,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/zh_CN/cedict-gb.idx"
+     "url": "http://download.huzheng.org/zh_CN/cedict-gb.idx"
     }
    ],
    "format": "stardict",
@@ -417,7 +417,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/dict.org/stardict-dictd-web1913-2.4.2.tar.bz2"
+     "url": "http://download.huzheng.org/dict.org/stardict-dictd-web1913-2.4.2.tar.bz2"
     }
    ],
    "format": "stardict",
@@ -451,7 +451,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2"
+     "url": "http://download.huzheng.org/dict.org/stardict-dictd_www.dict.org_gcide-2.4.2.tar.bz2"
     }
    ],
    "format": "stardict",
@@ -485,7 +485,7 @@
      "sha256": "",
      "sha512": "",
      "size": 0,
-     "url": "https://download.huzheng.org/dict.org/stardict-English-Turkish-2.4.2.tar.bz2"
+     "url": "http://download.huzheng.org/dict.org/stardict-English-Turkish-2.4.2.tar.bz2"
     }
    ],
    "format": "stardict",

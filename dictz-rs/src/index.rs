@@ -110,6 +110,35 @@ pub fn file_mtime(path: &Path) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Prefix search (`"query"*`) ranked by FTS5 on any connection to the index
+/// (the suggestion thread has its own, read-only).
+pub fn search_headword_rows(
+    conn: &Connection,
+    query: &str,
+    limit: usize,
+    dictionaries: Option<&[String]>,
+) -> Result<Vec<(String, String)>, DictzError> {
+    let fts = format!("\"{}\"*", query.replace('"', "\"\""));
+    let mut sql = String::from("SELECT headword, dictionary FROM entries WHERE entries MATCH ?");
+    let mut args: Vec<String> = vec![fts];
+    if let Some(d) = dictionaries {
+        if d.is_empty() {
+            return Ok(Vec::new());
+        }
+        sql.push_str(&format!(
+            " AND dictionary IN ({})",
+            vec!["?"; d.len()].join(",")
+        ));
+        args.extend(d.iter().cloned());
+    }
+    sql.push_str(&format!(" ORDER BY rank LIMIT {}", limit));
+    let mut st = conn.prepare(&sql)?;
+    let rows = st.query_map(params_from_iter(args.iter()), |r| {
+        Ok((r.get(0)?, r.get(1)?))
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
 /// The index database.
 pub struct IndexStore {
     conn: Connection,
@@ -395,26 +424,15 @@ impl IndexStore {
         limit: usize,
         dictionaries: Option<&[String]>,
     ) -> Result<Vec<(String, String)>, DictzError> {
-        let fts = format!("\"{}\"*", query.replace('"', "\"\""));
-        let mut sql =
-            String::from("SELECT headword, dictionary FROM entries WHERE entries MATCH ?");
-        let mut args: Vec<String> = vec![fts];
-        if let Some(d) = dictionaries {
-            if d.is_empty() {
-                return Ok(Vec::new());
-            }
-            sql.push_str(&format!(
-                " AND dictionary IN ({})",
-                vec!["?"; d.len()].join(",")
-            ));
-            args.extend(d.iter().cloned());
-        }
-        sql.push_str(&format!(" ORDER BY rank LIMIT {}", limit));
-        let mut st = self.conn.prepare(&sql)?;
-        let rows = st.query_map(params_from_iter(args.iter()), |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        search_headword_rows(&self.conn, query, limit, dictionaries)
+    }
+
+    /// The database file (`None` in memory).
+    pub fn db_path(&self) -> Option<PathBuf> {
+        self.conn
+            .path()
+            .filter(|p| !p.is_empty())
+            .map(PathBuf::from)
     }
 
     /// `true` when the dictionary's headwords are in the index.

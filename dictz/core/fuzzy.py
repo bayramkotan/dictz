@@ -26,9 +26,15 @@ def extract(query: str, candidates: Iterable[str], limit: int = DEFAULT_LIMIT,
     Ties keep candidate order (RapidFuzz ``process.extract`` semantics).
     """
     words = list(candidates)
+    return extract_prepared(query, words, [w.lower() for w in words], limit, cutoff)
+
+
+def extract_prepared(query: str, words: list[str], lowered: list[str], limit: int = DEFAULT_LIMIT,
+                     cutoff: float = DEFAULT_CUTOFF) -> list[tuple[str, float]]:
+    """:func:`extract` on a candidate list whose lower-cased copy is already
+    made (``suggest.Candidates`` keeps both)."""
     if not words:
         return []
-    lowered = [w.lower() for w in words]
     hits = process.extract(query.lower(), lowered, scorer=fuzz.ratio, limit=None, score_cutoff=cutoff)
     hits.sort(key=lambda h: (-h[1], h[2]))
     return [(words[idx], score) for _, score, idx in hits[:limit]]

@@ -7,18 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-11-22
+
+Everything about dictionaries in **one window**, a search that **never freezes**, and a search box that **stays put** — in both editions.
+
 ### Changed
+- **Fast search:** the word list and "Bunu mu demek istediniz?" are worked out on their own thread (`dictz/core/suggest.py` ↔ `dictz-rs/src/suggest.rs`) with its own read-only connection to the index; typing never waits for them, and only the newest request is answered. The fuzzy candidate list (every headword of the enabled dictionaries) is built **once** in the background — after loading and a moment after a dictionary is switched on or off — with its lower-cased copy, instead of on the first typo and again after every change; each dictionary's own list is kept, so switching one dictionary does not read all the others again. A "no result" page gets its suggestions as soon as they are ready. The Rust matcher skips candidates by length before any work and no longer lower-cases every candidate on every keystroke.
+- **The search box is fixed** above the side tabs, with an **Enter button (⏎)** beside it: it stays when Sözlükler, Favoriler or Geçmiş is open, and typing brings the word list back.
+- **Tercihler** no longer has a *Sözlükler* page that only pointed elsewhere: the dictionary settings are in **Sözlükler → Ayarlar** (and the Sözlükler menu's *Sözlük ayarları…*).
+- Default sources: **StarDict archive** is read over `http://download.huzheng.org/` (the site has no HTTPS, so the old `https://` address was refused); **dictz-data** reads the catalog kept in the dictz repository (`docs/dictz-data/catalog.json`) until its own repository exists, so it no longer answers 404.
 - **One Sözlükler window** (Sözlükler → Sözlükler…, Ctrl+M; the cloud button) replaces the dictionary manager, the Dictionary Center and the dictionary pages of Tercihler. Seven tabs: **Sözlüklerim** (search order with drag and ▲ ▼, on / off, only this, info, reindex, open folder, add files / folder, remove from the list or **with the files**, catalog licence and ↑ update per row), **Klasörler** (scanned folders, subfolders box, scan now), **Katalog**, **Kaynaklar**, **İndirmeler**, **İçe / Dışa aktar**, **Ayarlar** (dictionary and catalog settings, saved as you change them). The old *Kurulu* tab is folded into Sözlüklerim and Katalog (update one / all).
-- **One Sözlükler menu**: Sözlükler… (Ctrl+M), Sözlük ekle… (Ctrl+O), Klasör ekle… (Ctrl+Shift+O), Bağlantıdan sözlük ekle… (Ctrl+Shift+L), Sözlük klasörleri…, Sözlük indir (katalog)… (Ctrl+Shift+M), Kaynaklar (sunucular)…, Kurulumu dışa / içe aktar…, Tümünü etkinleştir / devre dışı bırak, Sözlük ayarları…. Dosya keeps only the article, favourites, desktop shortcut and Çıkış; Tercihler loses the Sözlükler and Sözlük Merkezi pages (a link to the new tab instead).
+- **One Sözlükler menu**: Sözlükler… (Ctrl+M), Sözlük ekle… (Ctrl+O), Klasör ekle… (Ctrl+Shift+O), Bağlantıdan sözlük ekle… (Ctrl+Shift+L), Sözlük klasörleri…, Sözlük indir (katalog)… (Ctrl+Shift+M), Kaynaklar (sunucular)…, Kurulumu dışa / içe aktar…, Tümünü etkinleştir / devre dışı bırak, Sözlük ayarları…. Dosya keeps only the article, favourites, desktop shortcut and Çıkış; Tercihler loses the Sözlükler and Sözlük Merkezi pages.
 - **Dictionary icons do something:** in the dictionary bar a click goes to that dictionary's article, **Ctrl+click** switches it on / off (an off dictionary is drawn faded), right click opens a menu (aç / kapa, yalnızca bunu etkinleştir, bilgi, Sözlüklerimde göster, kaldır). Switching re-runs the current search.
 
 ### Added
 - **Drag to reorder** dictionaries in the Sözlüklerim tab, the dictionary bar, the "Bulunduğu yer" panel and the left pane; the order is saved at once (`move_before` / `set_order`, same in both editions).
 - Removing a dictionary *with its files* deletes only its own files (`own_files`: source files, `.syn`, media archive), the same in both editions (`tests/test_center.py`, `dictz-rs/tests/center.rs`).
-- 24 new texts in all 25 interface languages.
-
-### Notes
-- The red source errors are expected: **dictz-data** answers 404 until the repository is created (v0.1.8); **download.huzheng.org** refuses connections (the site is down at the moment).
+- New `enter` interface icon; 25 new texts in all 25 interface languages.
 
 ## [0.1.7] — 2026-11-22
 

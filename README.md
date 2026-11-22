@@ -66,9 +66,9 @@ Both install two commands: **`dictz`** and its short name **`dct`**. They are th
 - **Multi-format:** StarDict (`.ifo`), ABBYY Lingvo DSL (`.dsl`, `.dsl.dz`), Babylon (`.bgl`).
 - **Multi-dictionary:** one query hits every dictionary, in your order.
 - **Fast:** SQLite FTS5 index with Unicode, diacritic-insensitive search and as-you-type suggestions.
-- **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first.
+- **Fuzzy search:** "did you mean" suggestions when nothing matches, closest first. Suggestions are worked out on their own thread, so typing never freezes, even with dozens of dictionaries and millions of headwords.
 - **Pictures and sounds:** DSL `[s]` media and StarDict `res/`, found under every name GoldenDict uses — `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same as folders, in any letter case.
-- **Compact, GoldenDict-like window:** search box and word list in the left pane (with Dictionaries, Favourites and History as icon tabs), one toolbar row with the dictionary bar as small toggles, thin article headers, no tab row while there is one tab, dictz's own line icons, and an **interface scale** setting (50–250 %) for high-resolution screens.
+- **Compact, GoldenDict-like window:** search box (always on top of the left pane, with an Enter button ⏎) and word list in the left pane (with Dictionaries, Favourites and History as icon tabs), one toolbar row with the dictionary bar as small toggles, thin article headers, no tab row while there is one tab, dictz's own line icons, and an **interface scale** setting (50–250 %) for high-resolution screens.
 - **Dictionary icons:** each dictionary has its own icon (or a monogram badge in its own colour), its language pair (`EN → TR`) and format, in the articles, the dictionary bar and the lists. To give a dictionary your own icon, put `Name.png` / `.ico` / `.bmp` next to `Name.ifo` / `Name.dsl` / `Name.bgl`.
 - **Scan popup:** copy a word in any program and its articles pop up next to the mouse. Also a tray icon, global hotkeys and a single running instance.
 - **Modern window:**
@@ -340,12 +340,12 @@ The order is the search order everywhere, and it is saved at once
 
 | Source | Type | What it has | Licences |
 |---|---|---|---|
-| **dictz-data** (default ★) | dictz catalog | dictz's own server: [github.com/bayramkotan/dictz-data](https://github.com/bayramkotan/dictz-data) | stated per dictionary |
+| **dictz-data** (default ★) | dictz catalog | dictz's own server; until [github.com/bayramkotan/dictz-data](https://github.com/bayramkotan/dictz-data) exists it reads [`docs/dictz-data/catalog.json`](docs/dictz-data/catalog.json) in this repository | stated per dictionary |
 | FreeDict | FreeDict database | ~200 bilingual pairs (StarDict, dictd, slob) | GPL, CC BY-SA … |
 | Wiktionary Dictionaries (Vuizur) | GitHub folder | Wiktionary → StarDict, almost every language → English | CC BY-SA 3.0 |
 | Wiktionary StarDict (xxyzz) | GitHub releases | Wiktionary dictionaries rebuilt monthly | CC BY-SA |
 | ECDICT | GitHub releases | English → Chinese | MIT |
-| StarDict archive (download.huzheng.org) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
+| StarDict archive (http://download.huzheng.org — the site has no HTTPS) | web folder listing | the oldest, largest StarDict archive | mostly not stated |
 | Internet Archive | archive.org search | community uploads (StarDict, Babylon, DSL) | vary |
 | FreeMdict cloud | Nextcloud share | MDict, StarDict and DSL packs | vary |
 | Telegram: Dictionaries_GoldenDict | Telegram channel | listed; the files open in Telegram | vary |
@@ -549,7 +549,7 @@ Pencerede de aynı işlem var: **Dosya → Masaüstü kısayolu oluştur**.
 
 - **Çoklu format:** StarDict, DSL, Babylon.
 - **Çoklu sözlük:** tek arama hepsinde çalışır.
-- **Hızlı:** SQLite FTS5 ve diakritik duyarsız arama.
+- **Hızlı:** SQLite FTS5 ve diakritik duyarsız arama; öneriler ayrı bir iş parçacığında hazırlanır, yazarken pencere hiç takılmaz. Arama kutusu sol bölmenin üstünde sabittir (yanında Enter ⏎ düğmesi), Favoriler ya da Geçmiş açıkken de görünür.
 - **Bulanık arama:** sonuç yoksa "Bunu mu demek istediniz?" önerileri.
 - **Resim ve ses:** DSL `[s]` dosyaları.
 - **Çevrimdışı:** telemetri yok.

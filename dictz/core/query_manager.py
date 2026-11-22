@@ -14,6 +14,7 @@ from ..parsers.stardict import StarDictDictionary
 from ..storage.indexer import IndexStore
 from . import fuzzy as _fuzzy
 from .media import MediaResolver
+from .suggest import Candidates, merge_suggestions
 
 _PARSER_REGISTRY: dict[str, type[Dictionary]] = {
     ".ifo": StarDictDictionary,
@@ -161,7 +162,7 @@ class QueryManager:
         self.index_store = index_store
         self._order: list[str] = []
         self._media: dict[str, MediaResolver] = {}
-        self._headword_cache: list[str] | None = None
+        self.candidates = Candidates()  # fuzzy candidates, shared with the suggestion thread
         # dictionaries in the list that could not be opened: name -> reason.
         # They stay in the list (and in the dictionary manager), never dropped.
         self.failed: dict[str, str] = {}
@@ -199,7 +200,6 @@ class QueryManager:
             if reindex or not already_indexed:
                 self.index_store.index_dictionary(dictionary)
         self._persist_order()
-        self._headword_cache = None
         return dictionary
 
     def restore_from_index(self, names: list[str] | None = None, enabled_only: bool = False,
@@ -305,7 +305,6 @@ class QueryManager:
             d = self.open_file(path)
         d.metadata.name = name
         self.dictionaries[name] = d
-        self._headword_cache = None
         return self.index_store.index_dictionary(d) if self.index_store is not None else d.metadata.word_count
 
     def attach(self, dictionary: Dictionary, path: Path | str, enabled: bool = True) -> None:
@@ -324,7 +323,6 @@ class QueryManager:
             self.enabled_names.add(name)
         else:
             self.enabled_names.discard(name)
-        self._headword_cache = None
 
     def remove_dictionary(self, name: str) -> None:
         if name in self.dictionaries:
@@ -340,7 +338,6 @@ class QueryManager:
         if self.index_store is not None:
             self.index_store.remove_dictionary(name)
         self._persist_order()
-        self._headword_cache = None
 
     def set_enabled(self, name: str, enabled: bool) -> None:
         if enabled:
@@ -349,7 +346,6 @@ class QueryManager:
             self.enabled_names.discard(name)
         if self.index_store is not None:
             self.index_store.set_enabled(name, enabled)
-        self._headword_cache = None
 
     def is_enabled(self, name: str) -> bool:
         if name in self.failed and name not in self.dictionaries and self.index_store is not None:
@@ -401,7 +397,6 @@ class QueryManager:
         if i != j:
             self._order.insert(j, self._order.pop(i))
             self._persist_order()
-            self._headword_cache = None
 
     def move_before(self, name: str, target: str | None) -> None:
         """Put ``name`` just before ``target`` (``None`` = at the end) — a drag
@@ -414,7 +409,6 @@ class QueryManager:
         if order != self._order:
             self._order = order
             self._persist_order()
-            self._headword_cache = None
 
     def set_order(self, names: list[str]) -> None:
         """Reorder the loaded dictionaries like ``names`` (unknown names are
@@ -424,7 +418,6 @@ class QueryManager:
         if order != self._order:
             self._order = order
             self._persist_order()
-            self._headword_cache = None
 
     def _persist_order(self) -> None:
         """Write the order of the loaded dictionaries to the list.
@@ -492,29 +485,30 @@ class QueryManager:
         hits = d.lookup(word, exact=True)
         return hits[0] if hits else None
 
+    def enabled_snapshot(self) -> list[tuple[str, Dictionary]]:
+        """``[(name, dictionary)]`` of the enabled dictionaries in list order —
+        what the suggestion thread works on."""
+        return [(n, self.dictionaries[n]) for n in self._order
+                if n in self.enabled_names and n in self.dictionaries]
+
     def all_headwords(self) -> list[str]:
         """Headwords of all enabled dictionaries (list order, each dictionary
         sorted, duplicates removed) — the fuzzy candidate list."""
-        if self._headword_cache is None:
-            seen: set[str] = set()
-            out: list[str] = []
-            for name in self._order:
-                if name not in self.enabled_names:
-                    continue
-                for w in self.dictionaries[name].headwords():
-                    if w not in seen:
-                        seen.add(w)
-                        out.append(w)
-            self._headword_cache = out
-        return self._headword_cache
+        got = self.candidates.get(self.enabled_snapshot())
+        return list(got[0]) if got else []
 
     def fuzzy(self, word: str, limit: int = _fuzzy.DEFAULT_LIMIT,
-              cutoff: float = _fuzzy.DEFAULT_CUTOFF) -> list[tuple[str, float]]:
-        """"Did you mean" candidates for ``word``, best first."""
+              cutoff: float = _fuzzy.DEFAULT_CUTOFF, wait: bool = True) -> list[tuple[str, float]] | None:
+        """"Did you mean" candidates for ``word``, best first. With ``wait``
+        false: ``None`` when the candidate list is not built yet (the window
+        then asks the suggestion thread)."""
         word = word.strip()
         if not word:
             return []
-        return _fuzzy.extract(word, self.all_headwords(), limit=limit, cutoff=cutoff)
+        got = self.candidates.get(self.enabled_snapshot(), wait=wait)
+        if got is None:
+            return None
+        return _fuzzy.extract_prepared(word, got[0], got[1], limit=limit, cutoff=cutoff)
 
     def suggest(self, prefix: str, limit: int = 30, fuzzy_fill_below: int = FUZZY_FILL_BELOW,
                 fuzzy_limit: int = _fuzzy.DEFAULT_LIMIT,
@@ -526,13 +520,10 @@ class QueryManager:
             return []
         enabled = [n for n in self._order if n in self.enabled_names]
         words: list[str] = []
-        seen: set[str] = set()
         if self.index_store is not None:
-            for headword, _ in self.index_store.search_headword(prefix, limit=limit, dictionaries=enabled):
-                if headword not in seen:
-                    seen.add(headword)
-                    words.append(headword)
+            words = [w for w, _ in self.index_store.search_headword(prefix, limit=limit, dictionaries=enabled)]
         else:
+            seen: set[str] = set()
             for name in enabled:
                 for entry in self.dictionaries[name].lookup(prefix, exact=False):
                     if entry.headword not in seen:
@@ -541,15 +532,8 @@ class QueryManager:
                 if len(words) >= limit:
                     words = words[:limit]
                     break
-        out = [Suggestion(w) for w in _fuzzy.rank(prefix, words)]
-        if len(out) < fuzzy_fill_below:
-            for w, _score in self.fuzzy(prefix, fuzzy_limit, fuzzy_cutoff):
-                if len(out) >= limit:
-                    break
-                if w not in seen:
-                    seen.add(w)
-                    out.append(Suggestion(w, fuzzy=True))
-        return out
+        return merge_suggestions(prefix, words, lambda: self.fuzzy(prefix, fuzzy_limit, fuzzy_cutoff) or [],
+                                 limit, fuzzy_fill_below)
 
     def close_all(self) -> None:
         for dictionary in self.dictionaries.values():
@@ -558,4 +542,3 @@ class QueryManager:
         self.enabled_names.clear()
         self._order.clear()
         self._media.clear()
-        self._headword_cache = None

@@ -83,6 +83,78 @@ where
         .collect()
 }
 
+/// A fuzzy candidate list with its lower-cased copy and character counts,
+/// made once and searched many times ([`extract_prepared`]).
+#[derive(Debug, Default, Clone)]
+pub struct Prepared {
+    /// The headwords, in candidate order.
+    pub words: Vec<String>,
+    lowered: Vec<String>,
+    lens: Vec<u32>,
+}
+
+impl Prepared {
+    /// Prepare `words` (kept in this order).
+    pub fn new(words: Vec<String>) -> Self {
+        let lowered: Vec<String> = words.iter().map(|w| w.to_lowercase()).collect();
+        let lens = lowered.iter().map(|w| w.chars().count() as u32).collect();
+        Self {
+            words,
+            lowered,
+            lens,
+        }
+    }
+
+    /// Number of candidates.
+    pub fn len(&self) -> usize {
+        self.words.len()
+    }
+
+    /// `true` when there are no candidates.
+    pub fn is_empty(&self) -> bool {
+        self.words.is_empty()
+    }
+}
+
+/// [`extract`] on a [`Prepared`] list: the same results, without lower-casing
+/// every candidate on every call; candidates whose length alone rules them
+/// out are skipped before any work.
+pub fn extract_prepared(
+    query: &str,
+    cands: &Prepared,
+    limit: usize,
+    cutoff: f64,
+) -> Vec<(String, f64)> {
+    let q: Vec<char> = query.to_lowercase().chars().collect();
+    let x = q.len();
+    let mut buf: Vec<char> = Vec::new();
+    let mut scored: Vec<(usize, f64)> = Vec::new();
+    for (i, (lw, &n)) in cands.lowered.iter().zip(&cands.lens).enumerate() {
+        let y = n as usize;
+        let lensum = x + y;
+        let best_possible = if lensum == 0 {
+            100.0
+        } else {
+            100.0 * (2 * x.min(y)) as f64 / lensum as f64
+        };
+        if best_possible + 1e-9 < cutoff {
+            continue;
+        }
+        buf.clear();
+        buf.extend(lw.chars());
+        let s = ratio_chars(&q, &buf);
+        if s >= cutoff {
+            scored.push((i, s));
+        }
+    }
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap().then(a.0.cmp(&b.0)));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(i, s)| (cands.words[i].clone(), s))
+        .collect()
+}
+
 /// Order prefix suggestions closest-first: score descending, then shorter,
 /// then case-insensitive alphabetical, then exact string.
 pub fn rank(query: &str, words: &mut [String]) {
@@ -129,6 +201,22 @@ mod tests {
         assert_eq!(r[0].0, "apple");
         assert!(r.iter().all(|(_, s)| *s >= 60.0));
         assert!(!r.iter().any(|(w, _)| w == "zebra"));
+    }
+
+    #[test]
+    fn prepared_gives_the_same_as_extract() {
+        let words: Vec<String> = ["Apple", "apply", "maple", "zebra", "ample", "Äpfel", "a"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let p = Prepared::new(words.clone());
+        for q in ["appel", "APL", "äpf", "z", ""] {
+            assert_eq!(
+                extract_prepared(q, &p, 10, 40.0),
+                extract(q, words.iter().map(String::as_str), 10, 40.0),
+                "{q}"
+            );
+        }
     }
 
     #[test]

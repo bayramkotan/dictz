@@ -256,6 +256,11 @@ pub struct DictzApp {
     suggestions: Vec<Suggestion>,
     show_suggestions: bool,
     sugg_index: Option<usize>,
+    /// Suggestions and "did you mean" are worked out on this thread.
+    suggester: Option<crate::suggest::SuggestWorker>,
+    /// The candidate list last asked to be built, and since when the
+    /// dictionaries have looked like this.
+    warm: (crate::suggest::Snapshot, Option<Instant>),
     focus_search: bool,
 
     tabs: Vec<Tab>,
@@ -346,6 +351,10 @@ impl DictzApp {
         if let Some(h) = &history {
             let _ = h.purge(prefs.int("history.max_entries"));
         }
+        let suggester = index.as_ref().and_then(|i| i.db_path()).map(|db| {
+            let ctx = cc.egui_ctx.clone();
+            crate::suggest::SuggestWorker::start(db, Box::new(move || ctx.request_repaint()))
+        });
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let search = if prefs.bool("general.restore_last_search") {
             prefs.str("state.last_search")
@@ -367,6 +376,8 @@ impl DictzApp {
             suggestions: Vec::new(),
             show_suggestions: false,
             sugg_index: None,
+            suggester,
+            warm: (Vec::new(), None),
             focus_search: true,
             tabs: vec![Tab::welcome()],
             current: 0,
@@ -1350,13 +1361,103 @@ impl DictzApp {
         entries
     }
 
+    /// "Did you mean" for `q` when the candidate list is ready; otherwise
+    /// the suggestion thread works it out and the page is filled in when it
+    /// answers (`suggest_answers`).
     fn fuzzy(&mut self, q: &str) -> Vec<(String, f64)> {
-        if !self.prefs.bool("search.fuzzy") {
+        if !self.prefs.bool("search.fuzzy") || q.trim().is_empty() {
             return Vec::new();
         }
-        let limit = self.prefs.int("search.fuzzy_limit").max(1) as usize;
-        let cutoff = self.prefs.float("search.fuzzy_cutoff");
-        self.qm.fuzzy(q, limit, cutoff)
+        let p = self.suggest_params();
+        let Some(w) = self.suggester.as_ref() else {
+            return self.qm.fuzzy(q, p.fuzzy_limit, p.fuzzy_cutoff);
+        };
+        let snap = self.qm.enabled_snapshot();
+        match w.ready(&snap) {
+            Some(c) => crate::fuzzy::extract_prepared(q.trim(), &c, p.fuzzy_limit, p.fuzzy_cutoff),
+            None => {
+                w.fuzzy(
+                    q,
+                    snap,
+                    crate::suggest::Params {
+                        limit: p.fuzzy_limit,
+                        ..p
+                    },
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    fn suggest_params(&self) -> crate::suggest::Params {
+        crate::suggest::Params {
+            limit: self.prefs.int("search.suggestion_limit").max(1) as usize,
+            fuzzy_fill_below: if self.prefs.bool("search.fuzzy") {
+                self.prefs.int("search.fuzzy_fill_below").max(0) as usize
+            } else {
+                0
+            },
+            fuzzy_limit: self.prefs.int("search.fuzzy_limit").max(1) as usize,
+            fuzzy_cutoff: self.prefs.float("search.fuzzy_cutoff"),
+        }
+    }
+
+    /// Answers of the suggestion thread; builds the candidate list in the
+    /// background once the dictionaries have stayed the same for a moment.
+    fn suggest_answers(&mut self, ctx: &egui::Context) {
+        let Some(w) = self.suggester.as_ref() else {
+            return;
+        };
+        let mut answers = Vec::new();
+        while let Some(a) = w.try_recv() {
+            answers.push(a);
+        }
+        for a in answers {
+            match a {
+                crate::suggest::Answer::Suggest { query, list } => {
+                    if self.search.trim() == query.trim() {
+                        self.show_suggestions = !list.is_empty();
+                        self.suggestions = list;
+                        self.sugg_index = None;
+                    }
+                }
+                crate::suggest::Answer::Fuzzy { query, list } => {
+                    if list.is_empty() {
+                        continue;
+                    }
+                    // every page still showing "no result" for this word
+                    for t in self.tabs.iter_mut() {
+                        if let Content::NotFound {
+                            query: q,
+                            suggestions,
+                        } = &mut t.content
+                        {
+                            if *q == query && suggestions.is_empty() {
+                                *suggestions = list.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if self.load_progress.is_some() || !self.prefs.bool("search.fuzzy") {
+            return;
+        }
+        let snap = self.qm.enabled_snapshot();
+        if snap != self.warm.0 {
+            self.warm = (snap, Some(Instant::now()));
+        }
+        if let Some(t) = self.warm.1 {
+            let settle = Duration::from_millis(1500);
+            if t.elapsed() >= settle {
+                self.warm.1 = None;
+                if let Some(w) = self.suggester.as_ref() {
+                    w.warm(self.warm.0.clone());
+                }
+            } else {
+                ctx.request_repaint_after(settle - t.elapsed());
+            }
+        }
     }
 
     fn search_with_fallback(
@@ -1514,20 +1615,21 @@ impl DictzApp {
             self.show_suggestions = false;
             return;
         }
-        let fill = if self.prefs.bool("search.fuzzy") {
-            self.prefs.int("search.fuzzy_fill_below") as usize
+        let p = self.suggest_params();
+        if let Some(w) = self.suggester.as_ref() {
+            // the word list fills in when the suggestion thread answers
+            w.suggest(&q, self.qm.enabled_snapshot(), p);
         } else {
-            0
-        };
-        self.suggestions = self.qm.suggest_with(
-            &q,
-            self.prefs.int("search.suggestion_limit").max(1) as usize,
-            fill,
-            self.prefs.int("search.fuzzy_limit").max(1) as usize,
-            self.prefs.float("search.fuzzy_cutoff"),
-        );
-        self.show_suggestions = !self.suggestions.is_empty();
-        self.sugg_index = None;
+            self.suggestions = self.qm.suggest_with(
+                &q,
+                p.limit,
+                p.fuzzy_fill_below,
+                p.fuzzy_limit,
+                p.fuzzy_cutoff,
+            );
+            self.show_suggestions = !self.suggestions.is_empty();
+            self.sugg_index = None;
+        }
         if !self.prefs.bool("search.live") {
             return;
         }
@@ -2321,10 +2423,6 @@ impl DictzApp {
     fn advanced(&mut self, ctx: &egui::Context, a: Advanced) {
         match a {
             Advanced::OpenData => self.apply(ctx, Action::OpenDataDir),
-            Advanced::DictionariesSettings => {
-                self.prefs_win = None;
-                self.open_center(ctx, super::center::TAB_SETTINGS);
-            }
             Advanced::Rescan => {
                 let prefs = match self.prefs_win.as_ref() {
                     Some(w) => w.draft.clone(),
@@ -2782,14 +2880,43 @@ impl DictzApp {
     }
 
     /// The search box and the word list (GoldenDict's search pane).
-    fn search_pane(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+    /// The search box with the Enter button beside it: on top of the side
+    /// pane, whichever tab is open.
+    fn search_box(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let id = egui::Id::new("search-box");
-        let edit = egui::TextEdit::singleline(&mut self.search)
-            .hint_text(tr("Bir kelime ara…   (Ctrl+F)"))
-            .desired_width(f32::INFINITY)
-            .margin(egui::Margin::symmetric(6, 4))
-            .id(id);
-        let mut out = edit.show(ui);
+        let button = 26.0;
+        // right to left: the button first, the box takes the rest (an exact
+        // width would let the resizable pane creep wider every frame)
+        let (mut out, enter) = ui
+            .allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), 28.0),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    uiicons::flat(ui);
+                    let tint = ui.visuals().text_color();
+                    let enter = match uiicons::image(ui.ctx(), "enter", 16.0, tint) {
+                        Some(img) => {
+                            ui.add(egui::Button::image(img).min_size(egui::vec2(button, 24.0)))
+                        }
+                        None => ui.add(egui::Button::new("⏎").min_size(egui::vec2(button, 24.0))),
+                    }
+                    .on_hover_text(tr("Ara (Enter)"));
+                    let out = egui::TextEdit::singleline(&mut self.search)
+                        .hint_text(tr("Bir kelime ara…   (Ctrl+F)"))
+                        .desired_width(f32::INFINITY)
+                        .margin(egui::Margin::symmetric(6, 4))
+                        .id(id)
+                        .show(ui);
+                    (out, enter)
+                },
+            )
+            .inner;
+        if enter.clicked() {
+            let new_tab = ui.input(|i| i.modifiers.command);
+            actions.push(Action::Explicit { new_tab });
+            self.sidebar_tab = SidebarTab::Search;
+        }
         let resp = out.response.clone();
         if self.focus_search {
             resp.request_focus();
@@ -2808,6 +2935,7 @@ impl DictzApp {
         if resp.changed() {
             self.edited_at = Some(Instant::now());
             self.show_suggestions = true;
+            self.sidebar_tab = SidebarTab::Search; // typing brings the word list back
         }
         let has_list = !self.search.trim().is_empty() && !self.suggestions.is_empty();
         if resp.has_focus() && has_list {
@@ -2835,7 +2963,10 @@ impl DictzApp {
             }
             self.focus_search = true;
         }
-        ui.add_space(3.0);
+    }
+
+    /// The word list under the search box.
+    fn search_pane(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         egui::Frame::NONE
             .fill(ui.visuals().extreme_bg_color)
             .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
@@ -3056,6 +3187,9 @@ impl DictzApp {
         if self.focus_search {
             self.sidebar_tab = SidebarTab::Search;
         }
+        // the search box first: fixed, never hidden by another tab
+        self.search_box(ui, actions);
+        ui.add_space(3.0);
         // icon tabs (names in the tooltips), like a compact GoldenDict pane
         ui.horizontal(|ui| {
             uiicons::flat(ui);
@@ -4085,6 +4219,7 @@ impl eframe::App for DictzApp {
         let mut actions: Vec<Action> = Vec::new();
         self.shortcuts(ctx, &mut actions);
 
+        self.suggest_answers(ctx);
         // debounced live search
         if let Some(t) = self.edited_at {
             let wait = Duration::from_millis(self.prefs.int("search.debounce_ms").max(0) as u64);
@@ -4171,6 +4306,9 @@ impl eframe::App for DictzApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some(mut w) = self.suggester.take() {
+            w.stop();
+        }
         if let Some(h) = &self.job {
             h.stop(); // workers end with the program; their temp files go later
         }

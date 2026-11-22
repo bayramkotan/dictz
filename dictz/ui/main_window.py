@@ -158,6 +158,7 @@ class UpdateChecker(QThread):
 class MainWindow(QMainWindow):
     hotkey_pressed = Signal(str)
     remote_request = Signal(dict)
+    _suggest_result = Signal(str, str, object)  # kind, query, result (from the suggestion thread)
 
     def __init__(self, query_manager: QueryManager, history_store: HistoryStore, preferences: Preferences,
                  startup_files: list[Path] | None = None):
@@ -207,6 +208,18 @@ class MainWindow(QMainWindow):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._run_search)
+        # suggestions and "did you mean" are worked out on their own thread
+        from ..core.suggest import SuggestWorker
+
+        qm = self.query_manager
+        self._suggester = SuggestWorker(qm.index_store.db_path if qm.index_store is not None else None,
+                                        self._suggest_result.emit, qm.candidates)
+        self._suggest_result.connect(self._on_suggest_result)
+        self._suggester.start()
+        self._warm_timer = QTimer(self)
+        self._warm_timer.setSingleShot(True)
+        self._warm_timer.timeout.connect(
+            lambda: self._suggester.submit("warm", "", self.query_manager.enabled_snapshot()))
 
         qs = QSettings()
         if self.prefs["general.remember_window"]:
@@ -358,6 +371,7 @@ class MainWindow(QMainWindow):
         self.search_box.setPlaceholderText(t("Bir kelime ara…   (Ctrl+F)"))
         self.search_box.textChanged.connect(self._on_search_text_changed)
         self.search_box.returnPressed.connect(self._run_search_explicit)
+        self.sidebar.search_requested.connect(self._run_search_explicit)
         self.search_box.installEventFilter(self)
         self.suggestions = self.sidebar.search_pane.list
         self.suggestions.itemActivated.connect(self._on_suggestion_activated)
@@ -745,13 +759,7 @@ class MainWindow(QMainWindow):
             self.rescan_folders()  # new folders: their dictionaries are added now
 
     def _on_prefs_action(self, action: str, dlg=None) -> None:
-        if action == "dictionaries_settings":
-            from .dictionary_center import TAB_SETTINGS
-
-            if dlg is not None:
-                dlg.reject()
-            self.open_center(TAB_SETTINGS)
-        elif action == "rescan":
+        if action == "rescan":
             self.rescan_folders(dlg.draft if dlg is not None else None)
         elif action == "open_data":
             self._open_data_dir()
@@ -788,10 +796,30 @@ class MainWindow(QMainWindow):
         return [e for e in entries if e.headword == query]
 
     def _fuzzy(self, query: str) -> list[tuple[str, float]]:
+        """"Did you mean" for ``query`` when the candidate list is ready;
+        otherwise the suggestion thread works it out and the page is filled
+        in when it answers (``_on_suggest_result``)."""
         p = self.prefs
-        if not p["search.fuzzy"]:
+        if not p["search.fuzzy"] or not query.strip():
             return []
-        return self.query_manager.fuzzy(query, int(p["search.fuzzy_limit"]), float(p["search.fuzzy_cutoff"]))
+        limit, cutoff = int(p["search.fuzzy_limit"]), float(p["search.fuzzy_cutoff"])
+        got = self.query_manager.fuzzy(query, limit, cutoff, wait=False)
+        if got is None:
+            self._suggester.submit("fuzzy", query, self.query_manager.enabled_snapshot(),
+                                   limit=limit, cutoff=cutoff)
+            return []
+        return got
+
+    def _on_suggest_result(self, kind: str, query: str, result) -> None:
+        if kind == "suggest":
+            if self.search_box.text().strip() == query.strip():
+                self._populate_suggestions(result)
+        elif kind == "fuzzy" and result:
+            # every page still showing "no result" for this word gets its "did you mean"
+            for i in range(self.tabs.count()):
+                v = self.tabs.widget(i)
+                if getattr(v, "word", None) == query and not v.entries and not v.suggestions:
+                    v.show_not_found(query, result)
 
     def _run_search(self) -> None:
         query = self.search_box.text().strip()
@@ -800,10 +828,11 @@ class MainWindow(QMainWindow):
             self._show_recent_in_word_list()
             return
         fill = int(p["search.fuzzy_fill_below"]) if p["search.fuzzy"] else 0
-        suggestions = self.query_manager.suggest(
-            query, limit=int(p["search.suggestion_limit"]), fuzzy_fill_below=fill,
-            fuzzy_limit=int(p["search.fuzzy_limit"]), fuzzy_cutoff=float(p["search.fuzzy_cutoff"]))
-        self._populate_suggestions(suggestions)
+        # the word list fills in when the suggestion thread answers (never blocks typing)
+        self._suggester.submit(
+            "suggest", query, self.query_manager.enabled_snapshot(), limit=int(p["search.suggestion_limit"]),
+            fuzzy_fill_below=fill, fuzzy_limit=int(p["search.fuzzy_limit"]),
+            fuzzy_cutoff=float(p["search.fuzzy_cutoff"]))
         if not p["search.live"]:
             return
         started = time.perf_counter()
@@ -1042,6 +1071,8 @@ class MainWindow(QMainWindow):
         c = getattr(self, "_center", None)
         if c is not None:
             c.refresh_dictionaries()
+        if hasattr(self, "_warm_timer"):
+            self._warm_timer.start(1500)  # build the fuzzy candidate list in the background
         self._refresh_favorites_pane()
         self._refresh_history_pane()
         self._refresh_status()
@@ -1586,6 +1617,8 @@ class MainWindow(QMainWindow):
             self._server = None
 
     def stop_services(self) -> None:
+        if getattr(self, "_suggester", None) is not None:
+            self._suggester.stop()
         if self._hotkeys is not None:
             self._hotkeys.stop()
             self._hotkeys = None

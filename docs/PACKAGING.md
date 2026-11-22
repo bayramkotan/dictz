@@ -109,13 +109,19 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 
 `dictz update --check` only compares versions (PyPI or crates.io); `--yes` skips the question.
 
-## Dictionary Center (v0.1.7; the Sözlükler window since 0.1.7b) — what it needs
+## Dictionary Center (v0.1.7; the Sözlükler window since v0.1.8) — what it needs
 
 - **Python edition:** nothing new. Downloads use `urllib.request` (system certificates, `center.proxy` or the `*_proxy` variables), unpacking `zipfile` / `tarfile` / `lzma` / `bz2`, checksums `hashlib` — all standard library. `dictz/resources/languages.json` (ISO 639 table) ships with the other resources (`MANIFEST.in`, the PyInstaller spec's `resources/**/*`).
 - **Rust edition:** the `center` feature (on by default; `cli` and `gui` turn it on) adds pure-Rust crates only — `ureq` (already used by `update`), `tar`, `regex`, `sha2`, `md-5`, `lzma-rs` (xz) and `bzip2` 0.6 with its default pure-Rust backend (`libbz2-rs-sys`, no C compiler or system libbz2). `src/center/languages.json` is built in with `include_str!` and listed in the crate's `include` — **without it the crates.io package does not build**.
 - **Network:** both editions go online only when the Dictionary Center reads a source or downloads (and for `dct update`); `center.online` = false switches all of it off. The Rust edition trusts the bundled Mozilla roots (`webpki-roots`), the Python edition the system store.
 - **Icons:** six new interface icons (`download`, `upload`, `link`, `server`, `center`, `license`) — SVGs in `dictz/resources/icons/`, PNGs for Rust from `make_samples.py`.
 - **Tests:** `tests/test_center.py` (with a local HTTP server for downloads) and `dictz-rs/tests/center.rs` read recorded answers in `tests/data/center/` and must match `center_golden.json`, `licenses_golden.json`, `sources_golden.json` and `langs_golden.json` — no test reaches the internet.
+
+## Suggestion thread (v0.1.8) — what it needs
+
+- Nothing new to install. Python: `dictz/core/suggest.py` uses `threading` and a second, read-only `sqlite3` connection to the index (`file:…?mode=ro`); RapidFuzz runs there. Rust: `src/suggest.rs` uses `std::thread`, `mpsc` and a read-only `rusqlite` connection (`SQLITE_OPEN_READ_ONLY | NO_MUTEX`). Both are part of the core (no feature flag).
+- One new interface icon, `enter` (SVG + PNG from `make_samples.py`).
+- The built-in StarDict archive source is plain `http://` (the site has no HTTPS); packagers that block plain HTTP will see only that source fail.
 
 ## Parity between the editions
 

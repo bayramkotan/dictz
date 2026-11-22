@@ -174,3 +174,42 @@ def test_resolver_finds_dz_files_folder(tmp_path: Path) -> None:
     (tmp_path / "OALD.dsl.dz.files").mkdir()
     (tmp_path / "OALD.dsl.dz.files" / "a.wav").write_bytes(b"w")
     assert MediaResolver(tmp_path / "OALD.dsl.dz").read("a.wav") == b"w"
+
+
+def test_suggestion_thread_answers_like_suggest(tmp_path: Path) -> None:
+    """The background suggestion thread gives what ``QueryManager.suggest``
+    gives; only the newest request of a kind is answered."""
+    import threading
+
+    from dictz.core.suggest import Candidates, SuggestWorker
+
+    a = write_stardict(tmp_path / "A", "A", [("apple", "elma"), ("apply", "uygula"), ("banana", "muz")])
+    store = IndexStore(tmp_path / "index.db")
+    qm = QueryManager(store)
+    qm.add_dictionary(a)
+    got: dict[str, object] = {}
+    done = threading.Event()
+
+    def on_result(kind, query, result):
+        got[kind] = (query, result)
+        if "suggest" in got and "fuzzy" in got:
+            done.set()
+
+    w = SuggestWorker(store.db_path, on_result, qm.candidates)
+    w.start()
+    snap = qm.enabled_snapshot()
+    w.submit("suggest", "ap", snap, limit=30, fuzzy_fill_below=10, fuzzy_limit=10, fuzzy_cutoff=60.0)
+    w.submit("fuzzy", "aplpe", snap, limit=5, cutoff=60.0)
+    assert done.wait(10)
+    w.stop()
+    assert got["suggest"][0] == "ap"
+    assert [s.word for s in got["suggest"][1]] == [s.word for s in qm.suggest("ap", 30)]
+    assert got["fuzzy"] == ("aplpe", qm.fuzzy("aplpe", 5))
+    # the candidate list is built once per set of dictionaries and shared
+    assert qm.candidates.ready(snap)
+    assert qm.fuzzy("aple", 5, wait=False)[0][0] == "apple"
+    c = Candidates()
+    assert c.get(snap, wait=True)[1] == ["apple", "apply", "banana"]
+    qm.set_enabled("A", False)
+    assert not qm.candidates.ready(qm.enabled_snapshot())
+    store.close()

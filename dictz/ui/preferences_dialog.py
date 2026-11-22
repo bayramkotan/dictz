@@ -273,7 +273,7 @@ class _SettingsEditing:
 
 class PreferencesDialog(_SettingsEditing, QDialog):
     preferences_changed = Signal(object)
-    action_requested = Signal(str)  # dictionaries_settings | reindex | clear_history | clear_favorites | check_updates | open_data
+    action_requested = Signal(str)  # reindex | clear_history | clear_favorites | check_updates | open_data
 
     def __init__(self, prefs: Preferences, parent: QWidget | None = None):
         super().__init__(parent)
@@ -304,9 +304,7 @@ class PreferencesDialog(_SettingsEditing, QDialog):
 
         for sec_id, title in SECTIONS:
             if sec_id in PAGES_IN_DICTIONARIES_WINDOW:
-                if sec_id == PAGES_IN_DICTIONARIES_WINDOW[0]:
-                    self._add_dictionaries_link_page()
-                continue
+                continue  # edited in Sözlükler → Ayarlar
             settings = [s for s in SCHEMA if s.key.split(".")[0] == sec_id]
             self._add_page(title, settings)
         self._add_shortcuts_page()
@@ -359,25 +357,6 @@ class PreferencesDialog(_SettingsEditing, QDialog):
         self.page_keys.append(keys)
         self.stack.addWidget(page)
         QListWidgetItem(t(title), self.nav)
-
-    def _add_dictionaries_link_page(self) -> None:
-        """The dictionary settings live in the Dictionaries window now; this
-        page only points there (and the search still finds them)."""
-        page, lay = self._page_container(t("Sözlükler"))
-        info = QLabel(t("Sözlük klasörleri, sözlük ve Sözlük Merkezi ayarları Sözlükler penceresinde, "
-                        "listeniz, kataloğunuz ve indirmelerinizle bir arada."))
-        info.setWordWrap(True)
-        lay.addWidget(info)
-        b = QPushButton(t("Sözlükler penceresinde aç (Ctrl+M)"))
-        b.clicked.connect(lambda: self.action_requested.emit("dictionaries_settings"))
-        row = QHBoxLayout()
-        row.addWidget(b)
-        row.addStretch(1)
-        lay.addLayout(row)
-        lay.addStretch(1)
-        self.page_keys.append([])
-        self.stack.addWidget(page)
-        QListWidgetItem(t("Sözlükler"), self.nav)
 
     def _reset_page(self) -> None:
         i = self.stack.currentIndex()

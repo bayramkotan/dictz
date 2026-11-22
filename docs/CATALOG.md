@@ -4,7 +4,8 @@ A **dictz catalog** is one JSON file listing downloadable dictionaries. The
 Sözlükler window (Katalog tab) reads it from any address — a web server, GitHub, a share,
 a `file:` path — when it is added as a source of type `dictz-catalog`.
 dictz's own default server, [github.com/bayramkotan/dictz-data](https://github.com/bayramkotan/dictz-data),
-is a dictz catalog too. Both editions (Python and Rust) read and write the
+is a dictz catalog too (until that repository exists, the built-in source reads
+`docs/dictz-data/catalog.json` from the dictz repository). Both editions (Python and Rust) read and write the
 same format.
 
 ## The file

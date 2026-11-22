@@ -18,6 +18,23 @@ def file_mtime(path: Path | str) -> float:
         return 0.0
 
 
+def search_headword_rows(con: sqlite3.Connection, query: str, limit: int = 100,
+                         dictionaries: list[str] | None = None) -> list[tuple[str, str]]:
+    """Prefix search (``"query"*``) ranked by FTS5 on any connection to the
+    index (the suggestion thread has its own, read-only)."""
+    if dictionaries is not None and not dictionaries:
+        return []
+    safe = query.replace('"', '""')
+    sql = "SELECT headword, dictionary FROM entries WHERE entries MATCH ?"
+    args: list = [f'"{safe}"*']
+    if dictionaries is not None:
+        sql += f" AND dictionary IN ({','.join('?' * len(dictionaries))})"
+        args.extend(dictionaries)
+    sql += " ORDER BY rank LIMIT ?"
+    args.append(limit)
+    return [(r[0], r[1]) for r in con.execute(sql, args).fetchall()]
+
+
 class IndexStore:
     SCHEMA = """
     CREATE TABLE IF NOT EXISTS dictionaries (
@@ -243,21 +260,8 @@ class IndexStore:
 
         ``dictionaries`` limits the search; an empty list means "none".
         """
-        if dictionaries is not None and not dictionaries:
-            return []
-        safe = query.replace('"', '""')
-        fts_query = f'"{safe}"*'
-        sql = "SELECT headword, dictionary FROM entries WHERE entries MATCH ?"
-        args: list = [fts_query]
-        if dictionaries is not None:
-            sql += f" AND dictionary IN ({','.join('?' * len(dictionaries))})"
-            args.extend(dictionaries)
-        sql += " ORDER BY rank LIMIT ?"
-        args.append(limit)
         with self._cursor() as cur:
-            cur.execute(sql, args)
-            rows = cur.fetchall()
-        return [(r["headword"], r["dictionary"]) for r in rows]
+            return search_headword_rows(cur.connection, query, limit, dictionaries)
 
     def is_indexed(self, name: str) -> bool:
         row = self.registry.get(name)

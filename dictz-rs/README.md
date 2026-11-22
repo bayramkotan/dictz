@@ -53,10 +53,11 @@ The Windows binary is a GUI program, but it attaches to the console when you sta
 - **One Sözlükler window** (Ctrl+M) with seven tabs — Sözlüklerim (drag rows to reorder, on / off, only this, info, reindex, remove from the list or with the files), Klasörler, Katalog, Kaynaklar, İndirmeler, İçe / Dışa aktar, Ayarlar — and one **Sözlükler** menu; Dosya keeps only article, favourites, shortcut and quit.
 - **Catalog** (Ctrl+Shift+M): catalog of free dictionaries from many servers (dictz-data, FreeDict, Wiktionary builds, ECDICT, the StarDict archive, the Internet Archive, FreeMdict, Telegram) or your own server, folder or link, with each dictionary's **licence**; download queue with pause / resume / retry and resumed partial downloads, checksums, unpacking (zip, tar, tar.gz, tar.xz, tar.bz2 — pure Rust), uninstall, updates, setup export / import, `catalog.json` builder for your own server. Same files and results as the Python edition.
 - **Multi-dictionary search** in your own order. Change the order by dragging in the Sözlüklerim tab, the dictionary bar, the found-in panel or the left pane.
-- **Fuzzy search:** "did you mean" suggestions. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
+- **Fuzzy search:** "did you mean" suggestions, worked out on their own thread (`suggest.rs`) so typing never freezes. The scores are identical to RapidFuzz `fuzz.ratio`, which the Python edition uses.
 - **DSL pictures and sounds** are read from `X.dsl.dz.files.zip`, `X.dsl.files.zip`, `X.files.zip` or the same names as folders (any letter case), StarDict's from `res/`. Pictures show inline; sounds play with one click (WAV, MP3, Ogg, FLAC).
 - **SQLite FTS5 index:** instant, diacritic-insensitive prefix suggestions.
 - **Interface:**
+  - search box fixed on top of the side pane with an Enter button (⏎), also while Dictionaries, Favourites or History is open
   - tabs, back/forward, random word, favorites and history (with filters)
   - dictionary bar: click = go to that dictionary's article, Ctrl+click = on / off (off is faded), right click = menu, drag = reorder; the same in the "found in" panel
   - 25 interface languages, picked from the flag at the top right (Arabic, Persian and Urdu are shaped and drawn right to left)

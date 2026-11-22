@@ -209,7 +209,7 @@ pub struct QueryManager {
     dicts: Vec<Loaded>,
     /// Optional FTS5 index (suggestions + persistence of the dictionary list).
     pub index: Option<IndexStore>,
-    headword_cache: Option<Vec<String>>,
+    headword_cache: Option<std::sync::Arc<crate::fuzzy::Prepared>>,
     /// Dictionaries of the list that could not be opened: name → reason.
     /// They stay in the list (and in the dictionary manager), never dropped.
     pub failed: std::collections::HashMap<String, String>,
@@ -724,9 +724,22 @@ impl QueryManager {
             .collect()
     }
 
-    /// Headwords of all enabled dictionaries (list order, each dictionary
-    /// sorted, duplicates removed) — the fuzzy candidate list.
-    pub fn all_headwords(&mut self) -> &[String] {
+    /// `(name, stamp)` of the enabled dictionaries in list order — what the
+    /// suggestion thread works on. The stamp changes when a dictionary is
+    /// opened again or its word count changes.
+    pub fn enabled_snapshot(&self) -> crate::suggest::Snapshot {
+        self.dicts
+            .iter()
+            .filter(|d| d.enabled)
+            .map(|d| {
+                let ptr = &*d.dict as *const dyn Dictionary as *const u8 as usize as u64;
+                let n = d.dict.metadata().word_count as u64;
+                (d.dict.metadata().name.clone(), ptr.rotate_left(24) ^ n)
+            })
+            .collect()
+    }
+
+    fn prepared(&mut self) -> std::sync::Arc<crate::fuzzy::Prepared> {
         if self.headword_cache.is_none() {
             let mut seen = HashSet::new();
             let mut out = Vec::new();
@@ -737,9 +750,15 @@ impl QueryManager {
                     }
                 }
             }
-            self.headword_cache = Some(out);
+            self.headword_cache = Some(std::sync::Arc::new(crate::fuzzy::Prepared::new(out)));
         }
-        self.headword_cache.as_deref().unwrap_or(&[])
+        self.headword_cache.clone().unwrap_or_default()
+    }
+
+    /// Headwords of all enabled dictionaries (list order, each dictionary
+    /// sorted, duplicates removed) — the fuzzy candidate list.
+    pub fn all_headwords(&mut self) -> Vec<String> {
+        self.prepared().words.clone()
     }
 
     /// "Did you mean" candidates for `word`, best first.
@@ -748,8 +767,8 @@ impl QueryManager {
         if word.is_empty() {
             return Vec::new();
         }
-        let words = self.all_headwords();
-        fuzzy::extract(&word, words.iter().map(String::as_str), limit, cutoff)
+        let p = self.prepared();
+        fuzzy::extract_prepared(&word, &p, limit, cutoff)
     }
 
     /// Suggestions for the search box: prefix hits ranked closest-first,
@@ -780,16 +799,12 @@ impl QueryManager {
         }
         let enabled = self.enabled_names();
         let mut words: Vec<String> = Vec::new();
-        let mut seen: HashSet<String> = HashSet::new();
         if let Some(index) = self.index.as_ref() {
             if let Ok(rows) = index.search_headword(&prefix, limit, Some(&enabled)) {
-                for (w, _) in rows {
-                    if seen.insert(w.clone()) {
-                        words.push(w);
-                    }
-                }
+                words = rows.into_iter().map(|(w, _)| w).collect();
             }
         } else {
+            let mut seen: HashSet<String> = HashSet::new();
             'outer: for d in self.dicts.iter().filter(|d| d.enabled) {
                 for e in d.dict.lookup(&prefix, false) {
                     if seen.insert(e.headword.clone()) {
@@ -801,25 +816,13 @@ impl QueryManager {
                 }
             }
         }
-        fuzzy::rank(&prefix, &mut words);
-        let mut out: Vec<Suggestion> = words
-            .into_iter()
-            .map(|word| Suggestion { word, fuzzy: false })
-            .collect();
-        if out.len() < fuzzy_fill_below {
-            for (w, _) in self.fuzzy(&prefix, fuzzy_limit, fuzzy_cutoff) {
-                if out.len() >= limit {
-                    break;
-                }
-                if seen.insert(w.clone()) {
-                    out.push(Suggestion {
-                        word: w,
-                        fuzzy: true,
-                    });
-                }
-            }
-        }
-        out
+        let unique = words.iter().collect::<HashSet<_>>().len();
+        let fz = if unique < fuzzy_fill_below {
+            self.fuzzy(&prefix, fuzzy_limit, fuzzy_cutoff)
+        } else {
+            Vec::new()
+        };
+        crate::suggest::merge_suggestions(&prefix, words, move || fz, limit, fuzzy_fill_below)
     }
 
     /// Close everything.
@@ -854,6 +857,56 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn suggestion_thread_answers_like_suggest() {
+        use crate::suggest::{Answer, Params, SuggestWorker};
+        let d = tmp("worker");
+        let a = write_stardict(
+            &d.join("a"),
+            "A",
+            &[("apple", "elma"), ("apply", "uygula"), ("banana", "muz")],
+        )
+        .unwrap();
+        let db = d.join("index.db");
+        let mut qm = QueryManager::new(Some(IndexStore::open(&db).unwrap()));
+        qm.add_dictionary(&a, false).unwrap();
+        let mut w = SuggestWorker::start(db, Box::new(|| {}));
+        let snap = qm.enabled_snapshot();
+        let p = Params {
+            limit: 30,
+            fuzzy_fill_below: 10,
+            fuzzy_limit: 10,
+            fuzzy_cutoff: 60.0,
+        };
+        w.suggest("ap", snap.clone(), p);
+        w.fuzzy("aplpe", snap.clone(), Params { limit: 5, ..p });
+        let (mut sug, mut fz) = (None, None);
+        let t = std::time::Instant::now();
+        while (sug.is_none() || fz.is_none()) && t.elapsed().as_secs() < 10 {
+            match w.try_recv() {
+                Some(Answer::Suggest { query, list }) => sug = Some((query, list)),
+                Some(Answer::Fuzzy { query, list }) => fz = Some((query, list)),
+                None => std::thread::sleep(std::time::Duration::from_millis(5)),
+            }
+        }
+        let (q, list) = sug.unwrap();
+        assert_eq!(q, "ap");
+        let want: Vec<String> = qm.suggest("ap", 30).into_iter().map(|s| s.word).collect();
+        assert_eq!(list.into_iter().map(|s| s.word).collect::<Vec<_>>(), want);
+        assert_eq!(
+            fz.unwrap(),
+            ("aplpe".to_string(), qm.fuzzy("aplpe", 5, 60.0))
+        );
+        // the candidate list is kept for this set of dictionaries
+        assert_eq!(
+            w.ready(&snap).unwrap().words,
+            vec!["apple", "apply", "banana"]
+        );
+        qm.set_enabled("A", false);
+        assert!(w.ready(&qm.enabled_snapshot()).is_none());
+        w.stop();
     }
 
     #[test]
