@@ -128,7 +128,7 @@ def test_formats() -> None:
 def test_sources_file(tmp_path: Path) -> None:
     s = Sources(tmp_path)
     ids = [x["id"] for x in s.all()]
-    assert ids == [b["id"] for b in BUILTIN] and s.default_id() == "freedict"
+    assert ids == [b["id"] for b in BUILTIN] and s.default_id() == "dictz-data"
     mine = s.add({"name": "My server", "type": "dictz-catalog", "url": "https://me.example/catalog.json"})
     assert mine["id"] == "my-server" and not mine["builtin"]
     assert s.add({"name": "My server", "url": "x"})["id"] == "my-server-2"
@@ -358,11 +358,8 @@ def test_retired_builtin_addresses_move(tmp_path: Path) -> None:
     for s in old:
         if s["id"] == "huzheng":
             s.update(url="https://download.huzheng.org/", enabled=False)
-    old.append(dict(clean({"id": "dictz-data", "name": "dictz-data (default server)", "type": "dictz-catalog",
-                           "url": "https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
-                           "builtin": True})))
-    old.append(dict(clean({"id": "my-data", "name": "dictz-data", "type": "dictz-catalog",
-                           "url": "https://my.example.org/catalog.json", "builtin": True})))
+        if s["id"] == "dictz-data":
+            s.update(url="https://my.example.org/catalog.json")
     old.append(dict(clean({"id": "freemdict", "name": "FreeMdict cloud", "type": "nextcloud-share",
                            "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", "builtin": True})))
     old.append(dict(clean({"id": "mine", "name": "Mine", "type": "local", "url": "/x"})))
@@ -374,10 +371,10 @@ def test_retired_builtin_addresses_move(tmp_path: Path) -> None:
     hz = src.get("huzheng")
     assert hz["url"] == "https://stardict.uber.space/" and hz["enabled"] is False
     assert not (center / "cache" / "huzheng.json").exists()
-    # built-ins that were dropped go, with their cache; the default falls back
-    assert src.get("freemdict") is None and src.get("dictz-data") is None and src.get("mine") is not None
-    assert src.get("my-data")["url"] == "https://my.example.org/catalog.json"
+    assert src.get("dictz-data")["url"] == "https://my.example.org/catalog.json"
+    # a built-in that was dropped goes, with its cache; the default falls back
+    assert src.get("freemdict") is None and src.get("mine") is not None
     assert not (center / "cache" / "freemdict.json").exists()
-    assert src.data()["default"] == "freedict"
+    assert src.data()["default"] == "dictz-data"
     stored = json.loads((center / "sources.json").read_text(encoding="utf-8"))
     assert next(s for s in stored["sources"] if s["id"] == "huzheng")["url"] == "https://stardict.uber.space/"

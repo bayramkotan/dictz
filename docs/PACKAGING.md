@@ -6,13 +6,18 @@ Everything is driven by one workflow, `.github/workflows/ci.yml`.
 |---|---|
 | pull request, or Actions → CI → **Run workflow** | lint · Python tests (Linux/Windows/macOS × 3.10–3.14) · Rust check + test (incl. parity tests) + library-only build + `--selftest` · wheel install smoke + `dictz --selftest` |
 | push to `main` (no tag) | nothing — so a release (main + tag push) shows up as exactly **one** run |
-| push a `v*` tag | all of the above, then **preflight** → build and check the Python wheel (`python-dist`) and the Rust crate (`rust-package`, `cargo package`) **without uploading them** → portable binaries of both editions (each runs `--selftest`) + Android APK → **GitHub Release** |
-
-**Private since v0.2.1:** the repository is private and nothing is published to PyPI or crates.io (0.2.0 is the last version there). `pyproject.toml` carries the `Private :: Do Not Upload` classifier (PyPI refuses such an upload) and `dictz-rs/Cargo.toml` has `publish = false` (cargo refuses), so a mistaken `twine upload` / `cargo publish` cannot leak the source. GitHub Release files of a private repository are visible only to people with access to it; Actions minutes on a private repository count against the account's monthly allowance (macOS runners cost more).
+| push a `v*` tag | all of the above, then **preflight** → publish to **PyPI** (Python edition) + **crates.io** (Rust edition) → build portable binaries of both editions (each runs `--selftest`) → **GitHub Release** |
 
 ## One-time setup
 
-No secrets are needed: the release uses the built-in `GITHUB_TOKEN`. The old `PYPI_API_TOKEN` and `CARGO_REGISTRY_TOKEN` secrets are not used any more and can be deleted (Settings → Secrets and variables → Actions); revoke the tokens on PyPI / crates.io too.
+Add two repository secrets at **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Where to get it |
+|---|---|
+| `PYPI_API_TOKEN` | https://pypi.org/manage/account/token/ → Add API token → scope: project `dictz` |
+| `CARGO_REGISTRY_TOKEN` | https://crates.io/settings/tokens → New Token → scopes `publish-new`, `publish-update` (the crates.io account needs a verified e-mail) |
+
+If either secret is missing, the `preflight` job fails within seconds with a message naming it — nothing is half-published.
 
 ## Cutting a release
 
@@ -27,7 +32,7 @@ No secrets are needed: the release uses the built-in `GITHUB_TOKEN`. The old `PY
    git push origin vX.Y.Z
    ```
 
-Re-pushing the same tag cancels the previous run; re-running a release only builds and uploads the release files again.
+Re-pushing the same tag cancels the previous run. PyPI and crates.io uploads are skipped if that version already exists, so re-running a release is safe.
 
 ## Artifacts
 
@@ -102,12 +107,12 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 | Rust | `cargo install` | `cargo install dictz --locked --force` |
 | Rust | portable binary | downloads the release archive and swaps the executable, and a sibling `dct` copy (Windows keeps `dictz.old` until the next start) |
 
-`dictz update --check` only compares versions (PyPI or crates.io; since v0.2.1 those stay at 0.2.0, so `dct update` does not see newer releases until the subscription / update server job); `--yes` skips the question.
+`dictz update --check` only compares versions (PyPI or crates.io); `--yes` skips the question.
 
 ## Dictionary Center (v0.1.7; the Sözlükler window since v0.1.8) — what it needs
 
 - **Python edition:** nothing new. Downloads use `urllib.request` (system certificates, `center.proxy` or the `*_proxy` variables), unpacking `zipfile` / `tarfile` / `lzma` / `bz2`, checksums `hashlib` — all standard library. `dictz/resources/languages.json` (ISO 639 table) ships with the other resources (`MANIFEST.in`, the PyInstaller spec's `resources/**/*`).
-- **Rust edition:** the `center` feature (on by default; `cli` and `gui` turn it on) adds pure-Rust crates only — `ureq` (already used by `update`), `tar`, `regex`, `sha2`, `md-5`, `lzma-rs` (xz) and `bzip2` 0.6 with its default pure-Rust backend (`libbz2-rs-sys`, no C compiler or system libbz2). `src/center/languages.json` is built in with `include_str!` and listed in the crate's `include` — **without it the packaged crate does not build**.
+- **Rust edition:** the `center` feature (on by default; `cli` and `gui` turn it on) adds pure-Rust crates only — `ureq` (already used by `update`), `tar`, `regex`, `sha2`, `md-5`, `lzma-rs` (xz) and `bzip2` 0.6 with its default pure-Rust backend (`libbz2-rs-sys`, no C compiler or system libbz2). `src/center/languages.json` is built in with `include_str!` and listed in the crate's `include` — **without it the crates.io package does not build**.
 - **Network:** both editions go online only when the Dictionary Center reads a source or downloads (and for `dct update`); `center.online` = false switches all of it off. The Rust edition trusts the bundled Mozilla roots (`webpki-roots`), the Python edition the system store.
 - **Icons:** six new interface icons (`download`, `upload`, `link`, `server`, `center`, `license`) — SVGs in `dictz/resources/icons/`, PNGs for Rust from `make_samples.py`.
 - **Tests:** `tests/test_center.py` (with a local HTTP server for downloads) and `dictz-rs/tests/center.rs` read recorded answers in `tests/data/center/` and must match `center_golden.json`, `licenses_golden.json`, `sources_golden.json` and `langs_golden.json` — no test reaches the internet.
@@ -120,18 +125,15 @@ No new system packages are needed to build either edition. A Linux tray needs a 
 
 ## Themes (v0.1.9) — what they need
 
-- `dictz/resources/themes.json` ships with the other resources (`MANIFEST.in` takes all of `dictz/resources`). The Rust crate embeds `src/gui/themes.json` with `include_str!` — it is listed in `Cargo.toml`'s `include`; **without it the packaged crate does not build**. `make_samples.py` copies it; `tests/test_themes.py` checks the copy is identical.
+- `dictz/resources/themes.json` ships with the other resources (`MANIFEST.in` takes all of `dictz/resources`). The Rust crate embeds `src/gui/themes.json` with `include_str!` — it is listed in `Cargo.toml`'s `include`; **without it the crates.io package does not build**. `make_samples.py` copies it; `tests/test_themes.py` checks the copy is identical.
 
 ## Sound players (0.2.0b) — what they need
 
 - Nothing new is required: the built-in players are Qt Multimedia (Python; `QAudioDecoder` decodes MP3 / Ogg into a padded WAV) and rodio (Rust, the `audio` feature). The external players (`mpv`, `ffplay`, `vlc`/`cvlc`, `mplayer`) are optional and looked up on `PATH` and in their usual Windows / macOS folders; a package may *recommend* `mpv` or `ffmpeg`.
 
-## Mobile apps (dictz-mobile/) — what they need
+## Phone apps
 
-- Build machine: Flutter 3.24.5, Java 17, Rust stable; Android: the NDK (`ANDROID_NDK_HOME`) and `cargo-ndk`; iOS: macOS with Xcode and CocoaPods. `tool/prepare.sh android|ios` does the rest (assets from `dictz/resources`, `flutter create` for the platform folders, the Rust core).
-- The core crate `dictz-mobile/rust` uses `dictz` with `default-features = false, features = ["center"]` (no window; the catalog and download queue over ureq + rustls with `ring`, which cross-compile with cargo-ndk and for iOS without OpenSSL); rusqlite's bundled SQLite is compiled by the NDK / Xcode toolchain.
-- **Permissions** (written into the generated platform files by `tool/prepare.sh`): Android `INTERNET` (catalog), `READ_/WRITE_EXTERNAL_STORAGE` (Android ≤ 10, with `requestLegacyExternalStorage`) and `MANAGE_EXTERNAL_STORAGE` (Android 11+, *All files access*, for the shared folder `/storage/emulated/0/dictz`). Google Play allows `MANAGE_EXTERNAL_STORAGE` only for some app kinds: a Play build may have to drop it and keep the dictionaries in the app's own folder (`Android/data/com.bayramkotan.dictz_mobile/files/dictionaries`, which dictz already falls back to). iOS: `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`, so `Documents/dictionaries` shows in the Files app.
-- Distribution: the APK from *Actions → CI → Run workflow* (artifact `dictz-android`) (debug-key signed: sideload; Play Store needs an upload key). iOS needs an Apple developer account for TestFlight / App Store; the workflow builds `--no-codesign`.
+The Android / iOS apps are a separate, private project (**dictz-mobile**, Flutter on this repository's Rust crate, used from crates.io as `dictz = { version = "0.2", default-features = false, features = ["center"] }`). Keep the `center` feature building without a window (`cargo clippy --no-default-features --features center`) — the phone core needs it.
 
 ## Parity between the editions
 

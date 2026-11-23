@@ -37,8 +37,6 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Education",
     "Topic :: Text Processing :: Linguistic",
-    # private since v0.2.1: PyPI refuses any upload that carries this classifier
-    "Private :: Do Not Upload",
 ]
 dependencies = [
     "PySide6>=6.6.0",

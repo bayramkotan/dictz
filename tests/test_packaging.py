@@ -136,28 +136,21 @@ def test_ci_workflow_selftests_every_binary() -> None:
     assert "dictz --selftest" in text                                    # pip install
 
 
-def test_ci_workflow_never_publishes_the_source() -> None:
-    """Private since v0.2.1: a tag builds the packages but never uploads them
-    to PyPI or crates.io, and needs no publishing secrets."""
+def test_ci_workflow_uses_token_secrets_not_oidc_environments() -> None:
+    """Publishing uses API-token secrets; no GitHub environments / PyPI OIDC
+    publisher setup is required (that setup caused invalid-publisher errors)."""
     text = CI_YML.read_text(encoding="utf-8")
-    for gone in ("PYPI_API_TOKEN", "CARGO_REGISTRY_TOKEN", "pypa/gh-action-pypi-publish", "cargo publish",
-                 "twine upload"):
-        assert gone not in text, gone
+    assert "secrets.PYPI_API_TOKEN" in text
+    assert "secrets.CARGO_REGISTRY_TOKEN" in text
     assert "environment:" not in text
     assert "id-token: write" not in text
 
 
-def test_packages_refuse_a_public_upload() -> None:
-    """Even by hand: PyPI refuses the classifier, cargo refuses publish = false."""
-    assert '"Private :: Do Not Upload"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert "\npublish = false\n" in (ROOT / "dictz-rs" / "Cargo.toml").read_text(encoding="utf-8")
-
-
-def test_ci_workflow_preflight_gates_the_packages() -> None:
+def test_ci_workflow_preflight_fails_fast_on_missing_secrets() -> None:
     data = _load_yaml(CI_YML)
     assert "preflight" in data["jobs"]
-    assert "preflight" in data["jobs"]["python-dist"]["needs"]
-    assert "preflight" in data["jobs"]["rust-package"]["needs"]
+    assert "preflight" in data["jobs"]["publish-pypi"]["needs"]
+    assert "preflight" in data["jobs"]["publish-crates"]["needs"]
 
 
 def test_ci_workflow_runs_pyinstaller() -> None:
@@ -181,14 +174,16 @@ def test_ci_workflow_runs_once_per_release() -> None:
     assert "workflow_dispatch" in triggers
 
 
-def test_ci_workflow_builds_the_python_package() -> None:
+def test_ci_workflow_publishes_to_pypi() -> None:
     text = CI_YML.read_text(encoding="utf-8")
-    assert "python -m build" in text and "twine check" in text
+    assert "pypa/gh-action-pypi-publish" in text
+    assert "python -m build" in text
 
 
-def test_ci_workflow_packages_the_rust_crate() -> None:
+def test_ci_workflow_publishes_to_crates_io() -> None:
     text = CI_YML.read_text(encoding="utf-8")
-    assert "cargo package --locked" in text
+    assert "crates.io" in text.lower()
+    assert "cargo publish" in text
 
 
 def test_ci_workflow_builds_rust() -> None:
@@ -267,10 +262,10 @@ def test_ci_builds_and_selftests_rust_binaries() -> None:
 
 def test_ci_installs_alsa_for_rust() -> None:
     data = _load_yaml(CI_YML)
-    for job in ("rust", "rust-package", "build-rust-binaries"):
+    for job in ("rust", "publish-crates", "build-rust-binaries"):
         steps = data["jobs"][job]["steps"]
         assert any("libasound2-dev" in str(st.get("run", "")) for st in steps), job
-    assert "cargo package --locked" in CI_YML.read_text(encoding="utf-8")
+    assert "cargo publish --locked" in CI_YML.read_text(encoding="utf-8")
 
 
 def test_rust_license_matches_python() -> None:

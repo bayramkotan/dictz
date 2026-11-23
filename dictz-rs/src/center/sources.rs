@@ -28,7 +28,7 @@ pub const TYPES: &[&str] = &[
 /// Sign-in kinds.
 pub const AUTH: &[&str] = &["none", "basic", "bearer", "header"];
 /// The default server.
-pub const DEFAULT_SERVER: &str = "freedict";
+pub const DEFAULT_SERVER: &str = "dictz-data";
 
 /// One source.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -168,6 +168,12 @@ pub fn builtin() -> Vec<Source> {
     };
     vec![
         mk(
+            json!({"id": "dictz-data", "name": "dictz-data (default server)", "type": "dictz-catalog",
+            "url": "https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
+            "homepage": "https://github.com/bayramkotan/dictz/tree/main/docs/dictz-data",
+            "description": "dictz's own dictionary server: every dictionary dictz offers, with its licence."}),
+        ),
+        mk(
             json!({"id": "freedict", "name": "FreeDict", "type": "freedict", "url": "https://freedict.org/freedict-database.json",
             "homepage": "https://freedict.org/", "license": "freedict",
             "description": "Free bilingual dictionaries, about 200 language pairs (StarDict, dictd, slob)."}),
@@ -265,34 +271,29 @@ pub struct Sources {
 /// Earlier addresses of built-in sources. A stored built-in still on one of
 /// them is moved to today's address (and its cached answer dropped); an
 /// address the user typed stays. Mirrors `RETIRED_URLS` in `sources.py`.
-pub const RETIRED_URLS: &[(&str, &[&str])] = &[(
-    "huzheng",
-    &[
-        "https://download.huzheng.org/",
-        "http://download.huzheng.org/",
-    ],
-)];
+pub const RETIRED_URLS: &[(&str, &[&str])] = &[
+    (
+        "dictz-data",
+        &["https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json"],
+    ),
+    (
+        "huzheng",
+        &[
+            "https://download.huzheng.org/",
+            "http://download.huzheng.org/",
+        ],
+    ),
+];
 
 /// Built-in sources that were dropped, with their built-in addresses. A
 /// stored copy still on that address goes (with its cache); one the user
 /// pointed elsewhere stays as the user's own source. Mirrors
 /// `RETIRED_BUILTINS` in `sources.py`.
-pub const RETIRED_BUILTINS: &[(&str, &[&str])] = &[
-    (
-        // its server answers HTTP 500 to folder listings (v0.2.0)
-        "freemdict",
-        &["https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs"],
-    ),
-    (
-        // dictz's own server: its catalog was empty, and the repository it
-        // was read from is private since v0.2.1 (it only showed an error)
-        "dictz-data",
-        &[
-            "https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json",
-            "https://raw.githubusercontent.com/bayramkotan/dictz-data/main/catalog.json",
-        ],
-    ),
-];
+pub const RETIRED_BUILTINS: &[(&str, &[&str])] = &[(
+    // its server answers HTTP 500 to folder listings (v0.2.0)
+    "freemdict",
+    &["https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs"],
+)];
 
 /// A stored built-in that is no longer built in.
 fn dropped(s: &Source) -> bool {

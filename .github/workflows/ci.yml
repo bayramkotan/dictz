@@ -1,27 +1,23 @@
 name: CI
 
 # One workflow, one run per release.
-#   push a v* tag   -> lint + test + rust + install-smoke, then a GitHub
-#                      Release with the portable binaries of BOTH editions,
-#                      the Python wheel and the Android APK
-#
-# Since v0.2.1 the repository is private and dictz is not published to PyPI or
-# crates.io any more: a tag must never upload the source anywhere public. The
-# Python wheel and the Rust crate are only built (and checked) here.
+#   push a v* tag   -> lint + test + rust + install-smoke, then publish to
+#                      PyPI (Python edition), crates.io (Rust edition) and
+#                      GitHub Releases (portable binaries of BOTH editions)
 #   pull request    -> lint + test + rust + install-smoke
-#   manual          -> Actions -> CI -> "Run workflow" (tests only, plus the
-#                      phone apps: their APK / unsigned iOS app as artifacts)
+#   manual          -> Actions -> CI -> "Run workflow" (tests only)
 #
-# The mobile jobs (dictz-mobile/: Flutter + the Rust core) run on tags and
-# manual runs, not on pull requests. They do not hold up the release: on a
-# tag the Android APK is one of the release's files (the release does not
-# wait for it to succeed).
+# The phone apps are a separate, private project (dictz-mobile) with its own
+# workflow; it uses this repository's Rust crate from crates.io.
 #
 # Plain pushes to main deliberately do NOT trigger CI: a release pushes both
 # main and a tag, which GitHub reports as two separate push events — reacting
 # to both produced two runs for every release.
 #
-# No repository secrets are needed (the release uses the built-in GITHUB_TOKEN).
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   PYPI_API_TOKEN        PyPI API token (pypi-...)
+#   CARGO_REGISTRY_TOKEN  crates.io API token
+# A tag release fails within seconds with a clear message if either is missing.
 
 # The Actions list shows each run under the tagged commit's TITLE (its first
 # line only), so the list reads version by version: "v0.0.9: <short title>".
@@ -63,6 +59,21 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Check secrets
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          missing=0
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "::error::PYPI_API_TOKEN secret is not set. Create a token at https://pypi.org/manage/account/token/ and add it under Settings -> Secrets and variables -> Actions."
+            missing=1
+          fi
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not set. Create a token at https://crates.io/settings/tokens and add it under Settings -> Secrets and variables -> Actions."
+            missing=1
+          fi
+          exit $missing
       - name: Check tag matches source versions
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -241,12 +252,10 @@ jobs:
           dictz --selftest
 
   # ===================================================================
-  # 5) Python package (sdist + wheel) — tag only, built and checked, NOT
-  #    uploaded to PyPI (private since v0.2.1); the wheel goes into the
-  #    GitHub Release
+  # 5) Publish to PyPI — tag only, API token
   # ===================================================================
-  python-dist:
-    name: Python package
+  publish-pypi:
+    name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [preflight, test, install-smoke]
     runs-on: ubuntu-latest
@@ -261,6 +270,12 @@ jobs:
           python -m pip install --upgrade build twine
           python -m build
           twine check dist/*
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+          print-hash: true
       - uses: actions/upload-artifact@v4
         with:
           name: python-dist
@@ -268,28 +283,37 @@ jobs:
           retention-days: 7
 
   # ===================================================================
-  # 6) Rust crate — tag only, packaged and checked (cargo package), NOT
-  #    uploaded to crates.io (private since v0.2.1)
+  # 6) Publish to crates.io — tag only, API token
   # ===================================================================
-  rust-package:
-    name: Rust crate
+  publish-crates:
+    name: Publish to crates.io
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [preflight, rust]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: dictz-rs
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Linux audio headers (cargo package builds the crate)
+      - name: Linux audio headers (cargo publish builds the crate)
         working-directory: .
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
-      - name: Package (no upload)
-        run: cargo package --locked --allow-dirty
+      - name: Publish (skip if this version is already on crates.io)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          version=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n1)
+          status=$(curl -s -o /dev/null -w "%{http_code}" -A "dictz-ci" \
+            "https://crates.io/api/v1/crates/dictz/$version")
+          if [ "$status" = "200" ]; then
+            echo "dictz $version already on crates.io — nothing to do."
+            exit 0
+          fi
+          cargo publish --locked
 
   # ===================================================================
   # 7) Portable binaries — tag only
@@ -452,10 +476,8 @@ jobs:
   # ===================================================================
   github-release:
     name: Publish GitHub Release
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.python-dist.result == 'success' && needs.rust-package.result == 'success' }}
-    # mobile-android: its APK goes into the release too; when it fails the
-    # release still goes out (the condition above does not ask for it)
-    needs: [python-dist, rust-package, build-binaries, build-rust-binaries, mobile-android]
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.publish-pypi.result == 'success' }}
+    needs: [publish-pypi, publish-crates, build-binaries, build-rust-binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -465,8 +487,8 @@ jobs:
       - name: Collect files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.whl" -o -name "*.apk" \) \
-            ! -name "*ios-unsigned*" -exec cp -v {} release/ \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.whl" \) \
+            -exec cp -v {} release/ \;
           ls -lh release/
       - uses: softprops/action-gh-release@v2
         with:
@@ -477,16 +499,14 @@ jobs:
             dictz ships as two editions with the same features: **Python** (Qt) and **Rust** (egui).
 
             ## Python edition
-            - **Wheel:** `pipx install ./dictz-<version>-py3-none-any.whl` (or `pip install`)
+            - **PyPI:** `pip install dictz` (or `pipx install dictz`)
             - **Portable:**
               - Linux: `dictz-linux-x86_64.AppImage` (`chmod +x` then run) or `.tar.gz`
               - Windows: `dictz-windows-x86_64.zip` → run `dictz.exe`
               - macOS (Apple Silicon): `dictz-macos-arm64.zip` → right-click `dictz.app` → Open
 
-            ## Android
-            - `dictz-<version>-android.apk` → open it on the phone to install (allow "install unknown apps" for the browser / file manager once). iOS needs an Apple developer account and comes later.
-
             ## Rust edition
+            - **crates.io:** `cargo install dictz` (app) · `cargo add dictz` (library)
             - **Portable (single binary):**
               - Linux: `dictz-rs-linux-x86_64.tar.gz` → `dictz-rs/dictz`
               - Windows: `dictz-rs-windows-x86_64.zip` → `dictz-rs\dictz.exe`
@@ -495,96 +515,4 @@ jobs:
             Both editions install the short name **`dct`** too (`dct -V`, `dct update`, `dct shortcut`).
             Both editions share the dictionary list, history and favorites (same data folder).
 
-            Since v0.2.1 dictz is no longer published to PyPI or crates.io. See CHANGELOG.md.
-
-  # ------------------------------------------------------------ phone apps
-  mobile-core:
-    name: Mobile · Rust core
-    timeout-minutes: 60
-    needs: lint
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - name: fmt, clippy, test
-        working-directory: dictz-mobile/rust
-        run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
-
-  mobile-android:
-    name: Mobile · Android (APK)
-    timeout-minutes: 60
-    needs: mobile-core
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.5'
-          channel: stable
-          cache: true
-      - name: Prepare (assets, platform folders, Rust core for Android)
-        working-directory: dictz-mobile
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
-        run: tool/prepare.sh android
-      - name: Test, screenshots and build
-        working-directory: dictz-mobile
-        run: |
-          sudo apt-get install -y fonts-dejavu-core >/dev/null
-          flutter pub get
-          flutter test
-          # the screens at a phone's size with made-up articles → test_screens/screenshots/*.png
-          flutter test test_screens --update-goldens
-          flutter build apk --release
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
-          cp build/app/outputs/flutter-apk/app-release.apk "dictz-${VERSION}-android.apk"
-          ls -la dictz-*-android.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dictz-android
-          path: dictz-mobile/dictz-*-android.apk
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dictz-mobile-screenshots
-          path: dictz-mobile/test_screens/screenshots/*.png
-
-  mobile-ios:
-    name: Mobile · iOS (unsigned)
-    timeout-minutes: 60
-    needs: mobile-core
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.5'
-          channel: stable
-          cache: true
-      - name: Prepare (assets, platform folders, Rust core for iOS)
-        working-directory: dictz-mobile
-        run: tool/prepare.sh ios
-      - name: Build
-        working-directory: dictz-mobile
-        run: |
-          flutter pub get
-          flutter build ios --release --no-codesign
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
-          (cd build/ios/iphoneos && zip -qr "../../../dictz-${VERSION}-ios-unsigned.zip" Runner.app)
-          ls -la dictz-*-ios-unsigned.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dictz-ios-unsigned
-          path: dictz-mobile/dictz-*-ios-unsigned.zip
+            See [CHANGELOG.md](https://github.com/bayramkotan/dictz/blob/main/CHANGELOG.md).

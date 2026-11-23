@@ -357,15 +357,10 @@ fn retired_builtin_addresses_move() {
             s["url"] = json!("https://download.huzheng.org/");
             s["enabled"] = json!(false);
         }
+        if s["id"] == "dictz-data" {
+            s["url"] = json!("https://my.example.org/catalog.json");
+        }
     }
-    old.push(
-        json!({"id": "dictz-data", "name": "dictz-data (default server)", "type": "dictz-catalog",
-        "url": "https://raw.githubusercontent.com/bayramkotan/dictz/main/docs/dictz-data/catalog.json", "builtin": true}),
-    );
-    old.push(
-        json!({"id": "my-data", "name": "dictz-data", "type": "dictz-catalog",
-        "url": "https://my.example.org/catalog.json", "builtin": true}),
-    );
     old.push(
         json!({"id": "freemdict", "name": "FreeMdict cloud", "type": "nextcloud-share",
         "url": "https://cloud.freemdict.com/index.php/s/pgKcDcbSDTCzXCs", "builtin": true}),
@@ -383,14 +378,13 @@ fn retired_builtin_addresses_move() {
     assert_eq!(hz.url, "https://stardict.uber.space/");
     assert!(!hz.enabled);
     assert!(!center.join("cache/huzheng.json").exists());
-    // built-ins that were dropped go, with their cache; the default falls back
-    assert!(src.get("freemdict").is_none());
-    assert!(src.get("dictz-data").is_none());
     assert_eq!(
-        src.get("my-data").unwrap().url,
+        src.get("dictz-data").unwrap().url,
         "https://my.example.org/catalog.json"
     );
+    // a built-in that was dropped goes, with its cache; the default falls back
+    assert!(src.get("freemdict").is_none());
     assert!(src.get("mine").is_some());
     assert!(!center.join("cache/freemdict.json").exists());
-    assert_eq!(src.data()["default"], "freedict");
+    assert_eq!(src.data()["default"], "dictz-data");
 }
