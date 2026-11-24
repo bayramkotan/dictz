@@ -2,8 +2,12 @@
 
 The setting ``audio.player`` picks who plays a dictionary's sounds:
 
-* ``auto`` — the built-in player; when it is not available, the first
-  external player found (mpv, ffplay, VLC, MPlayer), else the system's
+* ``auto`` — ``audio.command`` when one is typed (like GoldenDict's
+  "external program" field); on Linux the first external player installed
+  (mpv, ffplay, VLC, MPlayer — they talk to PipeWire / PulseAudio
+  themselves; the built-in players sounded bad there), else the built-in
+  player; on Windows / macOS the built-in player, else the first external
+  one; else the system's
 * ``internal`` — Qt Multimedia (Python) / rodio (Rust) in the program
 * ``ffplay``, ``mpv``, ``vlc``, ``mplayer`` — that program, if installed
 * ``system`` — the system's default program for the file
@@ -144,18 +148,40 @@ def pcm_to_wav(pcm: bytes, rate: int, channels: int, sampwidth: int = 2, ms: int
     return out.getvalue()
 
 
-def resolve(player: str, internal_ok: bool) -> str:
-    """``auto`` → internal, else the first external player installed, else
-    ``system``; an external player that is not installed → ``system``."""
+def prefers_external() -> bool:
+    """On Linux ``auto`` takes an installed external player before the
+    built-in one."""
+    return sys.platform.startswith("linux")
+
+
+def resolve(player: str, internal_ok: bool, command: str = "", prefer_external: bool | None = None) -> str:
+    """The player that really plays (see the module text): ``auto`` →
+    the typed command, else (Linux) an external player before the built-in
+    one, else the system's; an external player that is not installed →
+    ``system``; ``command`` without a command → ``auto``."""
+    if prefer_external is None:
+        prefer_external = prefers_external()
     if player == "auto":
+        if command.strip():
+            return "command"
+        ext = next((p for p in EXTERNAL if find_program(p)), None)
+        if prefer_external and ext:
+            return ext
         if internal_ok:
             return "internal"
-        return next((p for p in ("mpv", "ffplay", "vlc", "mplayer") if find_program(p)), "system")
+        return ext or "system"
     if player == "internal" and not internal_ok:
-        return resolve("auto", False)
+        return resolve("auto", False, "", prefer_external)
+    if player == "command" and not command.strip():
+        return resolve("auto", internal_ok, "", prefer_external)
     if player in EXTERNAL and not find_program(player):
         return "system"
     return player
+
+
+def label(player: str) -> str:
+    """The (Turkish) name of a player choice; translate with ``t()``."""
+    return dict(PLAYERS).get(player, player)
 
 
 def available() -> dict[str, bool]:

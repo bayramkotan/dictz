@@ -1,7 +1,11 @@
 //! Sound playback choices, shared with the Python edition (`dictz/core/audio.py`).
 //!
-//! `audio.player`: `auto` (the built-in player, else the first external
-//! player found, else the system's), `internal` (rodio), `mpv`, `ffplay`,
+//! `audio.player`: `auto` (`audio.command` when one is typed, like
+//! GoldenDict's "external program"; on Linux the first external player
+//! installed — they talk to PipeWire / PulseAudio themselves, the built-in
+//! rodio player went through ALSA and sounded bad there — else the built-in
+//! player; on Windows / macOS the built-in player, else the first external
+//! one; else the system's), `internal` (rodio), `mpv`, `ffplay`,
 //! `vlc`, `mplayer`, `system`, `command` (`audio.command`, `{file}` is the
 //! sound file). `audio.speed` 0.5–1.5 slows a sound down.
 //!
@@ -181,24 +185,56 @@ pub fn player_command(
     }
 }
 
-/// `auto` → internal, else the first external player installed, else
-/// `system`; an external player that is not installed → `system`.
-pub fn resolve(player: &str, internal_ok: bool) -> String {
+/// On Linux `auto` takes an installed external player before the built-in one.
+pub fn prefers_external() -> bool {
+    cfg!(target_os = "linux")
+}
+
+/// The player that really plays: `auto` → the typed command, else (when
+/// `prefer_external`) an external player before the built-in one, else the
+/// system's; an external player that is not installed → `system`; `command`
+/// without a command → `auto`. Same as `resolve` in Python.
+pub fn resolve(player: &str, internal_ok: bool, command: &str, prefer_external: bool) -> String {
+    let ext = || {
+        EXTERNAL
+            .iter()
+            .find(|p| find_program(p).is_some())
+            .map(|p| p.to_string())
+    };
     match player {
         "auto" => {
+            if !command.trim().is_empty() {
+                return "command".into();
+            }
+            if prefer_external {
+                if let Some(e) = ext() {
+                    return e;
+                }
+            }
             if internal_ok {
                 "internal".into()
             } else {
-                EXTERNAL
-                    .iter()
-                    .find(|p| find_program(p).is_some())
-                    .map(|p| p.to_string())
-                    .unwrap_or_else(|| "system".into())
+                ext().unwrap_or_else(|| "system".into())
             }
         }
-        "internal" if !internal_ok => resolve("auto", false),
+        "internal" if !internal_ok => resolve("auto", false, "", prefer_external),
+        "command" if command.trim().is_empty() => resolve("auto", internal_ok, "", prefer_external),
         p if EXTERNAL.contains(&p) && find_program(p).is_none() => "system".into(),
         p => p.to_string(),
+    }
+}
+
+/// The (Turkish) name of a player choice; translate it for the screen.
+pub fn label(player: &str) -> &'static str {
+    match player {
+        "auto" => "Otomatik",
+        "internal" => "Dahili oynatıcı",
+        "mpv" => "mpv",
+        "ffplay" => "FFplay (FFmpeg)",
+        "vlc" => "VLC",
+        "mplayer" => "MPlayer",
+        "system" => "Sistemin oynatıcısı",
+        _ => "Özel komut",
     }
 }
 
@@ -293,6 +329,19 @@ mod tests {
             vec![r"C:\Program Files\mpv\mpv.exe", "--title", "a b", "{file}"]
         );
         assert!(split_command("   ").is_empty());
+    }
+
+    #[test]
+    fn auto_uses_a_typed_command_like_goldendict() {
+        assert_eq!(
+            resolve("auto", true, "mplayer -really-quiet", true),
+            "command"
+        );
+        assert_eq!(resolve("auto", true, "", false), "internal");
+        // "Özel komut" with no command: as Otomatik
+        assert_eq!(resolve("command", true, "  ", false), "internal");
+        assert_eq!(resolve("command", true, "mpv", false), "command");
+        assert_eq!(label("mplayer"), "MPlayer");
     }
 
     #[test]

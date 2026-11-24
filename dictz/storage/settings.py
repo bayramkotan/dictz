@@ -202,14 +202,17 @@ SCHEMA: list[Setting] = [
     Setting("audio.auto_play", "bool", False, "Aramada ilk sesi otomatik çal"),
     Setting("audio.volume", "int", 80, "Ses düzeyi", "%", min=0, max=100),
     Setting("audio.player", "choice", "auto", "Ses oynatıcısı",
-            "Otomatik = dahili oynatıcı; yoksa kurulu ilk dış oynatıcı (mpv, FFplay, VLC, MPlayer), "
-            "o da yoksa sistemin oynatıcısı. Kurulu olmayan bir oynatıcı seçilirse sistemin oynatıcısı açılır.",
+            "Otomatik: önce özel oynatıcı komutu (yazılmışsa); Linux'ta kurulu ilk dış oynatıcı (mpv, FFplay, "
+            "VLC, MPlayer), yoksa dahili oynatıcı; Windows ve macOS'ta dahili oynatıcı, yoksa ilk dış oynatıcı; "
+            "o da yoksa sistemin oynatıcısı. Kurulu olmayan bir oynatıcı seçilirse sistemin oynatıcısı açılır "
+            "ve durum çubuğu bunu söyler.",
             choices=_player_choices()),
     Setting("audio.speed", "float", 1.0, "Çalma hızı",
             "1 = normal. Son heceleri daha iyi duymak için yavaşlatın (0.5–1.5).", min=0.5, max=1.5),
     Setting("audio.command", "str", "", "Özel oynatıcı komutu",
-            "Oynatıcı “Özel komut” iken kullanılır. {file} = ses dosyası; {volume} ve {speed} de "
-            "yazılabilir. Örnek: mpv --no-video --speed={speed} {file}"),
+            "Oynatıcı “Özel komut” ya da “Otomatik” iken kullanılır (GoldenDict'teki dış program gibi). "
+            "Program adı yeter, örn. mplayer; {file} = ses dosyası, {volume} ve {speed} de yazılabilir. "
+            "Örnek: mpv --no-video --speed={speed} {file}"),
     # ------------------------------------------------------------- history
     Setting("history.enabled", "bool", True, "Arama geçmişini kaydet"),
     Setting("history.limit", "int", 200, "Yan panelde gösterilen geçmiş", min=10, max=5000),

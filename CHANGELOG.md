@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Sound on Linux, and choosing a player like in GoldenDict** (both editions). On Linux *Otomatik* now uses an installed external player first — mpv, FFplay, VLC, MPlayer play through PipeWire / PulseAudio, while the built-in players (rodio over ALSA in the Rust edition) sounded bad there; Windows and macOS keep the built-in player first. A program typed into **Özel oynatıcı komutu** is used whenever the player is *Otomatik* or *Özel komut* — just `mplayer` is enough, as in GoldenDict's "external program" field (before, it was ignored unless *Özel komut* was also picked); *Özel komut* with an empty command acts as *Otomatik*. Players that are not installed are marked "(kurulu değil)" in the list, and the status bar says when the chosen player is missing ("MPlayer kurulu değil, Sistemin oynatıcısı kullanılıyor") or when an external player stops at once with an error, e.g. it cannot decode the file ("… sesi çalamadı (çıkış kodu N)"). Help texts updated, all 25 languages.
+
 ## [0.2.1] — 2026-11-23
 
 Sounds to the very end with a **player of your choice**, and new screenshots — in both editions. The phone apps move to their own project.

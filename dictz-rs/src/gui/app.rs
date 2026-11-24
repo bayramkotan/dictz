@@ -286,6 +286,8 @@ pub struct DictzApp {
     expand_all: Option<bool>,
 
     status: Option<(String, Instant, u64)>,
+    /// Until when to look for a message of the sound player (it plays in a thread).
+    audio_note_until: Option<Instant>,
     timing: String,
     error: Option<(String, String)>,
     confirm: Option<Confirm>,
@@ -399,6 +401,7 @@ impl DictzApp {
             scroll_to_dict: None,
             expand_all: None,
             status,
+            audio_note_until: None,
             timing: String::new(),
             error: None,
             confirm: None,
@@ -1983,6 +1986,7 @@ impl DictzApp {
             return;
         };
         self.set_status(tr_args("Çalınıyor: {name}", &[("name", &name)]), 3);
+        self.audio_note_until = Some(Instant::now() + std::time::Duration::from_millis(2500));
         audio::play(audio::Request {
             bytes,
             name: name.to_string(),
@@ -4226,6 +4230,16 @@ impl DictzApp {
 impl eframe::App for DictzApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_no += 1;
+        if let Some(until) = self.audio_note_until {
+            if let Some(n) = audio::take_note() {
+                self.set_status(n, 6);
+            }
+            if Instant::now() < until {
+                ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            } else {
+                self.audio_note_until = None;
+            }
+        }
         self.poll_loader(ctx);
         self.poll_updates();
         self.handle_services(ctx);

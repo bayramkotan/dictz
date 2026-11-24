@@ -198,8 +198,13 @@ class _SettingsEditing:
             w.valueChanged.connect(lambda val, k=s.key: self._set(k, val))
         elif s.kind == "choice":
             w = QComboBox()
+            missing: set[str] = set()
+            if s.key == "audio.player":
+                from ..core import audio
+
+                missing = {p for p, ok in audio.available().items() if not ok}
             for val, label in s.choices:
-                w.addItem(t(label), val)
+                w.addItem(t(label) + (f"  ({t('kurulu değil')})" if val in missing else ""), val)
             w.setCurrentIndex(max(0, w.findData(v)))
             w.currentIndexChanged.connect(lambda _i, k=s.key, c=w: self._set(k, c.currentData()))
         elif s.kind == "color":

@@ -6,7 +6,9 @@ device's buffer has been heard. So the built-in player is given a WAV that
 ends with silence (``core.audio.pad_wav``); an MP3 / Ogg / … is first
 decoded with ``QAudioDecoder`` into such a WAV (kept in the media cache).
 External players (mpv, FFplay, VLC, MPlayer, a command of your own) and the
-system's player are started as separate programs.
+system's player are started as separate programs. The status bar says when
+the chosen player is not installed, and when an external player stops at
+once with an error (e.g. it cannot decode the file).
 """
 from __future__ import annotations
 
@@ -14,10 +16,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 
 from ..core import audio
+from ..core.i18n import t
 
 
 def internal_available() -> bool:
@@ -46,15 +49,19 @@ class AudioPlayer(QObject):
         """Play ``file`` (in the media cache); returns the player used."""
         self.stop()
         self.last = (file, player, volume, speed, command, "")
-        used = audio.resolve(player, internal_available())
+        used = audio.resolve(player, internal_available(), command)
+        if player in audio.EXTERNAL and used != player:
+            self.message.emit(t("{player} kurulu değil, {used} kullanılıyor",
+                                player=t(audio.label(player)), used=t(audio.label(used))))
         if used == "internal":
             if self._play_internal(file, volume, speed):
                 return used
-            used = audio.resolve("auto", False)
+            used = audio.resolve("auto", False, "")
         if used in audio.EXTERNAL or used == "command":
             program = audio.find_program(used) if used != "command" else ""
             cmd = audio.player_command(used, program or "", str(file), volume, speed, command)
             if cmd and self._start(cmd):
+                self._watch(self._proc, cmd[0] if used == "command" else t(audio.label(used)))
                 return used
             used = "system"
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(file)))
@@ -85,6 +92,18 @@ class AudioPlayer(QObject):
         except OSError as e:
             self.message.emit(f"{cmd[0]}: {e}")
             return False
+
+    def _watch(self, proc: subprocess.Popen | None, name: str) -> None:
+        """Say so when the player gives up at once (bad codec, wrong option)."""
+
+        def check() -> None:
+            if proc is None:
+                return
+            code = proc.poll()
+            if code not in (None, 0) and proc is self._proc:
+                self.message.emit(t("{player} sesi çalamadı (çıkış kodu {code})", player=name, code=str(code)))
+
+        QTimer.singleShot(1500, check)
 
     # ------------------------------------------------------------ internal
     def _ensure_player(self) -> bool:

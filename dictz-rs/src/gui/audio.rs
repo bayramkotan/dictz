@@ -6,7 +6,9 @@
 //! stream was dropped as soon as the data was used up, before the device's
 //! buffer had been heard. Now [`crate::audioplay::TAIL_MS`] of silence is
 //! played after the sound and the stream is kept a moment longer.
-//! External players run as their own process; one sound at a time.
+//! External players run as their own process; one sound at a time. The
+//! status bar is told ([`take_note`]) when the chosen player is not installed
+//! or an external player gives up at once (bad codec, wrong option).
 
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -14,6 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use crate::audioplay;
+use crate::i18n::{tr, tr_args};
 
 /// What to play and how.
 #[derive(Clone, Debug)]
@@ -34,6 +37,19 @@ pub struct Request {
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static CHILD: Mutex<Option<Child>> = Mutex::new(None);
 static LAST: Mutex<Option<Request>> = Mutex::new(None);
+/// A message for the status bar from the playing thread.
+static NOTE: Mutex<Option<String>> = Mutex::new(None);
+
+fn note(msg: String) {
+    if let Ok(mut n) = NOTE.lock() {
+        *n = Some(msg);
+    }
+}
+
+/// The status-bar message the player left, if any (taken once).
+pub fn take_note() -> Option<String> {
+    NOTE.lock().ok().and_then(|mut n| n.take())
+}
 
 /// Stop what is playing.
 pub fn stop() {
@@ -67,12 +83,22 @@ pub fn play(req: Request) {
     }
     let gen = GENERATION.load(Ordering::SeqCst);
     std::thread::spawn(move || {
-        let used = audioplay::resolve(&req.player, cfg!(feature = "audio"));
+        let prefer = audioplay::prefers_external();
+        let used = audioplay::resolve(&req.player, cfg!(feature = "audio"), &req.command, prefer);
+        if audioplay::EXTERNAL.contains(&req.player.as_str()) && used != req.player {
+            note(tr_args(
+                "{player} kurulu değil, {used} kullanılıyor",
+                &[
+                    ("player", &tr(audioplay::label(&req.player))),
+                    ("used", &tr(audioplay::label(&used))),
+                ],
+            ));
+        }
         if used == "internal" && play_inline(&req, gen).is_ok() {
             return;
         }
         let used = if used == "internal" {
-            audioplay::resolve("auto", false)
+            audioplay::resolve("auto", false, "", prefer)
         } else {
             used
         };
@@ -107,15 +133,52 @@ pub fn play(req: Request) {
                     c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
                 }
                 if let Ok(child) = c.spawn() {
+                    let pid = child.id();
                     if let Ok(mut slot) = CHILD.lock() {
                         *slot = Some(child);
                     }
+                    let name = if used == "command" {
+                        exe.clone()
+                    } else {
+                        tr(audioplay::label(&used))
+                    };
+                    watch(pid, &name);
                     return;
                 }
             }
         }
         let _ = super::system::open_external(&file.to_string_lossy());
     });
+}
+
+/// Say so when the external player (`pid`) stops within 1.5 s with an error.
+fn watch(pid: u32, name: &str) {
+    for _ in 0..15 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let Ok(mut slot) = CHILD.lock() else { return };
+        let Some(child) = slot.as_mut() else { return };
+        if child.id() != pid {
+            return; // another sound took its place
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    let code = status
+                        .code()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "?".into());
+                    note(tr_args(
+                        "{player} sesi çalamadı (çıkış kodu {code})",
+                        &[("player", &name), ("code", &code)],
+                    ));
+                }
+                slot.take();
+                return;
+            }
+            Ok(None) => {}
+            Err(_) => return,
+        }
+    }
 }
 
 #[cfg(feature = "audio")]

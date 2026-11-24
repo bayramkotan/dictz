@@ -466,11 +466,22 @@ impl PrefsWindow {
                     .map(|c| tr(c.1))
                     .unwrap_or_default();
                 let mut picked = None;
+                // the sound players that are not installed are marked
+                let missing = |v: &str| {
+                    s.key == "audio.player"
+                        && crate::audioplay::EXTERNAL.contains(&v)
+                        && crate::audioplay::find_program(v).is_none()
+                };
                 egui::ComboBox::from_id_salt(("choice", s.key))
                     .selected_text(label)
                     .show_ui(ui, |ui| {
                         for (v, l) in s.choices {
-                            if ui.selectable_label(*v == cur, tr(l)).clicked() {
+                            let text = if missing(v) {
+                                format!("{}  ({})", tr(l), tr("kurulu değil"))
+                            } else {
+                                tr(l)
+                            };
+                            if ui.selectable_label(*v == cur, text).clicked() {
                                 picked = Some(*v);
                             }
                         }

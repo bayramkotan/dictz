@@ -41,11 +41,18 @@ def test_commands_match_golden_and_rust() -> None:
 def test_choices_and_resolve(monkeypatch) -> None:
     assert SCHEMA_BY_KEY["audio.player"].choices == audio.PLAYERS
     monkeypatch.setattr(audio, "find_program", lambda name: "/usr/bin/mpv" if name == "mpv" else None)
-    assert audio.resolve("auto", True) == "internal"
-    assert audio.resolve("auto", False) == "mpv"
+    # Windows / macOS: the built-in player first
+    assert audio.resolve("auto", True, prefer_external=False) == "internal"
+    assert audio.resolve("auto", False, prefer_external=False) == "mpv"
+    # Linux: an installed external player first (the built-in ones sounded bad)
+    assert audio.resolve("auto", True, prefer_external=True) == "mpv"
     assert audio.resolve("vlc", True) == "system"  # not installed
-    assert audio.resolve("internal", False) == "mpv"
-    assert audio.resolve("command", True) == "command"
+    assert audio.resolve("internal", False, prefer_external=False) == "mpv"
+    # a typed command is used like GoldenDict's "external program"
+    assert audio.resolve("auto", True, "mplayer -really-quiet", False) == "command"
+    assert audio.resolve("command", True, "mpv") == "command"
+    assert audio.resolve("command", True, "  ", prefer_external=False) == "internal"
+    assert audio.label("mplayer") == "MPlayer"
 
 
 def test_old_system_player_setting_moves(tmp_path: Path) -> None:
