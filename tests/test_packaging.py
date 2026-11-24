@@ -318,8 +318,12 @@ def test_changelog_mentions_current_version() -> None:
     )
 
 
-def test_todo_exists() -> None:
-    assert (ROOT / "TODO.md").is_file()
+def test_private_notes_are_never_committed() -> None:
+    """TODO.md and the handoff are private notes: git-ignored, not in the sdist."""
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "TODO.md" in ignored and "docs/dictz_Handoff.md" in ignored
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "TODO.md" not in manifest and "Handoff" not in manifest
 
 
 def test_license_is_gpl3() -> None:

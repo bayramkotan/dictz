@@ -53,3 +53,7 @@ build/appimage-tools/
 
 # Rust
 dictz-rs/target/
+
+# Private notes: never committed (kept locally and on Yandex.Disk only)
+TODO.md
+docs/dictz_Handoff.md

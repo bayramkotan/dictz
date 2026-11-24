@@ -475,7 +475,7 @@ All of them are shared by the Python and the Rust edition.
 | ABBYY Lingvo DSL | `.dsl` / `.dsl.dz` | [PyGlossary](https://github.com/ilius/pyglossary) | native (port of PyGlossary's reader) |
 | Babylon | `.bgl` | [PyGlossary](https://github.com/ilius/pyglossary) | native (port of PyGlossary's reader) |
 
-More formats (XDXF, Slob, DictD, MDict) are on the [TODO](TODO.md).
+More formats (XDXF, Slob, DictD, MDict) are planned.
 
 ## Keyboard shortcuts
 
