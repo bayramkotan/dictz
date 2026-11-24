@@ -754,8 +754,11 @@ impl Transformer {
             }
             fname.push(c);
         }
-        match py_splitext_ext(&fname).as_str() {
-            "wav" | "mp3" => {
+        // any letter case (Lingvo packs have "Apple.WAV"), and every sound /
+        // picture kind dictz plays or shows (PyGlossary knew only wav / mp3)
+        let ext = py_splitext_ext(&fname).to_lowercase();
+        match ext.as_str() {
+            e if crate::media::AUDIO_EXTENSIONS.contains(&e) => {
                 if self.audio {
                     self.output.push_str(&format!(
                         "<object type=\"audio/x-wav\" data=\"{}\" width=\"40\" height=\"40\">\
@@ -764,7 +767,7 @@ impl Transformer {
                     ));
                 }
             }
-            "jpg" | "jpeg" | "gif" | "tif" | "tiff" | "png" | "bmp" => {
+            e if crate::media::IMAGE_EXTENSIONS.contains(&e) => {
                 self.output.push_str(&format!(
                     "<img align=\"top\" src=\"{}\" alt=\"{}\" />",
                     fname, fname
@@ -935,6 +938,18 @@ mod tests {
             "<img align=\"top\" src=\"pic.png\" alt=\"pic.png\" />"
         );
         assert!(tr("[s]a.wav[/s]").starts_with("<object type=\"audio/x-wav\" data=\"a.wav\""));
+        // any case, more sound and picture kinds (v0.2.2)
+        for f in [
+            "A.WAV", "b.Mp3", "c.ogg", "d.spx", "e.opus", "f.m4a", "g.flac",
+        ] {
+            assert!(
+                tr(&format!("[s]{f}[/s]"))
+                    .starts_with(&format!("<object type=\"audio/x-wav\" data=\"{f}\"")),
+                "{f}"
+            );
+        }
+        assert!(tr("[s]p.WEBP[/s]").starts_with("<img align=\"top\" src=\"p.WEBP\""));
+        assert_eq!(tr("[s]notes.txt[/s]"), "");
         assert!(Transformer::new("[b", "").transform().is_err());
     }
 

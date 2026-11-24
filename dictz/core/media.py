@@ -27,12 +27,14 @@ from pathlib import Path, PurePosixPath
 
 from .i18n import t
 
-IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp"}
-AUDIO_EXTENSIONS = {"wav", "mp3", "ogg", "oga", "flac"}
+# compared in lower case; same lists as dictz-rs/src/media.rs. Lingvo /
+# GoldenDict sound packs use .wav (often ADPCM), .ogg, .spx (Speex), .opus …
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp", "webp"}
+AUDIO_EXTENSIONS = {"wav", "mp3", "ogg", "oga", "opus", "spx", "flac", "m4a", "aac", "wma"}
 
 _MIME = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "png": "image/png",
-    "bmp": "image/bmp", "tif": "image/tiff", "tiff": "image/tiff",
+    "bmp": "image/bmp", "tif": "image/tiff", "tiff": "image/tiff", "webp": "image/webp",
 }
 
 

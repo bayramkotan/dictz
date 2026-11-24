@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-11-24
+
+**Sounds that never played now play, and sound on Linux is fixed** — in both editions. Lingvo / GoldenDict sound packs with `.spx`, `.ogg`, `.opus`, ADPCM `.wav` or upper-case extensions, and a player chosen like in GoldenDict.
+
 ### Fixed
+- **DSL sounds and pictures that were silently dropped.** The `[s]…[/s]` rule (from PyGlossary) knew only lower-case `.wav` / `.mp3` sounds and `.jpg/.jpeg/.gif/.tif/.tiff/.png/.bmp` pictures: `Apple.WAV`, `word.ogg`, `word.spx` (Speex), `.opus`, `.flac` … showed no speaker at all. Now the extension counts in any letter case and the sounds are `.wav .mp3 .ogg .oga .opus .spx .flac .m4a .aac .wma`, the pictures also `.webp` — one list for the DSL rule and the media lookup, the same in both editions (Python replaces PyGlossary's `[s]` handler; parity sample extended).
+- **Sounds the built-in player could not decode were silent.** The Rust built-in player now decodes ADPCM `.wav` (common in Lingvo sound packs); what it still cannot decode (`.spx`, `.opus`, `.m4a` …) — and any decoder panic — goes to the first installed external player, else the system's. The Python built-in player decodes all of them through Qt's FFmpeg and falls back the same way when Qt cannot. WebP pictures show in the Rust edition too.
 - **Sound on Linux, and choosing a player like in GoldenDict** (both editions). On Linux *Otomatik* now uses an installed external player first — mpv, FFplay, VLC, MPlayer play through PipeWire / PulseAudio, while the built-in players (rodio over ALSA in the Rust edition) sounded bad there; Windows and macOS keep the built-in player first. A program typed into **Özel oynatıcı komutu** is used whenever the player is *Otomatik* or *Özel komut* — just `mplayer` is enough, as in GoldenDict's "external program" field (before, it was ignored unless *Özel komut* was also picked); *Özel komut* with an empty command acts as *Otomatik*. Players that are not installed are marked "(kurulu değil)" in the list, and the status bar says when the chosen player is missing ("MPlayer kurulu değil, Sistemin oynatıcısı kullanılıyor") or when an external player stops at once with an error, e.g. it cannot decode the file ("… sesi çalamadı (çıkış kodu N)"). Help texts updated, all 25 languages.
 
 ## [0.2.1] — 2026-11-23

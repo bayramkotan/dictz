@@ -33,6 +33,7 @@ apples
 \t[m3][ex][lang id=1033]An ~ a day.[/lang][/ex][/m]
 \t[m2]see [ref]pear[/ref] and <<orange juice>>[/m]
 \t[s]apple.png[/s] [s]apple.wav[/s]
+\t[s]Apple.OGG[/s] [s]apple.spx[/s] [s]leaf.WEBP[/s] [s]notes.txt[/s]
 
 go (to) {[']}x{[/']}
 \t[m1]gitmek[/m]

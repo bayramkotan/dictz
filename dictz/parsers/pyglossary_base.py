@@ -96,7 +96,55 @@ def _ensure_init() -> None:
         Glossary.init(usePluginsJson=False)
     else:
         Glossary.init()
+    _patch_dsl_media()
     _pyglossary_initialized = True
+
+
+def _lex_s(tr):  # noqa: ANN001, ANN202 — PyGlossary's Transformer
+    """PyGlossary's ``[s]…[/s]`` handler with dictz's rule: the extension in
+    any letter case (Lingvo packs have "Apple.WAV") and every sound / picture
+    kind dictz plays or shows (PyGlossary knew only wav / mp3). Same as
+    ``lex_s`` in ``dictz-rs/src/dsl.rs``."""
+    from os.path import splitext
+
+    from pyglossary.plugins.dsl import lex
+
+    from ..core.media import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
+
+    if tr.end():
+        return None, None
+    fname = ""
+    while not tr.end():
+        c = tr.next()
+        if c == "[":
+            tr.move(-1)
+            break
+        fname += c
+    ext = splitext(fname)[1].lstrip(".").lower()
+    if ext in AUDIO_EXTENSIONS:
+        if tr.audio:
+            tr.output += (
+                rf'<object type="audio/x-wav" data="{fname}" '
+                'width="40" height="40">'
+                '<param name="autoplay" value="false" />'
+                "</object>"
+            )
+    elif ext in IMAGE_EXTENSIONS:
+        tr.output += rf'<img align="top" src="{fname}" alt="{fname}" />'
+    tr.resFileSet.add(fname)
+    tr.resetBuf()
+    return lex.lexRoot, None
+
+
+def _patch_dsl_media() -> None:
+    """Use :func:`_lex_s` for ``[s]`` tags (PyGlossary calls ``lexS`` through
+    its module, so replacing the module's function is enough)."""
+    try:
+        from pyglossary.plugins.dsl import lex
+    except ImportError:
+        return
+    if hasattr(lex, "lexS"):
+        lex.lexS = _lex_s
 
 
 def _format_kwarg(glos, fmt: str) -> dict[str, str]:

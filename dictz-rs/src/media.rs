@@ -20,10 +20,15 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-/// Extensions shown as pictures.
-pub const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp"];
-/// Extensions played as sound.
-pub const AUDIO_EXTENSIONS: &[&str] = &["wav", "mp3", "ogg", "oga", "flac"];
+/// Extensions shown as pictures (compared in lower case; same list as
+/// `IMAGE_EXTENSIONS` in Python).
+pub const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "gif", "tif", "tiff", "png", "bmp", "webp"];
+/// Extensions played as sound (compared in lower case). Lingvo / GoldenDict
+/// sound packs use `.wav` (often ADPCM), `.ogg`, `.spx` (Speex), `.opus` …;
+/// what the built-in player cannot decode goes to an external player.
+pub const AUDIO_EXTENSIONS: &[&str] = &[
+    "wav", "mp3", "ogg", "oga", "opus", "spx", "flac", "m4a", "aac", "wma",
+];
 
 /// Kind of a media file, judged by its extension (case-insensitive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

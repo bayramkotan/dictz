@@ -116,7 +116,22 @@ class AudioPlayer(QObject):
         self._out = QAudioOutput(self)
         self._player = QMediaPlayer(self)
         self._player.setAudioOutput(self._out)
+        self._player.errorOccurred.connect(lambda *_a: self._fallback(self.last[0] if self.last else None))
         return True
+
+    def _fallback(self, file: Path | None) -> None:
+        """The built-in player cannot play ``file`` (its codec): the first
+        external player installed, else the system's player."""
+        if file is None:
+            return
+        _f, _p, volume, speed, _c, _x = self.last or (file, "", 80, 1.0, "", "")
+        used = audio.resolve("auto", False, "")
+        if used in audio.EXTERNAL:
+            cmd = audio.player_command(used, audio.find_program(used) or "", str(file), volume, speed, "")
+            if cmd and self._start(cmd):
+                self._watch(self._proc, t(audio.label(used)))
+                return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(file)))
 
     def _play_internal(self, file: Path, volume: int, speed: float) -> bool:
         if not self._ensure_player():
@@ -163,7 +178,7 @@ class AudioPlayer(QObject):
         def finished() -> None:
             self._decoder = None
             if not chunks or not info.get("rate"):
-                self._start_qt(src, volume, speed)
+                self._fallback(src)
                 return
             dst.write_bytes(audio.pcm_to_wav(b"".join(chunks), info["rate"], info["channels"],
                                              info.get("width") or 2))
@@ -171,7 +186,7 @@ class AudioPlayer(QObject):
 
         def failed(*_a) -> None:
             self._decoder = None
-            self._start_qt(src, volume, speed)
+            self._fallback(src)  # Qt cannot decode it (e.g. Speex .spx)
 
         dec.bufferReady.connect(ready)
         dec.finished.connect(finished)

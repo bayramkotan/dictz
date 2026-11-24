@@ -94,7 +94,12 @@ pub fn play(req: Request) {
                 ],
             ));
         }
-        if used == "internal" && play_inline(&req, gen).is_ok() {
+        // a decoder that panics (rodio has done so on some files) counts as
+        // "cannot play": the sound goes to an external player instead
+        if used == "internal"
+            && std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| play_inline(&req, gen)))
+                .is_ok_and(|r| r.is_ok())
+        {
             return;
         }
         let used = if used == "internal" {
