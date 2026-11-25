@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-11-25
+
+**Articles look right again when QtWebEngine is missing**, and dictionary colours stay readable on dark themes (Python edition; the Rust edition already drew both right). Also: the private working notes (TODO, handoff) are no longer part of the repository.
+
 ### Fixed
 - **Python edition without QtWebEngine: the articles looked broken.** When QtWebEngine cannot be loaded (some PySide6 installs and frozen builds) the plain `QTextBrowser` viewer got the web viewer's HTML, which it cannot draw: dictionary headers ran together ("BaBabylon English-EnglishEN → ENBGL⧉◎▾"), dictionary badges appeared at 48 px inside the previous article, sound buttons were missing and left holes, and pictures were not limited in size. The plain viewer now gets its own HTML (`dictz/ui/plainview.py`): a one-row header per dictionary (colour bar, badge, name, language pair, copy / only-here), padded article bodies, the speaker as a small picture, every picture sized to the window width and `article.max_image_height`, zoom that works. The reason QtWebEngine could not be loaded is written to the log (`DICTZ_NO_WEBENGINE=1` forces the plain viewer for testing).
 - **Dark dictionary colours on dark themes (Python edition).** Colours from the dictionary (`[c blue]`, `<font color>`, `style="color: …"`) that are too dark for a dark theme are lifted, and too light ones darkened on a light theme — the rule the Rust edition already used (`render.rs::adjust`).
+
+### Changed
+- `TODO.md` and the handoff are private working notes: removed from the repository, git-ignored and no longer in the source package; the README no longer links to the TODO.
 
 ## [0.2.2] — 2026-11-24
 

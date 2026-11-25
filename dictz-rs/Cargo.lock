@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "dictz"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "ar-reshaper",
  "arboard",
