@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import os
 from urllib.parse import quote
 
 from PySide6.QtCore import QUrl, Signal
@@ -10,16 +11,24 @@ from PySide6.QtWidgets import QTextBrowser, QVBoxLayout, QWidget
 from ..core.i18n import t
 from ..parsers.base import DictionaryEntry
 from ..storage.settings import Preferences
-from . import dicticons, themes
+from . import dicticons, icons, plainview, themes
 
+#: Why the web viewer is not used ("" when it is); shown in Yardım → Hakkında / the log.
+WEBENGINE_ERROR = ""
 try:
+    if os.environ.get("DICTZ_NO_WEBENGINE"):
+        raise ImportError("DICTZ_NO_WEBENGINE is set")
     from PySide6.QtWebEngineCore import QWebEnginePage
     from PySide6.QtWebEngineWidgets import QWebEngineView
     HAS_WEBENGINE = True
-except ImportError:
+except ImportError as exc:
     QWebEngineView = None  # type: ignore
     QWebEnginePage = None  # type: ignore
     HAS_WEBENGINE = False
+    WEBENGINE_ERROR = str(exc) or exc.__class__.__name__
+    import logging
+
+    logging.getLogger("dictz").warning("QtWebEngine unavailable, plain article viewer used: %s", WEBENGINE_ERROR)
 
 
 if HAS_WEBENGINE:
@@ -59,6 +68,7 @@ class DefinitionView(QWidget):
         self.entries: list[DictionaryEntry] = []
         self.suggestions: list[tuple[str, float]] = []
         self._body = ""
+        self._zoom = 1.0
         if HAS_WEBENGINE:
             self._view = QWebEngineView(self)
             self._view.setPage(_LinkPage(self.link_activated.emit, self._view))
@@ -79,9 +89,8 @@ class DefinitionView(QWidget):
         if self._html_mode == "web":
             self._view.setZoomFactor(factor)  # type: ignore[attr-defined]
         else:
-            f = self._view.font()
-            f.setPointSizeF(max(6.0, 11.0 * factor))
-            self._view.setFont(f)
+            self._zoom = factor
+            self.refresh_style()
 
     def refresh_style(self) -> None:
         """Re-render with the current preferences."""
@@ -131,8 +140,11 @@ class DefinitionView(QWidget):
         head_cls = "" if p["article.show_dict_headers"] else " nohead"
         if not p["article.show_dict_headers"]:
             is_open = " open"
+        dark = bool(themes.current(p)["dark"])
+        if self._html_mode == "text":
+            self.set_html(self._plain_entries(entries, dark))
+            return
         parts: list[str] = []
-        dark = themes.is_dark(p["appearance.theme"])
         for i, (dict_name, items) in enumerate(group_by_dictionary(entries)):
             lk = dicticons.look(dict_name)
             tint = themes._mix(lk.color, "#1b1f26" if dark else "#ffffff", 0.80 if dark else 0.88)
@@ -151,24 +163,72 @@ class DefinitionView(QWidget):
                 f'<span class="chev">▾</span></summary><div class="dbody">'
             )
             for e in items:
-                definition = e.definition
-                if "<" in definition and ">" in definition:
-                    body = f'<div class="definition">{definition}</div>'
-                else:
-                    body = f'<div class="definition"><pre>{html.escape(definition)}</pre></div>'
-                parts.append(f'<div class="article"><div class="headword">{html.escape(e.headword)}</div>{body}</div>')
+                parts.append(self._article(e, dark))
             parts.append("</div></details>")
         self.set_html("\n".join(parts))
 
+    @staticmethod
+    def _article(e: DictionaryEntry, dark: bool, plain: bool = False) -> str:
+        definition = plainview.readable_colors(e.definition, dark)
+        if "<" in definition and ">" in definition:
+            body = f'<div class="definition">{definition}</div>'
+        elif plain:
+            body = f'<div class="definition">{html.escape(definition).replace(chr(10), "<br>")}</div>'
+        else:
+            body = f'<div class="definition"><pre>{html.escape(definition)}</pre></div>'
+        return f'<div class="article"><div class="headword">{html.escape(e.headword)}</div>{body}</div>'
+
+    def _plain_entries(self, entries: list[DictionaryEntry], dark: bool) -> str:
+        """The articles as HTML that ``QTextBrowser`` can draw (see ``plainview``)."""
+        p = self.prefs
+        art = themes.current(p)["article"]
+        width = max(200, self._view.viewport().width() - 60)  # type: ignore[attr-defined]
+        max_w = min(width, int(p["article.max_width"]) or width)
+        max_h = int(p["article.max_image_height"])
+        speaker = plainview.png_uri(icons._render("sound", art["muted"], 32) or icons.app_icon().pixmap(32))
+        sep = f'<hr style="border: none; height: 1px; background-color: {art["border"]}">'
+        parts: list[str] = []
+        for i, (dict_name, items) in enumerate(group_by_dictionary(entries)):
+            lk = dicticons.look(dict_name)
+            if p["article.show_dict_headers"]:
+                parts.append(plainview.header(
+                    i, dict_name, plainview.png_uri(dicticons.pixmap(dict_name, 16, 2.0)), lk.color,
+                    themes._mix(lk.color, art["strip"], 0.86), art["fg"], art["muted"],
+                    f"{lk.langs[0]} → {lk.langs[1]}" if lk.langs else "",
+                    t("{n} madde", n=len(items)) if len(items) > 1 else "",
+                    t("Makaleyi kopyala"), t("Yalnızca bu sözlükte ara")))
+            else:
+                parts.append(f'<a name="dict-{i}"></a>')
+            parts.append('<div style="margin: 2px 12px 8px 14px; line-height: 135%">')
+            for j, e in enumerate(items):
+                if j:
+                    parts.append(sep)
+                parts.append(plainview.plain_body(self._article(e, dark, plain=True), speaker, max_w, max_h))
+            parts.append("</div>")
+        return "\n".join(parts)
+
     def set_html(self, body_html: str) -> None:
         self._body = body_html
-        css = themes.definition_css(self.prefs)
+        css = themes.definition_css(self.prefs) if self._html_mode == "web" else self._plain_css()
         full = (f"<!doctype html><html><head><meta charset='utf-8'><style>{css}</style></head>"
                 f"<body><main>{body_html}</main></body></html>")
         if self._html_mode == "web":
             self._view.setHtml(full, QUrl("dictz://article/"))  # type: ignore[attr-defined]
         else:
             self._view.setHtml(full)  # type: ignore[attr-defined]
+
+    def _plain_css(self) -> str:
+        p = self.prefs
+        th = themes.current(p)
+        art = th["article"]
+        accent = themes.accent_of(p)
+        if th["dark"]:
+            head_fg, link = themes._mix(accent, "#ffffff", 0.55), themes._mix(accent, "#ffffff", 0.35)
+        else:
+            head_fg, link = themes._mix(accent, "#000000", 0.35), accent
+        fam = p["article.font_family"] or p["appearance.ui_font_family"]
+        return plainview.css(art["bg"], art["fg"], art["muted"], link, head_fg,
+                             f'"{fam}", ' if fam else "", round(int(p["article.font_size"]) * self._zoom))
 
     # ------------------------------------------------------------ actions
     def scroll_to_dictionary(self, index: int) -> None:
